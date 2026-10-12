@@ -6,10 +6,20 @@ orchestration; Testkit remains responsible for testing and PocketIC lifecycle.
 Neither should independently implement the common build and artifact-cache engine.
 
 This design preserves the ownership audit discussed on 2026-10-12. Repository
-bootstrap and saving the design are authorized. Implementation, sibling migrations,
-API removals, installation changes and artifact cleanup require their own scoped
-work. The design is the coordination reference; GitHub issues own assignments,
+bootstrap and saving the design were initially authorized. The maintainer has
+since authorized the IC Testkit and Canic source extraction. IcyDB mutation,
+installation changes and artifact cleanup remain outside that scope.
+The design is the coordination reference; GitHub issues own assignments,
 acceptance and delivery status.
+
+The current implementation and qualification evidence is recorded in the
+[handoff](../status/current.md); [IC Build #1](https://github.com/dragginzgame/ic-build/issues/1)
+owns extraction acceptance. The generic engine retains Testkit's exact `v1`
+stamp/digest bytes and `.ic-testkit` cache/lock namespaces. No migration reader or
+automatic cleanup is introduced. Canic's feature-equivalent Cargo grouping moves
+to IC Build with caller-supplied environment and output policy; complete-release
+reuse/finalization remains Canic-owned until its additional invariants can be
+preserved through a shared execution path.
 
 ## Current build paths
 

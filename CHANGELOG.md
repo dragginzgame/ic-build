@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.1]
+
+- Extract Testkit's generic artifact/Wasm engine and behavioral/process tests,
+  and Canic's feature-equivalent Cargo grouping. Retain the existing cache formats
+  and namespaces; consumers select recipes and retain their release/runtime policy
+  ([#1](https://github.com/dragginzgame/ic-build/issues/1)).
+- Run the extracted behavioral, cross-process and real Cargo/Wasm tests in the
+  package gate and include the preserved MIT license notice in package contents.
+- Adopt Shared Tooling 0.9.5 with bounded tool-download retries, complete Git
+  identity checks and hardened evidence/path verification
+  ([Shared #138](https://github.com/dragginzgame/shared-tooling/issues/138),
+  [Shared #133](https://github.com/dragginzgame/shared-tooling/issues/133)).
+
 ## [0.1.0]
 
 - Record the build ownership and extraction design for the planned common engine.

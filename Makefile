@@ -3,7 +3,7 @@ override SHARED_TOOLING_ROOT := $(CURDIR)
 include make/consumer.mk
 
 .PHONY: help version tasks check ci check-doc-links check-workspace check-pins \
-        check-package docs-check msrv \
+        check-package docs-check test msrv \
         check-release-commands install-validation-tools lint check-shell \
         check-workflows check-secrets release-version release-preflight
 SHELLCHECK ?= $(CURDIR)/.tools/ci/bin/shellcheck
@@ -16,11 +16,11 @@ help:
 	@echo 'install-tools / tools-check: explicit shared setup and offline admission'
 	@echo 'fmt / fmt-check: sort Cargo manifests and format/check all workspace Rust source'
 	@echo 'install-hooks: activate the shared repository-local pre-commit formatter'
-	@echo 'check-package / docs-check / msrv: compile, document and check the scaffold on its declared floor'
+	@echo 'check-package / docs-check / test / msrv: compile, document and qualify the extracted engine'
 	@echo 'cloc: shared workspace Rust LOC report'
 	@echo 'install-validation-tools: pinned Linux x86-64 ShellCheck, actionlint and Gitleaks'
 	@echo 'lint / check-secrets: shell/workflow lint and history secret scan'
-	@echo 'release-*: shared entrypoints; require engine extraction and a reviewed adapter'
+	@echo 'release-*: shared entrypoints; require extraction acceptance and a reviewed adapter'
 
 version:
 	@bash scripts/ci/read-cargo-workspace-version.sh --stable Cargo.toml
@@ -31,7 +31,7 @@ tasks:
 check ci:
 	+@bash scripts/ci/run-validation-targets.sh --fail-fast \
 		shared-tooling-check tools-check check-doc-links check-workspace check-pins \
-		fmt-check check-package docs-check msrv check-release-commands
+		fmt-check check-package docs-check test msrv check-release-commands
 
 check-doc-links:
 	perl scripts/ci/check-documentation-links.pl --root "$(CURDIR)" \
@@ -52,6 +52,10 @@ check-package:
 docs-check:
 	+CARGO_NET_OFFLINE=true RUSTUP_AUTO_INSTALL=0 RUSTDOCFLAGS='-D warnings' \
 		cargo doc --workspace --all-features --no-deps --offline --locked
+
+test:
+	+CARGO_NET_OFFLINE=true RUSTUP_AUTO_INSTALL=0 cargo test -p ic-build \
+		--all-features --offline --locked
 
 msrv:
 	+@bash -ec 'task_msrv="$$(yq -p toml -o json -r '\''.workspace.package."rust-version"'\'' Cargo.toml)"; \
@@ -87,5 +91,5 @@ check-secrets:
 	"$(GITLEAKS)" git --redact=100 --no-banner --no-color --log-level error "$(CURDIR)"
 
 release-version release-preflight:
-	@echo 'IC Build has only a package scaffold; engine extraction and a reviewed release adapter are required.' >&2
+	@echo 'IC Build is unpublished; extraction acceptance and a reviewed release adapter are required.' >&2
 	@exit 1

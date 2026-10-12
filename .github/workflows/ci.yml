@@ -47,7 +47,7 @@ jobs:
           mkdir -p "$task_tmpdir"
           echo "TMPDIR=$task_tmpdir" >> "$GITHUB_ENV"
       - name: Prepare the declared development toolchain
-        run: rustup toolchain install --profile minimal --component rustfmt --no-self-update
+        run: rustup toolchain install --profile minimal --component rustfmt --target wasm32-unknown-unknown --no-self-update
       - name: Prepare the complete common toolset
         run: make install-tools 2>&1 | tee "$TMPDIR/tools-install.log"
       - name: Prepare the declared minimum compiler

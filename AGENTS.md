@@ -3,16 +3,16 @@
 Read [docs/status/current.md](docs/status/current.md), then
 [DRAGGINZGAME.md](DRAGGINZGAME.md) and the
 [ownership design](docs/design/build-ownership.md).
-The baseline is Shared Tooling 0.9.1 revision
-`e8a9ea6b660f216166eb00d0af6a32462bdbda4a`, recorded with exact digests in
+The baseline is Shared Tooling 0.9.5 revision
+`b1630b89482cc6071fc928a86962d79c9c11fdb7`, recorded with exact digests in
 [.shared-tooling.snapshot](.shared-tooling.snapshot).
 
 - Mutate only this repository unless the maintainer expressly authorizes another
   target. Existing sibling repositories remain read-only.
-- This is a planning bootstrap with a maintainer-requested package scaffold at
-  `crates/ic-build/`. It exposes no build API and is not publishable. Do not claim
-  that an engine, migration, native qualification or release exists before it is
-  implemented and verified.
+- The maintainer authorized extracting generic code from IC Testkit and Canic.
+  `crates/ic-build/` contains the extraction candidate and remains unpublished.
+  Do not claim completed consumer migration, native qualification or a release
+  until the corresponding changes are applied and verified.
 - Extract one implementation from its existing owners; do not copy a second
   production engine or leave compatibility reexports and parallel owners behind.
 - IC Build owns generic build/artifact mechanics. Consumers own recipes, budgets,
@@ -30,10 +30,10 @@ The baseline is Shared Tooling 0.9.1 revision
 - Check active Cargo/rustc processes before edits or builds. Preserve dirty source
   and artifacts. The bootstrap validation is `make check` (also `make ci`), plus
   `make lint check-secrets` on Linux with explicitly prepared validation tools.
-  The gates cover formatting, dependency inheritance, scaffold compilation,
-  rustdoc and the declared MSRV. Add behavioral tests and qualify the extracted
-  dependency graph when implementation begins; scaffold checks do not establish
-  build-engine behavior. Keep the root Cargo.lock tracked under the shared rules.
+  The gates cover formatting, dependency inheritance, compilation, rustdoc,
+  behavioral/process tests and the actual declared MSRV. Preserve the selected
+  graph and distinguish native artifact mechanics from synthetic Wasm producers.
+  Keep the root Cargo.lock tracked under the shared rules.
 - Follow [contribution rules](rules/contributions.md). Staging, commits, pushes,
   package versions, releases and publication are user-owned unless delegated.
 - GitHub issues are the follow-up tracker. Keep the design and handoff as evidence
