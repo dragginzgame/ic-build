@@ -19,10 +19,16 @@ Markdown links. It requires Bash and Perl. Shared Tooling 0.9.0 is pinned in
 [.shared-tooling.snapshot](.shared-tooling.snapshot); no mutable sibling checkout
 is used by these commands.
 
+The root [Cargo manifest](Cargo.toml) reserves the requested initial version
+`0.1.0`, edition 2024 and MSRV target 1.88.0 in a virtual workspace. It has no
+members yet; extraction will add the real package at `crates/ic-build/` and
+qualify its dependency graph and native hosts before claiming support.
+
 The common `make install-tools` and `make tools-check` commands are available.
 Setup is explicit and has not been run during bootstrap. Release entrypoints use
 the shared runner, but release metadata admission refuses until there is a real
-package and a reviewed release adapter. No initial package version is invented.
+package and a reviewed release adapter. The workspace version is preparation,
+not a released package.
 
 When implementation starts, use a virtual root Cargo workspace with
 `crates/ic-build/`, inherited package metadata and dependencies, and the qualified
@@ -31,6 +37,7 @@ Rust/MSRV and native-host requirements described in [AGENTS.md](AGENTS.md).
 ## Coordination
 
 The design owns architectural decisions, not issue status. GitHub issues in the
-owning repository remain the sole follow-up tracker once a remote is established.
+owning [GitHub repository](https://github.com/dragginzgame/ic-build) remain the
+sole follow-up tracker.
 Changes in Canic, Testkit, IcyDB or Shared Tooling require authorization for that
 repository. Saving this plan does not authorize their extraction or cleanup.
