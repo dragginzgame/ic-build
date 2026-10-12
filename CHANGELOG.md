@@ -3,7 +3,7 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.1.2]
+## [0.1.2] - 2026-10-12
 
 - Prepare the locked workspace dependency cache on every CI host before offline
   validation, so fresh runners can compile the package and run its gates
