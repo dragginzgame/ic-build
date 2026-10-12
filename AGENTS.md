@@ -3,8 +3,8 @@
 Read [docs/status/current.md](docs/status/current.md), then
 [DRAGGINZGAME.md](DRAGGINZGAME.md) and the
 [ownership design](docs/design/build-ownership.md).
-The baseline is Shared Tooling 0.9.0 revision
-`aec7a149f581a42b9531fc747b46024fc0314fcf`, recorded with exact digests in
+The baseline is Shared Tooling 0.9.1 revision
+`e8a9ea6b660f216166eb00d0af6a32462bdbda4a`, recorded with exact digests in
 [.shared-tooling.snapshot](.shared-tooling.snapshot).
 
 - Mutate only this repository unless the maintainer expressly authorizes another
@@ -26,8 +26,11 @@ The baseline is Shared Tooling 0.9.0 revision
 - Linux x86-64 and native macOS 15 Intel/Apple Silicon are the initial required
   hosts. Linux or substitute checks do not establish native macOS qualification.
 - Check active Cargo/rustc processes before edits or builds. Preserve dirty source
-  and artifacts. The bootstrap validation is `make check`; extend `make ci` with
-  the actual package gates when executable code is introduced.
+  and artifacts. The bootstrap validation is `make check` (also `make ci`), plus
+  `make lint check-secrets` on Linux with explicitly prepared validation tools.
+  Extend formatting, dependency checking and `make ci` with actual package/MSRV
+  gates when executable code is introduced; do not claim empty-workspace checks
+  establish package behavior.
 - Follow [contribution rules](rules/contributions.md). Staging, commits, pushes,
   package versions, releases and publication are user-owned unless delegated.
 - GitHub issues are the follow-up tracker. Keep the design and handoff as evidence

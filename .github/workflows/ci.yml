@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Prepare pinned validation tools
+        run: make install-validation-tools
+      - name: Check shell and workflow sources and scan history
+        run: make lint check-secrets
+
+  bootstrap:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - name: Prepare temporary evidence directory
+        run: |
+          task_tmpdir="$RUNNER_TEMP/bootstrap-validation"
+          mkdir -p "$task_tmpdir"
+          echo "TMPDIR=$task_tmpdir" >> "$GITHUB_ENV"
+      - name: Prepare the declared development toolchain
+        run: rustup toolchain install --profile minimal --component rustfmt --no-self-update
+      - name: Prepare the complete common toolset
+        run: make install-tools 2>&1 | tee "$TMPDIR/tools-install.log"
+      - name: Run the bootstrap gate
+        run: make ci
+      - name: Retain failed validation and installer evidence
+        if: ${{ failure() && !cancelled() }}
+        uses: ./.github/actions/retain-failure-evidence
+        with:
+          name: bootstrap-${{ matrix.os }}-${{ github.run_attempt }}
+          temp-root: ${{ runner.temp }}/bootstrap-validation
+          repository-root: ${{ github.workspace }}
