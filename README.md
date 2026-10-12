@@ -1,8 +1,8 @@
 # IC Build
 
 IC Build is the planned common Cargo and Wasm artifact build engine for Canic,
-IC Testkit and IcyDB. This repository currently contains the ownership and
-extraction design; it does not yet contain a Rust crate or a released build engine.
+IC Testkit and IcyDB. This repository contains the ownership and extraction design
+and an unpublished Rust package scaffold. The build engine is not implemented.
 
 Start with [Build ownership and extraction](docs/design/build-ownership.md).
 It records the inspected build paths, duplicated responsibilities, intended
@@ -19,10 +19,19 @@ Shared Tooling 0.9.1 is pinned in
 local snapshot. The [Make interface](docs/make-interface.md) owns common setup,
 formatting, hook installation and release entrypoints.
 
-The root [Cargo manifest](Cargo.toml) reserves the requested initial version
-`0.1.0`, edition 2024 and MSRV target 1.88.0 in a virtual workspace. It has no
-members yet; extraction will add the real package at `crates/ic-build/` and
-qualify its dependency graph and native hosts before claiming support.
+The virtual root [Cargo manifest](Cargo.toml) owns version `0.1.0`, edition 2024,
+MSRV 1.88.0, common metadata and lints. The
+[ic-build package](crates/ic-build/Cargo.toml) inherits them and disables registry
+publication. Its dependency-free [library root](crates/ic-build/src/lib.rs)
+exposes no build API. The root [lockfile](Cargo.lock) records this scaffold's
+selected graph; extracted dependencies will need separate qualification.
+
+```text
+Cargo.toml                  # Virtual workspace and shared metadata
+Cargo.lock                  # One selected graph
+crates/ic-build/Cargo.toml   # Inherited package metadata; publish = false
+crates/ic-build/src/lib.rs   # Library scaffold
+```
 
 Prepare the declared development compiler and common tools explicitly:
 
@@ -43,28 +52,34 @@ the PATH selection in [local developer setup](docs/local-setup.md).
 | `make version` | Read the initial workspace version. |
 | `make tasks` | Read the shared maintenance catalog; scheduling remains explicit. |
 | `make tools-check` | Verify all 12 common tools offline. |
-| `make fmt` / `make fmt-check` | Sort / check Cargo manifests through the shared formatter. |
+| `make fmt` / `make fmt-check` | Sort Cargo manifests and format / check all workspace Rust source. |
 | `make install-hooks` | Activate the shared pre-commit formatter for selected staged files. |
-| `make check` / `make ci` | Run the complete bootstrap gate: snapshot, tools, all Markdown links, Cargo metadata, declared pins, formatting and isolated release-command routing. |
+| `make check-package` / `make docs-check` | Compile the scaffold and build rustdoc with warnings denied. |
+| `make msrv` | Compile the scaffold using the minimum compiler declared in Cargo.toml. |
+| `make check` / `make ci` | Run the complete bootstrap gate: snapshot, tools, Markdown links, Cargo metadata, shared dependency/pin checks, formatting, scaffold compilation/rustdoc/MSRV and isolated release routing. |
 | `make install-validation-tools` | Prepare pinned Linux x86-64 ShellCheck, actionlint and Gitleaks. |
 | `make lint check-secrets` | Check shell/workflow sources and scan committed history for secrets. |
 
 The full local delivery suite is `make ci` plus `make lint check-secrets` on
 Linux after explicit tool setup. [CI](.github/workflows/ci.yml) runs lint/security
 on Linux and the bootstrap gate on Linux x86-64, macOS 15 Apple Silicon and
-macOS 15 Intel. Failed native jobs use the shared evidence action. These jobs
-are configured but have not yet qualified this change on native macOS.
+macOS 15 Intel. It explicitly prepares the minimum compiler from Cargo.toml.
+Failed native jobs use the shared evidence action. These jobs are configured but
+have not yet qualified the package scaffold on native macOS.
 
-The empty workspace has no Rust source or dependency graph. Its formatter
-covers the manifest; package extraction must add Rust source formatting, the
-tracked lockfile and full shared dependency checker, behavioral tests and MSRV
-gates. The shared `make cloc` report requires workspace packages. Release
-entrypoints use the shared runner but refuse until a real package and reviewed
-release adapter exist. The workspace version is preparation, not a release.
+Keep Cargo.lock tracked: the full shared pin checker enforces lockfile custody
+as well as root/member dependency inheritance. Before the new lockfile is staged,
+that gate refuses the working checkout; layout preparation is validated in an
+isolated checkout without changing the real index.
 
-When implementation starts, add `crates/ic-build/` to the virtual workspace with
-inherited metadata and dependencies, following the Rust/MSRV and native-host
-requirements in [AGENTS.md](AGENTS.md).
+`make cloc` reports the workspace's Rust LOC. The scaffold has no implementation
+or behavioral tests. Package extraction must introduce the engine and its real
+behavioral/MSRV gates. Release entrypoints use the shared runner but refuse until
+engine extraction and a reviewed release adapter exist. Version `0.1.0` is
+preparation, not a release.
+
+When implementation starts, extract the existing generic implementation into
+`crates/ic-build/`, following [AGENTS.md](AGENTS.md) and the ownership design.
 
 ## Coordination
 

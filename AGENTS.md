@@ -9,8 +9,10 @@ The baseline is Shared Tooling 0.9.1 revision
 
 - Mutate only this repository unless the maintainer expressly authorizes another
   target. Existing sibling repositories remain read-only.
-- This is a planning bootstrap. Do not claim that an engine, crate, migration,
-  native qualification or release exists before it is implemented and verified.
+- This is a planning bootstrap with a maintainer-requested package scaffold at
+  `crates/ic-build/`. It exposes no build API and is not publishable. Do not claim
+  that an engine, migration, native qualification or release exists before it is
+  implemented and verified.
 - Extract one implementation from its existing owners; do not copy a second
   production engine or leave compatibility reexports and parallel owners behind.
 - IC Build owns generic build/artifact mechanics. Consumers own recipes, budgets,
@@ -28,9 +30,10 @@ The baseline is Shared Tooling 0.9.1 revision
 - Check active Cargo/rustc processes before edits or builds. Preserve dirty source
   and artifacts. The bootstrap validation is `make check` (also `make ci`), plus
   `make lint check-secrets` on Linux with explicitly prepared validation tools.
-  Extend formatting, dependency checking and `make ci` with actual package/MSRV
-  gates when executable code is introduced; do not claim empty-workspace checks
-  establish package behavior.
+  The gates cover formatting, dependency inheritance, scaffold compilation,
+  rustdoc and the declared MSRV. Add behavioral tests and qualify the extracted
+  dependency graph when implementation begins; scaffold checks do not establish
+  build-engine behavior. Keep the root Cargo.lock tracked under the shared rules.
 - Follow [contribution rules](rules/contributions.md). Staging, commits, pushes,
   package versions, releases and publication are user-owned unless delegated.
 - GitHub issues are the follow-up tracker. Keep the design and handoff as evidence

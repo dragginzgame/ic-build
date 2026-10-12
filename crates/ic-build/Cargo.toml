@@ -1,0 +1,12 @@
+[package]
+name = "ic-build"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+repository.workspace = true
+description.workspace = true
+readme.workspace = true
+publish = false
+
+[lints]
+workspace = true

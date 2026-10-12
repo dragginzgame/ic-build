@@ -10,3 +10,6 @@
 - Add the common contributor Make interface, manifest formatting hook, explicit
   development toolchain and bootstrap CI for Linux and both macOS 15 architectures,
   with pinned validation tools and retained failure evidence.
+- Add an unpublished `ic-build` library scaffold in the standard `crates/`
+  layout, inheriting workspace metadata and lints, with a root lockfile, source
+  formatting and compilation/documentation/MSRV gates. The engine remains planned.

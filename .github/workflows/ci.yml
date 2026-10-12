@@ -50,6 +50,10 @@ jobs:
         run: rustup toolchain install --profile minimal --component rustfmt --no-self-update
       - name: Prepare the complete common toolset
         run: make install-tools 2>&1 | tee "$TMPDIR/tools-install.log"
+      - name: Prepare the declared minimum compiler
+        run: |
+          task_msrv="$(.tools/host/bin/yq -p toml -o json -r '.workspace.package."rust-version"' Cargo.toml)"
+          rustup toolchain install "$task_msrv" --profile minimal --no-self-update
       - name: Run the bootstrap gate
         run: make ci
       - name: Retain failed validation and installer evidence
