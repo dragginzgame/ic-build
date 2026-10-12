@@ -54,6 +54,8 @@ jobs:
         run: |
           task_msrv="$(.tools/host/bin/yq -p toml -o json -r '.workspace.package."rust-version"' Cargo.toml)"
           rustup toolchain install "$task_msrv" --profile minimal --no-self-update
+      - name: Prepare the locked workspace dependency cache
+        run: cargo fetch --locked 2>&1 | tee "$TMPDIR/dependencies-fetch.log"
       - name: Run the bootstrap gate
         run: make ci
       - name: Retain failed validation and installer evidence

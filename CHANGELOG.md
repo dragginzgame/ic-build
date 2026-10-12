@@ -3,6 +3,12 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.1.2]
+
+- Prepare the locked workspace dependency cache on every CI host before offline
+  validation, so fresh runners can compile the package and run its gates
+  ([#5](https://github.com/dragginzgame/ic-build/issues/5)).
+
 ## [0.1.1] - 2026-10-12
 
 - Preserve typed Cargo grouping failures, including original status and bounded

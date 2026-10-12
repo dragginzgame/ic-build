@@ -1,5 +1,36 @@
 # Current handoff
 
+## CI dependency preparation
+
+Version 0.1.1 is published from `dbb17982557174eed29e1a499a2b1a7bb278d5a7`.
+The next pending notes are 0.1.2; package metadata remains 0.1.1. The sections
+below preserve earlier extraction/delivery evidence, including their historical
+version and working-tree references.
+
+The current working-tree repair for
+[#5](https://github.com/dragginzgame/ic-build/issues/5) adds explicit
+`cargo fetch --locked` preparation on every CI matrix host before the offline
+gate. Fetch output is retained with the existing failed-validation evidence.
+Developer setup now documents the same prerequisite; validation remains offline
+and does not install dependencies implicitly.
+
+A private checkout of the released source with the workflow/changelog repair and
+an empty Cargo home reproduced the missing `fs2` failure before preparation.
+Locked fetching then enabled the full Linux `make ci lint check-secrets` gate,
+including 141 unit tests, real Cargo/Wasm/process suites, actual Rust 1.88.0 and
+release-adapter fixtures. The released lockfile checksum stayed
+`c1704c433e54f8bd20c054561570f6e7ed85cf8fbfa165093a6b55eb4429a51e`
+before fetch, after fetch and after the gate. Evidence remains under
+`/tmp/ic-build-ci-cache-repair.Vn3mPr/`, including `before-fetch.log`,
+`dependencies-fetch.log` and `full-validation.log`.
+
+The real checkout's existing Host 0.15.1/syn 3.0.9 lockfile update was preserved
+unchanged and was not substituted for the released graph in this validation.
+The repair remains uncommitted; no package version, real index, Git refs,
+publication, CI dispatch or retained artifacts were changed. Native macOS
+qualification still requires CI against the delivered repair; local Linux checks
+do not establish it.
+
 ## Generic engine extraction
 
 The maintainer authorized moving generic build/artifact code from IC Testkit

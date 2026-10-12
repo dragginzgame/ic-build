@@ -2,7 +2,7 @@
 
 IC Build provides common Cargo/Wasm builds and retained artifact caches, moved
 from IC Testkit, and feature-safe Cargo grouping from Canic.
-Version [0.1.0 is published on crates.io](https://crates.io/crates/ic-build/0.1.0).
+Version [0.1.1 is published on crates.io](https://crates.io/crates/ic-build/0.1.1).
 The owning
 [extraction issue](https://github.com/dragginzgame/ic-build/issues/1) tracks
 producer and consumer acceptance.
@@ -63,7 +63,7 @@ Shared Tooling 0.9.5 is pinned in
 local snapshot. The [Make interface](docs/make-interface.md) owns common setup,
 formatting, hook installation and release entrypoints.
 
-The virtual root [Cargo manifest](Cargo.toml) owns version `0.1.0`, edition 2024,
+The virtual root [Cargo manifest](Cargo.toml) owns version `0.1.1`, edition 2024,
 MSRV 1.88.0, common metadata and lints. The
 [ic-build package](crates/ic-build/Cargo.toml) inherits them and permits registry
 publication through the explicit tagged-release command. The [library root](crates/ic-build/src/lib.rs)
@@ -82,6 +82,7 @@ Prepare the declared development compiler and common tools explicitly:
 ```bash
 rustup toolchain install --profile minimal --component rustfmt --target wasm32-unknown-unknown --no-self-update
 make install-tools
+cargo fetch --locked
 make install-hooks
 ```
 
@@ -89,6 +90,9 @@ make install-hooks
 development compiler independently of the qualified Linux library MSRV. The complete
 common toolset is prepared and checked on Linux x86-64. Interactive shells use
 the PATH selection in [local developer setup](docs/local-setup.md).
+Fetch the selected workspace dependencies before the offline validation gate;
+installing developer tools does not populate this project cache. CI performs the
+same locked fetch on each host and retains its preparation log on failure.
 
 | Command | Purpose |
 | --- | --- |
@@ -126,7 +130,7 @@ on Linux; native macOS qualification remains pending. The
 [release and publication guide](docs/publishing.md) describes the consumer
 adapters, exact tagged-source admission and retained recovery evidence.
 The adapter fixtures qualify command behavior; they do not establish publication
-of the pending 0.1.1 changes or native macOS support.
+of the pending 0.1.2 changes or native macOS support.
 
 Existing Testkit v1 stamp bytes, digest domains and `.ic-testkit` cache/lock names
 are retained unchanged during the ownership move. There is one reader and no
