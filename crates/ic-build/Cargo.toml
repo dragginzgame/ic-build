@@ -8,7 +8,7 @@ description.workspace = true
 readme.workspace = true
 license.workspace = true
 license-file.workspace = true
-publish = false
+publish = true
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
