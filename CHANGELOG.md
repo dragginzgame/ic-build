@@ -3,7 +3,7 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.1.1]
+## [0.1.1] - 2026-10-12
 
 - Preserve typed Cargo grouping failures, including original status and bounded
   stdout/stderr, through Host's existing execution error
