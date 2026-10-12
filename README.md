@@ -1,8 +1,9 @@
 # IC Build
 
-IC Build contains the unpublished extraction candidate for common Cargo/Wasm
-builds and retained artifact caches, moved from IC Testkit, and feature-safe
-Cargo grouping from Canic. The owning
+IC Build provides common Cargo/Wasm builds and retained artifact caches, moved
+from IC Testkit, and feature-safe Cargo grouping from Canic.
+Version [0.1.0 is published on crates.io](https://crates.io/crates/ic-build/0.1.0).
+The owning
 [extraction issue](https://github.com/dragginzgame/ic-build/issues/1) tracks
 producer and consumer acceptance.
 
@@ -23,6 +24,38 @@ freshness, batching and explicit maintenance.
 The dependency direction is application adapters → IC Build → IC Host
 Tooling. IC Build must not depend on Canic, IcyDB, PocketIC or IC Testkit.
 
+## Use
+
+Add the registry dependency to your host-side package:
+
+```toml
+[dependencies]
+ic-build = "0.1"
+```
+
+Import the engine directly and keep the returned record alive while using its
+artifacts. With a prepared Cargo/Wasm toolchain and a caller-held source lease:
+
+```rust,no_run
+use ic_build::artifacts::{WasmBuildSpec, build_wasm_canisters_cached};
+use std::path::Path;
+
+fn build(workspace: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let target = workspace.join("target/canister-builds");
+    let spec = WasmBuildSpec::new(workspace, &target, &["counter_canister"], "release")
+        .with_cargo_profile_args(["--release", "--locked"]);
+    let outcome = build_wasm_canisters_cached(&spec)?;
+    let wasm = std::fs::read(&outcome.record().artifacts()[0])?;
+    Ok(wasm)
+}
+```
+
+Consumers select packages, profiles, environment and maintenance policy.
+Publication makes the engine available; [#1](https://github.com/dragginzgame/ic-build/issues/1)
+still tracks consumer acceptance, Canic production convergence and required native
+macOS qualification. See the artifact guide for source custody and retained-cache
+contracts.
+
 ## Development
 
 Shared Tooling 0.9.5 is pinned in
@@ -32,15 +65,15 @@ formatting, hook installation and release entrypoints.
 
 The virtual root [Cargo manifest](Cargo.toml) owns version `0.1.0`, edition 2024,
 MSRV 1.88.0, common metadata and lints. The
-[ic-build package](crates/ic-build/Cargo.toml) inherits them and disables registry
-publication while extraction is qualified. The [library root](crates/ic-build/src/lib.rs)
+[ic-build package](crates/ic-build/Cargo.toml) inherits them and permits registry
+publication through the explicit tagged-release command. The [library root](crates/ic-build/src/lib.rs)
 exports the generic engine. The root [lockfile](Cargo.lock) records its selected
 dependencies; none depend on Testkit, PocketIC or Canic.
 
 ```text
 Cargo.toml                  # Virtual workspace and shared metadata
 Cargo.lock                  # One selected graph
-crates/ic-build/Cargo.toml   # Inherited package metadata; publish = false
+crates/ic-build/Cargo.toml   # Inherited package metadata; publish = true
 crates/ic-build/src/lib.rs   # Generic engine modules
 ```
 
@@ -60,7 +93,7 @@ the PATH selection in [local developer setup](docs/local-setup.md).
 | Command | Purpose |
 | --- | --- |
 | `make help` | List the repository commands. |
-| `make version` | Read the initial workspace version. |
+| `make version` | Read the current workspace version. |
 | `make tasks` | Read the shared maintenance catalog; scheduling remains explicit. |
 | `make tools-check` | Verify all 12 common tools offline. |
 | `make fmt` / `make fmt-check` | Sort Cargo manifests and format / check all workspace Rust source. |
@@ -71,6 +104,9 @@ the PATH selection in [local developer setup](docs/local-setup.md).
 | `make check` / `make ci` | Run the full gate: snapshot, tools, links, metadata, dependency/pin checks, formatting, compilation/rustdoc/tests/MSRV and isolated release routing. |
 | `make install-validation-tools` | Prepare pinned Linux x86-64 ShellCheck, actionlint and Gitleaks. |
 | `make lint check-secrets` | Check shell/workflow sources and scan committed history for secrets. |
+| `make check-release-adapters` | Test release metadata, recovery and publication routing in isolated fixtures. |
+| `make release-patch` / `make release-minor` / `make release-major` | Validate and deliver the selected release through Shared Tooling. |
+| `make publish-check` / `make publish` | Dry-run / upload the clean, tagged release to crates.io. |
 
 The full local delivery suite is `make ci` plus `make lint check-secrets` on
 Linux after explicit tool setup. [CI](.github/workflows/ci.yml) runs lint/security
@@ -86,9 +122,11 @@ with its selected lockfile; validation never changes package versions.
 `make cloc` reports workspace Rust LOC. The transferred tests execute real
 filesystem and process boundaries, Cargo metadata and Wasm compilation, alongside
 synthetic producer fixtures for failure and concurrency cases. These checks passed
-on Linux; native macOS qualification remains pending. Release entrypoints refuse
-until extraction acceptance and a
-reviewed release adapter exist. Version `0.1.0` is preparation, not a release.
+on Linux; native macOS qualification remains pending. The
+[release and publication guide](docs/publishing.md) describes the consumer
+adapters, exact tagged-source admission and retained recovery evidence.
+The adapter fixtures qualify command behavior; they do not establish publication
+of the pending 0.1.1 changes or native macOS support.
 
 Existing Testkit v1 stamp bytes, digest domains and `.ic-testkit` cache/lock names
 are retained unchanged during the ownership move. There is one reader and no
@@ -106,4 +144,4 @@ The design owns architectural decisions, not issue status. GitHub issues in the
 owning [GitHub repository](https://github.com/dragginzgame/ic-build) remain the
 sole follow-up tracker.
 Changes in Canic, Testkit, IcyDB or Shared Tooling require authorization for that
-repository. Saving this plan does not authorize their extraction or cleanup.
+repository. Consumer migrations and cleanup require their own scoped authorization.

@@ -10,7 +10,6 @@ repository = "https://github.com/dragginzgame/ic-build"
 description = "Cargo and Wasm builds, exact inputs and retained artifact caches"
 readme = "README.md"
 license = "MIT"
-license-file = "LICENSE"
 
 [workspace.dependencies]
 fs2 = "0.4"

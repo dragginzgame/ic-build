@@ -1,11 +1,28 @@
 .DEFAULT_GOAL := help
 override SHARED_TOOLING_ROOT := $(CURDIR)
+export SHARED_TOOLING_ROOT
+export RELEASE_DELIVERY ?= direct
+export YQ := $(CURDIR)/.tools/host/bin/yq
 include make/consumer.mk
 
 .PHONY: help version tasks check ci check-doc-links check-workspace check-pins \
         check-package docs-check test msrv \
         check-release-commands install-validation-tools lint check-shell \
-        check-workflows check-secrets release-version release-preflight
+        check-workflows check-secrets release-version release-preflight \
+        release-verify release-prepare-version release-prepared-check release-files \
+        release-commit-check release-committed-check release-tagged-check release-push-check \
+        check-release-adapters package publish publish-check
+
+_release_targets := release-patch release-minor release-major release-resume \
+                    release-version release-preflight release-verify release-prepare-version \
+                    release-prepared-check release-files release-commit-check \
+                    release-committed-check release-tagged-check release-push-check
+ifneq ($(filter $(_release_targets),$(MAKECMDGOALS)),)
+ifneq ($(RELEASE_DELIVERY),direct)
+$(error IC Build supports RELEASE_DELIVERY=direct only)
+endif
+endif
+release-patch release-minor release-major release-resume: export IC_BUILD_RELEASE_CACHE_PREPARE := 1
 SHELLCHECK ?= $(CURDIR)/.tools/ci/bin/shellcheck
 ACTIONLINT ?= $(CURDIR)/.tools/ci/bin/actionlint
 GITLEAKS ?= $(CURDIR)/.tools/ci/bin/gitleaks
@@ -20,7 +37,9 @@ help:
 	@echo 'cloc: shared workspace Rust LOC report'
 	@echo 'install-validation-tools: pinned Linux x86-64 ShellCheck, actionlint and Gitleaks'
 	@echo 'lint / check-secrets: shell/workflow lint and history secret scan'
-	@echo 'release-*: shared entrypoints; require extraction acceptance and a reviewed adapter'
+	@echo 'release-*: shared runner; validate, prepare, commit, tag and atomically push the selected release'
+	@echo 'package / publish-check / publish: local archive / tagged-release dry run / crates.io upload'
+	@echo 'check-release-adapters: isolated metadata and publication fixtures, with no live release effects'
 
 version:
 	@bash scripts/ci/read-cargo-workspace-version.sh --stable Cargo.toml
@@ -31,7 +50,7 @@ tasks:
 check ci:
 	+@bash scripts/ci/run-validation-targets.sh --fail-fast \
 		shared-tooling-check tools-check check-doc-links check-workspace check-pins \
-		fmt-check check-package docs-check test msrv check-release-commands
+		fmt-check check-package docs-check test msrv check-release-commands check-release-adapters
 
 check-doc-links:
 	perl scripts/ci/check-documentation-links.pl --root "$(CURDIR)" \
@@ -69,6 +88,9 @@ check-release-commands:
 		make/consumer.mk make/tools.mk make/rust-format.mk make/release.mk \
 		make/execution.mk scripts/ci/check-make-execution.sh
 
+check-release-adapters:
+	bash scripts/release/test-adapters.sh
+
 install-validation-tools:
 	@bash -ec 'test "$$(uname -s):$$(uname -m)" = Linux:x86_64; \
 		. ci/tool-versions.env; \
@@ -82,7 +104,7 @@ install-validation-tools:
 lint: check-shell check-workflows
 
 check-shell:
-	"$(SHELLCHECK)" scripts/ci/*.sh scripts/dev/*.sh .githooks/pre-commit
+	"$(SHELLCHECK)" scripts/ci/*.sh scripts/dev/*.sh scripts/release/*.sh .githooks/pre-commit
 
 check-workflows:
 	"$(ACTIONLINT)" .github/workflows/*.yml
@@ -90,6 +112,30 @@ check-workflows:
 check-secrets:
 	"$(GITLEAKS)" git --redact=100 --no-banner --no-color --log-level error "$(CURDIR)"
 
-release-version release-preflight:
-	@echo 'IC Build is unpublished; extraction acceptance and a reviewed release adapter are required.' >&2
-	@exit 1
+release-version:
+	@bash scripts/release/metadata.sh version
+
+release-preflight:
+	+@bash scripts/release/metadata.sh preflight
+
+release-verify:
+	+@VALIDATION_FAILURE_LOG_DIR="$$(git rev-parse --git-path release-state)/validation-failures" \
+		bash scripts/ci/run-validation-targets.sh --fail-fast ci lint check-secrets
+
+release-prepare-version:
+	+@bash scripts/release/metadata.sh prepare
+
+release-prepared-check release-committed-check release-tagged-check release-push-check:
+	+@bash scripts/release/metadata.sh check
+
+release-files:
+	@printf '%s\0' Cargo.toml Cargo.lock CHANGELOG.md
+
+release-commit-check:
+	+@bash scripts/release/metadata.sh commit-check
+
+package:
+	+cargo package -p ic-build --locked
+
+publish publish-check:
+	+@bash scripts/release/publish.sh "$@"

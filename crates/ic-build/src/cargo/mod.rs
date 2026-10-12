@@ -7,6 +7,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::batch::{BatchLabelError, validate_labels};
 use ic_host_process::tool::{CompletedExecution, OutputLimits, capture_command};
 use std::{collections::BTreeMap, path::Path, process::Command};
 
@@ -15,9 +16,13 @@ use std::{collections::BTreeMap, path::Path, process::Command};
 /// The caller supplies the selected Cargo command, complete environment, target,
 /// source custody and output/deadline policy. This does not publish artifacts or
 /// establish a consumer's release validity.
+/// Package names must be nonempty and unique; invalid inputs are rejected before
+/// invoking the command factory, with zero-based indices in the error. An empty
+/// package list returns an empty plan without invoking the factory.
 ///
 /// # Errors
-/// Returns the original process/capture failure or invalid dependency-tree evidence.
+/// Returns invalid package input, the original typed Host process/capture failure
+/// (including status and bounded diagnostics), or invalid dependency-tree evidence.
 pub fn compatible_package_groups(
     workspace: &Path,
     packages: &[String],
@@ -25,6 +30,14 @@ pub fn compatible_package_groups(
     limits: OutputLimits,
     mut cargo_command: impl FnMut() -> Command,
 ) -> Result<Vec<Vec<String>>, Box<dyn std::error::Error>> {
+    validate_labels(packages.iter().map(String::as_str)).map_err(|error| match error {
+        BatchLabelError::Empty { index } => {
+            format!("empty Cargo package input at index {index}")
+        }
+        BatchLabelError::Duplicate { label, first_index, duplicate_index } => {
+            format!("duplicate Cargo package input {label:?} at indices {first_index} and {duplicate_index}")
+        }
+    })?;
     let mut isolated = BTreeMap::new();
     let mut groups: Vec<Vec<String>> = Vec::new();
     for package in packages {
@@ -88,15 +101,9 @@ fn resolved_trees(
     for package in packages {
         command.arg("--package").arg(package);
     }
-    let output =
-        capture_command(&mut command, limits).and_then(CompletedExecution::require_complete)?;
-    if !output.status.success() {
-        return Err(format!(
-            "Cargo batch feature inspection failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        )
-        .into());
-    }
+    let output = capture_command(&mut command, limits)
+        .and_then(CompletedExecution::require_success)
+        .and_then(CompletedExecution::require_complete)?;
     parse_trees(&String::from_utf8(output.stdout)?)
 }
 

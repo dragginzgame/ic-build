@@ -2,6 +2,104 @@ use super::*;
 use ic_host_process::tool::OutputLimit;
 
 #[test]
+fn invalid_package_inputs_reject_before_command_effects() {
+    let limits = OutputLimits {
+        stdout: OutputLimit::Terminate(4096),
+        stderr: OutputLimit::Terminate(4096),
+        timeout: None,
+    };
+    for (packages, expected) in [
+        (
+            vec!["left", "", "right"],
+            "empty Cargo package input at index 1",
+        ),
+        (
+            vec!["left", "right", "left"],
+            "duplicate Cargo package input \"left\" at indices 0 and 2",
+        ),
+    ] {
+        let packages = packages.into_iter().map(str::to_string).collect::<Vec<_>>();
+        let error = compatible_package_groups(
+            Path::new("."),
+            &packages,
+            "wasm32-unknown-unknown",
+            limits,
+            || panic!("invalid package inputs must not invoke the command factory"),
+        )
+        .unwrap_err();
+        assert_eq!(error.to_string(), expected);
+    }
+    let groups = compatible_package_groups(
+        Path::new("."),
+        &[],
+        "wasm32-unknown-unknown",
+        limits,
+        || panic!("an empty plan must not invoke the command factory"),
+    )
+    .unwrap();
+    assert!(groups.is_empty());
+}
+
+#[test]
+#[cfg(unix)]
+fn unsuccessful_tree_commands_preserve_status_and_bounded_diagnostics() {
+    use ic_host_process::tool::{ExecutionFailure, ToolError};
+    let limits = OutputLimits {
+        stdout: OutputLimit::Truncate(12),
+        stderr: OutputLimit::Terminate(4096),
+        timeout: None,
+    };
+    for stdout in ["probe stdout", "probe stdout beyond the admitted limit"] {
+        let error = compatible_package_groups(
+            Path::new("."),
+            &["role".to_string()],
+            "wasm32-unknown-unknown",
+            limits,
+            || {
+                let mut command = Command::new("/bin/sh");
+                command.args([
+                    "-c",
+                    "printf '%s' \"$1\"; printf 'probe stderr' >&2; exit 23",
+                    "probe",
+                    stdout,
+                ]);
+                command
+            },
+        )
+        .unwrap_err();
+        let ToolError::Execution(execution) = error
+            .downcast_ref::<ToolError>()
+            .expect("typed Host failure")
+        else {
+            panic!("expected a completed execution failure")
+        };
+        assert!(matches!(execution.failure, ExecutionFailure::ExitStatus));
+        assert_eq!(execution.evidence.status.unwrap().code(), Some(23));
+        assert_eq!(execution.evidence.stdout, b"probe stdout");
+        assert_eq!(execution.evidence.stderr, b"probe stderr");
+        assert_eq!(execution.evidence.stdout_truncated, stdout.len() > 12);
+        assert!(!execution.evidence.stderr_truncated);
+    }
+    let malformed = compatible_package_groups(
+        Path::new("."),
+        &["role".to_string()],
+        "wasm32-unknown-unknown",
+        limits,
+        || {
+            let mut command = Command::new("/bin/sh");
+            command.args(["-c", "printf '1dependency'"]);
+            command
+        },
+    )
+    .unwrap_err();
+    assert!(malformed.downcast_ref::<ToolError>().is_none());
+    assert_eq!(
+        malformed.to_string(),
+        "Cargo dependency has no selected root"
+    );
+}
+
+#[test]
 #[cfg(unix)]
 fn incomplete_tree_capture_and_spawn_failures_preserve_typed_host_errors() {
     let root = crate::artifacts::test_support::unique_temp_directory("batch-capture-failure");

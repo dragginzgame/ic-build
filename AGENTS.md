@@ -10,7 +10,7 @@ The baseline is Shared Tooling 0.9.5 revision
 - Mutate only this repository unless the maintainer expressly authorizes another
   target. Existing sibling repositories remain read-only.
 - The maintainer authorized extracting generic code from IC Testkit and Canic.
-  `crates/ic-build/` contains the extraction candidate and remains unpublished.
+  `crates/ic-build/` owns the extracted engine; version 0.1.0 is published.
   Do not claim completed consumer migration, native qualification or a release
   until the corresponding changes are applied and verified.
 - Extract one implementation from its existing owners; do not copy a second

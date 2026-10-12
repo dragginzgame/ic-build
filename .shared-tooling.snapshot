@@ -71,6 +71,7 @@ revision	b1630b89482cc6071fc928a86962d79c9c11fdb7
 # entrypoint	scripts/ci/install-actionlint.sh
 # entrypoint	scripts/ci/install-shellcheck.sh
 # entrypoint	scripts/ci/install-gitleaks.sh
+# entrypoint	scripts/ci/rewrite-local-lock-versions.pl
 file	9e69a457466c76b77d1b4acede62717a3d3599acfa4aa8c75ea0cb95780633db	-	DRAGGINZGAME.md
 file	8d32526932bdaf88a6c78ccc2358fb92a49bd89b7631572766deea51923d8f58	-	rules/contributions.md
 file	e7c1c56549860efff6a579913a1632eb19868d5e2e5e5e1ed2ba3ea7171db881	-	rules/changelogs.md
@@ -139,6 +140,7 @@ file	6fe7da8acbeb862b26047d08c63a95a5d2b93223bb9c929d65c56dd2f30551ac	x	scripts/
 file	8a6304b9096963fa5fe1881fa99ce1790b34d6ee0e0d0d0983f6d63da84817d2	x	scripts/ci/install-actionlint.sh
 file	c133d81786de40433b64fbc497db763151705d52e910607e768b8f986fc20548	x	scripts/ci/install-shellcheck.sh
 file	b74ef317a68d4b7f881eda82d508d0e696af32bf5a53f278c5e8233663e666d1	x	scripts/ci/install-gitleaks.sh
+file	236f9b2d7fe391a73d03cfe355c0d26fa73de8db1553c7e670f7b19aeb65d086	x	scripts/ci/rewrite-local-lock-versions.pl
 file	6f8fcf904d038e1a6ae6e5ce4c812762ba05d937c775aacc1601f131ffc2032c	-	make/tools.mk
 file	ae47d5db88f4c4b0c8bce9ee94b83edc25ce450daa9df0275971f270439c5d34	-	make/release.mk
 file	394b173e903aeb4d057f57665a0fad17233b677eff1f63d17d81314b3086856b	-	make/rust-format.mk
