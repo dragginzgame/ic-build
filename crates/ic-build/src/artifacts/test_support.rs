@@ -9,7 +9,7 @@ pub(super) use crate::test_executable::write_executable_script;
 
 static TEMP_DIRECTORY_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
-pub(crate) fn unique_temp_directory(label: &str) -> PathBuf {
+pub fn unique_temp_directory(label: &str) -> PathBuf {
     let sequence = TEMP_DIRECTORY_SEQUENCE.fetch_add(1, Ordering::Relaxed);
     let path = std::env::temp_dir().join(format!(
         "ic-testkit-{label}-{}-{sequence}",

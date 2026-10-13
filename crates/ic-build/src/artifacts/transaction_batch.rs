@@ -244,6 +244,9 @@ impl<E> ArtifactCacheBatchEntry<E> {
     }
 
     /// Structured success or failure for this entry.
+    ///
+    /// # Errors
+    /// Returns this entry's recorded preparation, population or publication failure.
     pub const fn result(&self) -> Result<&ArtifactCacheOutcome, &ArtifactCacheBatchFailure<E>> {
         self.result.as_ref()
     }
@@ -476,6 +479,10 @@ impl<E> std::fmt::Display for ArtifactCacheBatchReport<E> {
 /// This operation is not atomic across specifications. A caller requiring one
 /// all-or-nothing multi-output publication should declare those outputs on one
 /// [`ArtifactCacheSpec`] instead.
+///
+/// # Errors
+/// Returns a contract error for an empty or duplicate label before any work.
+/// Per-entry acquisition, callback and commit errors are retained in the report.
 pub fn build_artifact_caches_batch<E, F>(
     specs: &[LabeledArtifactCacheSpec],
     mut populate: F,

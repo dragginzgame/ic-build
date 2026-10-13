@@ -37,7 +37,7 @@ fn invalid_package_inputs_reject_before_command_effects() {
         || panic!("an empty plan must not invoke the command factory"),
     )
     .unwrap();
-    assert!(groups.is_empty());
+    assert_eq!(groups, Vec::<Vec<String>>::new());
 }
 
 #[test]

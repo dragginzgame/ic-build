@@ -19,6 +19,9 @@ impl WatchedInputSnapshot {
     ///
     /// File timestamps are deliberately excluded, so the same content produces
     /// the same digest after a Git checkout or CI cache restore.
+    ///
+    /// # Errors
+    /// Returns input traversal or file-read errors while hashing the watched trees.
     pub fn capture(workspace_root: &Path, watched_relative_paths: &[&str]) -> io::Result<Self> {
         let paths = watched_relative_paths
             .iter()
@@ -44,6 +47,10 @@ impl WatchedInputSnapshot {
     /// Stamp reads are bounded by the expected stamp length plus one byte;
     /// oversized stamps are stale. I/O errors and invalid UTF-8 in stamps within
     /// that size limit are reported to the caller.
+    ///
+    /// # Errors
+    /// Returns artifact metadata, bounded stamp-read or stamp UTF-8 errors.
+    /// An absent stamp is stale rather than an error; absent artifacts report I/O errors.
     pub fn artifact_is_fresh(self, artifact_path: &Path) -> io::Result<bool> {
         let metadata = fs::metadata(artifact_path)?;
         if !metadata.is_file() || metadata.len() == 0 {
@@ -63,6 +70,9 @@ impl WatchedInputSnapshot {
     /// The caller must coordinate producers and verify that inputs have not
     /// changed during the build before stamping. This checks only that the
     /// artifact is a nonempty regular file, not that its bytes match the build.
+    ///
+    /// # Errors
+    /// Returns artifact metadata, invalid-artifact or durable stamp-publication errors.
     pub fn mark_artifact_fresh(self, artifact_path: &Path) -> io::Result<()> {
         let metadata = fs::metadata(artifact_path)?;
         if !metadata.is_file() || metadata.len() == 0 {

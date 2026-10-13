@@ -6,7 +6,7 @@ export YQ := $(CURDIR)/.tools/host/bin/yq
 include make/consumer.mk
 
 .PHONY: help version tasks check ci check-doc-links check-workspace check-pins \
-        check-package docs-check test msrv \
+        check-package clippy docs-check test msrv \
         check-release-commands install-validation-tools lint check-shell \
         check-workflows check-secrets release-version release-preflight \
         release-verify release-prepare-version release-prepared-check release-files \
@@ -33,7 +33,7 @@ help:
 	@echo 'install-tools / tools-check: explicit shared setup and offline admission'
 	@echo 'fmt / fmt-check: sort Cargo manifests and format/check all workspace Rust source'
 	@echo 'install-hooks: activate the shared repository-local pre-commit formatter'
-	@echo 'check-package / docs-check / test / msrv: compile, document and qualify the extracted engine'
+	@echo 'check-package / clippy / docs-check / test / msrv: compile, lint, document and qualify the extracted engine'
 	@echo 'cloc: shared workspace Rust LOC report'
 	@echo 'install-validation-tools: pinned Linux x86-64 ShellCheck, actionlint and Gitleaks'
 	@echo 'lint / check-secrets: shell/workflow lint and history secret scan'
@@ -50,7 +50,7 @@ tasks:
 check ci:
 	+@bash scripts/ci/run-validation-targets.sh --fail-fast \
 		shared-tooling-check tools-check check-doc-links check-workspace check-pins \
-		fmt-check check-package docs-check test msrv check-release-commands check-release-adapters
+		fmt-check check-package clippy docs-check test msrv check-release-commands check-release-adapters
 
 check-doc-links:
 	perl scripts/ci/check-documentation-links.pl --root "$(CURDIR)" \
@@ -67,6 +67,10 @@ check-pins:
 check-package:
 	+CARGO_NET_OFFLINE=true RUSTUP_AUTO_INSTALL=0 cargo check \
 		--workspace --all-targets --all-features --offline --locked
+
+clippy:
+	+CARGO_NET_OFFLINE=true RUSTUP_AUTO_INSTALL=0 cargo clippy \
+		-p ic-build --all-targets --all-features --offline --locked -- -D warnings
 
 docs-check:
 	+CARGO_NET_OFFLINE=true RUSTUP_AUTO_INSTALL=0 RUSTDOCFLAGS='-D warnings' \

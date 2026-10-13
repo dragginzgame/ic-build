@@ -789,6 +789,10 @@ fn pruning_removes_abandoned_staging_without_touching_active_transactions() {
     assert_eq!(active_report.uncommitted_directories_removed(), 0);
     assert!(active_staging.exists());
     #[cfg(unix)]
+    #[expect(
+        clippy::used_underscore_binding,
+        reason = "duplicate the RAII content lock to qualify pruning custody"
+    )]
     let retained_content_lock = transaction
         ._content_lock
         .try_clone()
@@ -1288,10 +1292,7 @@ fn expect_build(preparation: ArtifactCachePreparation) -> super::ArtifactBuildTr
 }
 
 fn expect_invalid_spec(result: Result<ArtifactCachePreparation, ArtifactCacheError>) {
-    assert!(matches!(
-        result,
-        Err(ArtifactCacheError::InvalidSpec { .. })
-    ));
+    assert!(result.is_err_and(|error| matches!(error, ArtifactCacheError::InvalidSpec { .. })));
 }
 
 fn build_output(spec: &ArtifactCacheSpec, contents: &[u8]) -> ArtifactCacheOutcome {

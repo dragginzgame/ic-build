@@ -2,7 +2,7 @@
 
 IC Build provides common Cargo/Wasm builds and retained artifact caches, moved
 from IC Testkit, and feature-safe Cargo grouping from Canic.
-Version [0.1.2 is published on crates.io](https://crates.io/crates/ic-build/0.1.2).
+Version [0.1.3 is published on crates.io](https://crates.io/crates/ic-build/0.1.3).
 The owning
 [extraction issue](https://github.com/dragginzgame/ic-build/issues/1) tracks
 producer and consumer acceptance.
@@ -20,7 +20,7 @@ owners, retained safety boundaries and extraction sequence. Read the
 [current handoff](docs/status/current.md) before implementation.
 The [artifact API guide](docs/artifacts.md) covers recipes, retained records,
 freshness, batching and explicit maintenance.
-Pending 0.1.3 also provides temporary staging and bounded capture of producer
+Version 0.1.3 also provides temporary staging and bounded capture of producer
 outputs, with caller-owned qualification and publication.
 
 The dependency direction is application adapters → IC Build → IC Host
@@ -65,7 +65,7 @@ Shared Tooling 0.9.5 is pinned in
 local snapshot. The [Make interface](docs/make-interface.md) owns common setup,
 formatting, hook installation and release entrypoints.
 
-The virtual root [Cargo manifest](Cargo.toml) owns version `0.1.2`, edition 2024,
+The virtual root [Cargo manifest](Cargo.toml) owns version `0.1.3`, edition 2024,
 MSRV 1.88.0, common metadata and lints. The
 [ic-build package](crates/ic-build/Cargo.toml) inherits them and permits registry
 publication through the explicit tagged-release command. The [library root](crates/ic-build/src/lib.rs)
@@ -89,7 +89,8 @@ make install-hooks
 ```
 
 [rust-toolchain.toml](rust-toolchain.toml) selects the existing Rust 1.99.0
-development compiler independently of the qualified Linux library MSRV. The complete
+development compiler, rustfmt, Clippy and its Wasm target independently of the qualified Linux
+library MSRV. Explicit setup reads that target from the toolchain file. The complete
 common toolset is prepared and checked on Linux x86-64. Interactive shells use
 the PATH selection in [local developer setup](docs/local-setup.md).
 Fetch the selected workspace dependencies before the offline validation gate;
@@ -108,9 +109,10 @@ use the prepared compiler even outside this repository's toolchain selection.
 | `make fmt` / `make fmt-check` | Sort Cargo manifests and format / check all workspace Rust source. |
 | `make install-hooks` | Activate the shared pre-commit formatter for selected staged files. |
 | `make check-package` / `make docs-check` | Compile the engine and build rustdoc with warnings denied. |
+| `make clippy` | Check the library, tests and examples with all features and warnings denied. |
 | `make test` | Run behavioral, cross-process retention/locking and documentation tests. |
 | `make msrv` | Compile the engine using the minimum compiler declared in Cargo.toml. |
-| `make check` / `make ci` | Run the full gate: snapshot, tools, links, metadata, dependency/pin checks, formatting, compilation/rustdoc/tests/MSRV and isolated release routing. |
+| `make check` / `make ci` | Run the full gate: snapshot, tools, links, metadata, dependency/pin checks, formatting, compilation/Clippy/rustdoc/tests/MSRV and isolated release routing. |
 | `make install-validation-tools` | Prepare pinned Linux x86-64 ShellCheck, actionlint and Gitleaks. |
 | `make lint check-secrets` | Check shell/workflow sources and scan committed history for secrets. |
 | `make check-release-adapters` | Test release metadata, recovery and publication routing in isolated fixtures. |
@@ -135,7 +137,7 @@ on Linux; native macOS qualification remains pending. The
 [release and publication guide](docs/publishing.md) describes the consumer
 adapters, exact tagged-source admission and retained recovery evidence.
 The adapter fixtures qualify command behavior; they do not establish publication
-of the pending 0.1.3 changes or native macOS support.
+or native macOS support. Published-version custody is recorded in the handoff.
 
 Existing Testkit v1 stamp bytes, digest domains and `.ic-testkit` cache/lock names
 are retained unchanged during the ownership move. There is one reader and no

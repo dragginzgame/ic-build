@@ -87,6 +87,9 @@ fn library_output_validation_survives_batch_session_and_prepared_resolution() {
             .build_batch(&specs, WasmBuildBatchConfig::new())
             .unwrap(),
     );
+    drop(snapshot);
+    drop(session);
+    drop(source_guard);
     fs::remove_dir_all(root).unwrap();
 }
 

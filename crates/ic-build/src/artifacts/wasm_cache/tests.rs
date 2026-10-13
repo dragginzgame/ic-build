@@ -316,6 +316,8 @@ fn compact_feature_arguments_watch_enabled_optional_dependencies() {
             .expect("prepare distinct feature graphs");
             assert_eq!(prepared.metrics().input_resolution_runs(), 2);
             assert_eq!(prepared.metrics().input_resolution_reuses(), 0);
+            drop(prepared);
+            drop(guard);
         }
         fs::write(&dependency_source, "pub fn optional_dep() -> u8 { 2 }\n")
             .expect("change optional dependency source");
@@ -1663,15 +1665,14 @@ fn observed_cargo_failure_retains_captured_diagnostics_and_exit_event() {
         let mut events = Vec::new();
         let error = {
             let mut observer = |event| events.push(event);
-            let mut progress = match emit {
-                Some(emit) => ProgressReporter::observed(
+            let mut progress = emit.map_or_else(ProgressReporter::silent, |emit| {
+                ProgressReporter::observed(
                     WasmBuildProgressConfig::new()
                         .without_heartbeats()
                         .with_cargo_output(emit),
                     &mut observer,
-                ),
-                None => ProgressReporter::silent(),
-            };
+                )
+            });
 
             run_cargo_build(&spec, &root.join("cargo-target"), &mut progress)
                 .expect_err("Cargo fixture must fail")

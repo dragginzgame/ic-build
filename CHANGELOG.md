@@ -3,6 +3,18 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.1.4]
+
+- Qualify the extracted library, tests and examples with warning-denied Rust
+  Clippy, and include that check in `make check` / `make ci`. Document public
+  error contracts and preserve source leases through their final consumers;
+  prepare Clippy through the declared development toolchain
+  ([#8](https://github.com/dragginzgame/ic-build/issues/8)).
+- Declare the development Wasm target in `rust-toolchain.toml`, so Rustup
+  prepares it on fresh runners when installing the active toolchain. Preserve
+  the prepared compiler selection and real positive-heartbeat build
+  ([#6](https://github.com/dragginzgame/ic-build/issues/6)).
+
 ## [0.1.3] - 2026-10-13
 
 - Add temporary artifact staging and bounded capture of completed producer outputs.

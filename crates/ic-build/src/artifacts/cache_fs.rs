@@ -390,10 +390,9 @@ pub(super) fn cache_maintenance_due(
     if lines.next() != Some(maintenance_identity) {
         return Ok(true);
     }
-    Ok(match SystemTime::now().duration_since(last_maintenance) {
-        Ok(elapsed) => elapsed >= minimum_interval,
-        Err(_) => true,
-    })
+    Ok(SystemTime::now()
+        .duration_since(last_maintenance)
+        .map_or(true, |elapsed| elapsed >= minimum_interval))
 }
 
 pub(super) fn record_cache_maintenance(
@@ -807,6 +806,10 @@ mod tests {
         let root = unique_temp_directory("retention-duplicate-descriptor");
         let retained = super::RetainedCacheEntry::acquire(&root).unwrap();
         // A process spawn can duplicate this descriptor before close-on-exec.
+        #[expect(
+            clippy::used_underscore_binding,
+            reason = "inspect the RAII guard to verify inherited-descriptor retention"
+        )]
         let inherited = retained._lock.0.try_clone().unwrap();
         let clone = retained.clone();
         let independently_retained = super::RetainedCacheEntry::acquire(&root).unwrap();

@@ -194,6 +194,10 @@ impl<'guard> WasmBuildSession<'guard> {
     }
 
     /// Build one sequential collect-all batch using retained immutable inputs.
+    ///
+    /// # Errors
+    /// Returns invalid labels or an invalidated source-lease error before work.
+    /// Individual build failures are retained in the returned report.
     pub fn build_batch(
         &mut self,
         specs: &[LabeledWasmBuildSpec],
@@ -208,6 +212,10 @@ impl<'guard> WasmBuildSession<'guard> {
     }
 
     /// Build one observed sequential batch using retained immutable inputs.
+    ///
+    /// # Errors
+    /// Returns invalid labels or an invalidated source-lease error before work.
+    /// Individual build failures are retained in the returned report.
     pub fn build_batch_with_progress<F>(
         &mut self,
         specs: &[LabeledWasmBuildSpec],
@@ -264,6 +272,9 @@ impl<'guard> WasmBuildInputSnapshot<'guard> {
     /// manifest, configuration file, discovered source, declared additional
     /// input, and relevant environment value used by the supplied
     /// specifications. The type system cannot verify guard provenance.
+    ///
+    /// # Errors
+    /// Returns specification, tool/metadata, filesystem or input-resolution errors.
     pub fn prepare_assuming_sources_immutable<Guard: ?Sized>(
         _source_write_guard: &'guard Guard,
         specs: &[WasmBuildSpec],
@@ -278,6 +289,10 @@ impl<'guard> WasmBuildInputSnapshot<'guard> {
     ///
     /// Separate calls may run concurrently. Every exact specification must
     /// have been supplied to [`Self::prepare_assuming_sources_immutable`].
+    ///
+    /// # Errors
+    /// Returns invalid labels, an invalidated lease or an unprepared specification
+    /// error before work. Individual build failures are retained in the report.
     pub fn build_batch(
         &self,
         specs: &[LabeledWasmBuildSpec],
@@ -294,6 +309,10 @@ impl<'guard> WasmBuildInputSnapshot<'guard> {
     /// Build one observed sequential batch from prepared inputs.
     ///
     /// Separate calls may run concurrently and use independent observers.
+    ///
+    /// # Errors
+    /// Returns invalid labels, an invalidated lease or an unprepared specification
+    /// error before work. Individual build failures are retained in the report.
     pub fn build_batch_with_progress<F>(
         &self,
         specs: &[LabeledWasmBuildSpec],
@@ -379,6 +398,9 @@ impl WasmBuildBatchEntry {
     }
 
     /// Structured success or failure for this entry.
+    ///
+    /// # Errors
+    /// Returns this entry's recorded build error when the entry failed.
     pub const fn result(&self) -> Result<&WasmBuildOutcome, &WasmBuildError> {
         match &self.result {
             Ok(outcome) => Ok(outcome),
@@ -809,6 +831,10 @@ impl std::fmt::Display for WasmBuildBatchReport {
 /// keeps its own package set, profile arguments, feature resolution,
 /// fingerprint, locks, and cache policy. Packages are never combined into one
 /// Cargo command because doing so can unify shared dependency features.
+///
+/// # Errors
+/// Returns a contract error for an empty or duplicate label before any work.
+/// Individual build failures are retained in the returned report.
 pub fn build_wasm_canisters_cached_batch(
     specs: &[LabeledWasmBuildSpec],
 ) -> Result<WasmBuildBatchReport, WasmBuildBatchContractError> {
@@ -821,6 +847,10 @@ pub fn build_wasm_canisters_cached_batch(
 /// each distinct configured shared-target path. Isolated specifications are
 /// unaffected. An entry mixing batch-owned and per-spec integrated maintenance
 /// reports an indexed error without preventing later entries from running.
+///
+/// # Errors
+/// Returns a contract error for an empty or duplicate label before any work.
+/// Individual build failures are retained in the returned report.
 pub fn build_wasm_canisters_cached_batch_with_config(
     specs: &[LabeledWasmBuildSpec],
     config: WasmBuildBatchConfig,
@@ -833,6 +863,10 @@ pub fn build_wasm_canisters_cached_batch_with_config(
 /// The same observation configuration is applied to every entry. Batch events
 /// identify the originating specification without altering the standalone
 /// build semantics.
+///
+/// # Errors
+/// Returns a contract error for an empty or duplicate label before any work.
+/// Individual build failures are retained in the returned report.
 pub fn build_wasm_canisters_cached_batch_with_progress<F>(
     specs: &[LabeledWasmBuildSpec],
     config: WasmBuildProgressConfig,
@@ -850,6 +884,10 @@ where
 }
 
 /// Build a configured independent Wasm batch while forwarding structured progress.
+///
+/// # Errors
+/// Returns a contract error for an empty or duplicate label before any work.
+/// Individual build failures are retained in the returned report.
 pub fn build_wasm_canisters_cached_batch_with_config_and_progress<F>(
     specs: &[LabeledWasmBuildSpec],
     batch_config: WasmBuildBatchConfig,

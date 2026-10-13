@@ -1018,6 +1018,8 @@ fn source_changes_during_shared_incremental_build_reject_exact_publication() {
             .expect("valid race-test batch");
         let invalidated = session.metrics().is_invalidated();
         let next = session.build_batch(&specs, WasmBuildBatchConfig::new());
+        drop(session);
+        drop(source_guard);
         (report, invalidated, next)
     });
     wait_for_path(&started);
@@ -1035,10 +1037,9 @@ fn source_changes_during_shared_incremental_build_reject_exact_publication() {
         .failures()
         .next()
         .expect("changed source must fail the leased entry");
-    let error = failure.error();
 
     assert!(matches!(
-        error,
+        failure.error(),
         WasmBuildError::InputsChangedDuringAcquisition { .. }
     ));
     assert_eq!(failure.phase(), WasmBuildFailurePhase::ContentHashing);

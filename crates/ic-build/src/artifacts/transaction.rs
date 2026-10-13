@@ -695,6 +695,9 @@ impl ArtifactBuildTransaction {
     }
 
     /// Checked staging destination for one declared logical output.
+    ///
+    /// # Errors
+    /// Returns [`ArtifactCacheError::UnknownOutput`] for an undeclared output name.
     pub fn output_path(&self, name: &str) -> Result<PathBuf, ArtifactCacheError> {
         self.output_index(name)
             .map(|index| staged_output_path(&self.staging_directory, index))
@@ -704,6 +707,9 @@ impl ArtifactBuildTransaction {
     }
 
     /// Copy a fixed external output into its transaction-owned staging path.
+    ///
+    /// # Errors
+    /// Returns an unknown-output or atomic source-copy/publication error.
     pub fn import_output(&self, name: &str, source: &Path) -> Result<(), ArtifactCacheError> {
         let destination = self.output_path(name)?;
         copy_file_atomic(source, &destination).map_err(|source_error| ArtifactCacheError::Io {
@@ -715,6 +721,10 @@ impl ArtifactBuildTransaction {
     }
 
     /// Validate the exact staging schema and atomically publish the complete output set.
+    ///
+    /// # Errors
+    /// Returns staging-schema, output verification, input-change, lock or publication
+    /// errors. Failed staging cleanup preserves both the transaction and cleanup errors.
     pub fn commit(mut self) -> Result<ArtifactCacheOutcome, ArtifactCacheError> {
         let result = self.commit_inner();
         match result {
@@ -738,6 +748,9 @@ impl ArtifactBuildTransaction {
     }
 
     /// Abandon the transaction and synchronously remove its staging directory.
+    ///
+    /// # Errors
+    /// Returns the filesystem error if removing the owned staging directory fails.
     pub fn abort(mut self) -> Result<(), ArtifactCacheError> {
         remove_path_if_present(&self.staging_directory).map_err(|source| {
             ArtifactCacheError::Io {
@@ -848,6 +861,13 @@ impl Drop for ArtifactBuildTransaction {
 /// writers to these mutable paths.
 /// Final symlinks with missing or cyclic referents can be replaced. Directories
 /// and directory referents remain invalid destinations.
+///
+/// # Errors
+/// Returns invalid specification/boundary, Cargo input revalidation, input-change,
+/// lock, input-read or cache acquisition/materialization errors.
+///
+/// # Panics
+/// Panics if internal preparation retries exhaust without recording an input change.
 pub fn prepare_artifact_cache(
     spec: &ArtifactCacheSpec,
 ) -> Result<ArtifactCachePreparation, ArtifactCacheError> {
@@ -995,6 +1015,9 @@ fn revalidate_cargo_build_input_fingerprints(
 /// Abandoned staging is removed only when its content-key lock is currently
 /// unowned and is reported separately from committed-entry retention.
 /// Entries owned by live acquisition records are skipped until their last owner drops.
+///
+/// # Errors
+/// Returns invalid namespace/root, lock, cache inspection or removal errors.
 pub fn prune_artifact_cache(
     cache_root: &Path,
     namespace: &str,

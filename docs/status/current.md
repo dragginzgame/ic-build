@@ -1,6 +1,89 @@
 # Current handoff
 
-## Current release and compiler qualification
+## Pending 0.1.4 qualification batch — 2026-10-13
+
+The maintainer requested more work for 0.1.4. The existing fresh-runner Wasm
+setup correction is extended with [#8](https://github.com/dragginzgame/ic-build/issues/8):
+warning-denied Rust Clippy now passes for the library, unit/integration tests and
+examples with all features. `make clippy` is a primitive, offline/locked package
+check; `make check` and `make ci` run it before rustdoc and tests. The development
+toolchain declares both Clippy and the Wasm target for explicit setup.
+
+The 43 initial library/test diagnostics are corrected, together with one source
+guard diagnostic exposed when integration targets became reachable. Public
+error/panic contracts are documented, private cache-miss inputs are borrowed,
+and small test/style corrections preserve behavior. Source guards remain held
+through the final session/snapshot operation; borrowed owners explicitly drop
+before the guards. Two statement-local lint expectations document why descriptor
+inheritance tests must inspect underscore-named RAII fields. The declared lint
+policy, public production signatures, dependencies and cache bytes are unchanged.
+
+Full Linux `make ci lint check-secrets` passes with the new gate, including 146
+unit tests, 14 real Cargo/Wasm cases, process/retention suites, rustdoc, actual
+Rust 1.88.0 and isolated release-adapter fixtures. Receipt:
+`/tmp/ic-build-014-full-validation.log`; strict initial/final diagnostics and
+before-images are retained under `/tmp/ic-build-014-*`. Cargo.lock remains
+`c0c98783fc94d305034cef7788a7558a5629aacef8c8ca039d2a638ab5fcd235`.
+Explicit setup in the retained private Rustup fixture also prepares Clippy while
+keeping Wasm installed; receipts are `clippy-install.log` and
+`clippy-components.log` under `/tmp/ic-build-6-fresh-rustup.FGmFTo/`.
+
+Published 0.1.3 now has the same heartbeat failure on Linux and native macOS
+Apple Silicon; Intel remains queued at inspection. The delivered 0.1.4 native
+matrix still needs to qualify these working-tree corrections. Metadata remains
+0.1.3, the numbered draft remains 0.1.4, and Git/release effects are user-owned.
+No sibling source was changed in this batch. Earlier sections retain their
+historical source/graph and qualification state.
+
+## Published 0.1.3 and current consumer qualification — 2026-10-13
+
+Version 0.1.3 is published from
+`3248364dccc9bdb9b56a666f86cc7682b4dead42`. The cached crates.io archive's
+SHA-256 is
+`1527d2dfe308fc7c1236b6db42c8c6883635f0d60d1dbbabd28462648058caec`;
+its VCS receipt names that release and its staging source/tests match this
+checkout. The published dependency graph selects Host 0.16.0. Earlier Linux
+receipts below qualified Host 0.15.2 and remain historical evidence.
+
+The authorized Canic #529 replacement is applied against registry 0.1.3, with
+no local producer override or parallel staging engine. Canic keeps its recipes,
+read/output policy, release binding and qualification-first durable publication.
+Its current graph selects Host 0.16.0, Memory 0.36.1, Testkit 0.36.0,
+Blob/contracts 0.23.0 and Timers 0.21.4. Concurrent catalog updates are preserved.
+
+All 45 focused consumer checks pass in a frozen checkout with a separate target:
+23 artifact cases, two real Cargo-output cases, three release-binding cases and
+17 declaration/cache cases including the real extractor. One governed PocketIC
+binding case remains ignored. Strict Host all-target/all-feature Clippy and
+changed-file formatting pass. A final custody check matches 1,592 owning-package
+Rust/manifest/config inputs to live Canic; receipts are under
+`/tmp/canic-529-registry-qualification/` and `/tmp/canic-529-registry-*.log`.
+Three consumer production adapters shrink by 25 code lines. Canic's handoff and
+0.112 draft own consumer evidence; native/application acceptance remains pending.
+Package versions, staging, Git delivery and further publication remain user-owned.
+
+The [release CI run](https://github.com/dragginzgame/ic-build/actions/runs/38373448100)
+has a failed Linux job and queued macOS jobs at inspection. Linux again fails
+the real positive-heartbeat build with a missing Wasm standard library, despite
+the released prepared-compiler selection. Rustup 1.29.1's no-channel install
+branch reads required targets from the toolchain file and does not apply the
+command's target/component flags. The released file omitted the Wasm target.
+
+The working-tree #6 follow-up declares `wasm32-unknown-unknown` there. A fresh
+private Rustup home under `/tmp/ic-build-6-fresh-rustup.FGmFTo/` reproduces the
+old setup's successful installation without Wasm, then the same explicit setup
+installs Wasm with the amended file. Its real positive-heartbeat test passes
+with that private compiler and no inherited toolchain override. The user's
+installed compilers, global default and targets are untouched.
+
+Full Linux `make ci lint check-secrets` passes on the released Host 0.16 graph,
+including 146 units, 14 real Cargo/Wasm cases, process/retention suites and actual
+Rust 1.88.0. Receipt: `/tmp/ic-build-013-host016-final-ci.log`. Metadata remains
+0.1.3; the current numbered 0.1.4 draft covers this setup correction. Native
+macOS acceptance and #6 closure still require delivered CI results. Historical
+working-tree/version claims below describe their recorded source state.
+
+## Historical compiler qualification
 
 Version 0.1.2 is published from `24c5f49a1684e62f67a659a931a628ada6cd2cdd`;
 package metadata remains 0.1.2 and the next pending notes are 0.1.3. The later

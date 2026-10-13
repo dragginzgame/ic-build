@@ -1455,6 +1455,9 @@ impl ResolvedCargoBuildInputs {
     }
 
     /// Resolve `spec` again and report whether its exact identity is unchanged.
+    ///
+    /// # Errors
+    /// Returns specification, tool/metadata, filesystem or input-resolution errors.
     pub fn is_current(&self, spec: &WasmBuildSpec) -> Result<bool, WasmBuildError> {
         resolve_cargo_build_inputs(spec).map(|current| current.fingerprint == self.fingerprint)
     }
@@ -1465,6 +1468,9 @@ impl ResolvedCargoBuildInputs {
     /// before/after guards around external artifact transformations. Resolve a
     /// new snapshot to observe tool, argument, environment, or dependency-graph
     /// identity changes between separate acquisitions.
+    ///
+    /// # Errors
+    /// Returns filesystem errors while rehashing the previously discovered inputs.
     pub fn is_content_current(&self) -> Result<bool, WasmBuildError> {
         self.current_validation_digest()
             .map(|current| current == self.validation_digest)
@@ -2222,6 +2228,10 @@ impl std::fmt::Display for WasmBuildOutcome {
 /// Tool identities require complete output within 64 KiB per stream. Metadata
 /// requires complete stdout within 16 MiB and stderr within 64 KiB. Probes have
 /// no elapsed-time deadline; oversized output fails before parsing or hashing.
+///
+/// # Errors
+/// Returns invalid specifications, tool/metadata probe failures, filesystem
+/// errors or Cargo input discovery/resolution errors.
 pub fn resolve_cargo_build_inputs(
     spec: &WasmBuildSpec,
 ) -> Result<ResolvedCargoBuildInputs, WasmBuildError> {
@@ -2233,6 +2243,9 @@ pub fn resolve_cargo_build_inputs(
 ///
 /// Returns `None` without creating anything when the caller-owned target does
 /// not exist. This operation never removes Cargo state.
+///
+/// # Errors
+/// Returns target-boundary, coordination-lock, size-inspection or use-marker errors.
 pub fn inspect_shared_incremental_target(
     spec: &WasmBuildSpec,
 ) -> Result<Option<SharedIncrementalTargetInspection>, WasmBuildError> {
@@ -2273,6 +2286,10 @@ pub fn inspect_shared_incremental_target(
 ///
 /// This function is never called automatically by exact Wasm acquisitions.
 /// Consumers retain ownership of when mutable incremental state may be lost.
+///
+/// # Errors
+/// Returns missing configuration, unsafe source/target overlap, input-resolution,
+/// lock, inspection or target-removal errors.
 pub fn maintain_shared_incremental_target(
     spec: &WasmBuildSpec,
     policy: SharedIncrementalTargetPrunePolicy,
@@ -2305,6 +2322,10 @@ pub fn maintain_shared_incremental_target(
 /// clearing the target. Failures are returned and are not recorded as a
 /// successful pass, so an unsafe configuration cannot be hidden by the
 /// schedule.
+///
+/// # Errors
+/// Returns missing configuration, schedule, input-resolution, lock, inspection
+/// or target-removal errors. Failed maintenance does not advance the schedule.
 pub fn maintain_shared_incremental_target_at_most_every(
     spec: &WasmBuildSpec,
     policy: SharedIncrementalTargetPrunePolicy,
@@ -2499,6 +2520,10 @@ fn clear_shared_incremental_target_contents(target_dir: &Path) -> Result<(), Was
 /// an acquisition record still retains that entry. Cold publication and
 /// non-Unix materialization use atomic replacement. Callers must coordinate
 /// other writers to mutable public destinations and treat retained paths as read-only.
+///
+/// # Errors
+/// Returns invalid specification, input-resolution/change, coordination-lock,
+/// Cargo execution, artifact verification or publication errors.
 pub fn build_wasm_canisters_cached(
     spec: &WasmBuildSpec,
 ) -> Result<WasmBuildOutcome, WasmBuildError> {
@@ -2534,6 +2559,10 @@ pub(super) fn build_wasm_canisters_cached_in_batch(
 /// Observed Cargo builds use a new process group rather than sharing the
 /// parent terminal group. Cleanup reaps Cargo and signals its remaining group
 /// members; escaped descendants and a wall-clock cleanup bound are not covered.
+///
+/// # Errors
+/// Returns invalid observation/specification, input-resolution/change, lock,
+/// Cargo execution, artifact verification or publication errors.
 pub fn build_wasm_canisters_cached_with_progress<F>(
     spec: &WasmBuildSpec,
     config: WasmBuildProgressConfig,
@@ -2658,10 +2687,10 @@ fn build_wasm_canisters_cached_internal(
             let cache_entry = cache_entry_directory(spec, resolved.fingerprint);
             build_wasm_cache_miss(
                 spec,
-                resolved,
+                &resolved,
                 first_lock_wait,
                 isolated_acquisition,
-                cache_entry,
+                &cache_entry,
                 total_started,
                 progress,
             )
@@ -2725,10 +2754,10 @@ fn build_wasm_with_shared_incremental(
 
     let outcome = build_wasm_cache_miss(
         spec,
-        current,
+        &current,
         lock_wait,
         shared_incremental,
-        shared_target,
+        &shared_target,
         total_started,
         progress,
     );
@@ -2779,10 +2808,10 @@ fn build_wasm_canisters_cached_with_scheduled_shared_maintenance(
     });
     build_wasm_cache_miss(
         spec,
-        resolved,
+        &resolved,
         lock_wait,
         shared_incremental,
-        shared_target,
+        &shared_target,
         total_started,
         progress,
     )
@@ -3077,10 +3106,10 @@ fn reconstruct_exact_cache_entry(
 
 fn build_wasm_cache_miss(
     spec: &WasmBuildSpec,
-    resolved: ResolvedCargoBuildInputs,
+    resolved: &ResolvedCargoBuildInputs,
     lock_wait: Duration,
     shared_incremental: WasmAcquisitionContext,
-    cargo_target_dir: PathBuf,
+    cargo_target_dir: &Path,
     total_started: Instant,
     progress: &mut ProgressReporter<'_>,
 ) -> Result<WasmBuildOutcome, WasmBuildError> {
@@ -3108,15 +3137,15 @@ fn build_wasm_cache_miss(
             spec.cache_mode,
             WasmBuildCacheMode::SharedIncremental { .. }
         ) {
-            record_cache_entry_use(&cargo_target_dir)?;
+            record_cache_entry_use(cargo_target_dir)?;
         }
         let build_started = Instant::now();
         progress.begin_phase(WasmBuildFailurePhase::CargoBuild);
-        let cargo_result = run_cargo_build(spec, &cargo_target_dir, progress);
+        let cargo_result = run_cargo_build(spec, cargo_target_dir, progress);
         let cargo_build = build_started.elapsed();
         progress.record_phase(WasmBuildFailurePhase::CargoBuild, cargo_build);
         cargo_result?;
-        let built_artifacts = expected_artifacts(spec, &cargo_target_dir);
+        let built_artifacts = expected_artifacts(spec, cargo_target_dir);
         let validation_started = Instant::now();
         progress.begin_phase(WasmBuildFailurePhase::ArtifactPublication);
         let missing = missing_artifacts(&built_artifacts);
@@ -3128,7 +3157,7 @@ fn build_wasm_cache_miss(
             return Err(WasmBuildError::MissingArtifacts { paths: missing });
         }
 
-        let verified = verify_resolved_inputs(spec, &resolved, progress)?;
+        let verified = verify_resolved_inputs(spec, resolved, progress)?;
         input_resolution.include(verified.timings);
 
         // Publication is the prepared snapshot's linearization boundary. A
@@ -3174,6 +3203,9 @@ fn build_wasm_cache_miss(
 /// directories with SHA-256 fingerprint names are eligible; caller-facing
 /// artifacts and unrelated target contents are never removed.
 /// Entries owned by live build records are skipped until their last owner drops.
+///
+/// # Errors
+/// Returns cache-lock, inspection or filesystem removal errors.
 pub fn prune_wasm_build_cache(
     target_dir: &Path,
     policy: ArtifactCachePrunePolicy,
