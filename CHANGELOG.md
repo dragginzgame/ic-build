@@ -3,7 +3,7 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.1.3]
+## [0.1.3] - 2026-10-13
 
 - Add temporary artifact staging and bounded capture of completed producer outputs.
   Keep captured bytes alive across later compilations; callers retain recipes,
