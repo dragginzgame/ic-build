@@ -3,7 +3,7 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.2.5]
+## [0.2.5] - 2026-10-13
 
 - Replace the duplicated optional-duration helper with standard-library reduction
   in Wasm and artifact timing aggregation. Preserve absent measurements, measured
