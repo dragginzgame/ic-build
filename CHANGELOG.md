@@ -3,7 +3,7 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.2.1]
+## [0.2.1] - 2026-10-13
 
 - Adopt Shared Tooling 0.10.0's snapshot-owned common catalogs. Keep existing
   executable versions and digests; select host, Rust and IC exceptions
