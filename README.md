@@ -2,7 +2,7 @@
 
 IC Build provides common Cargo/Wasm builds and retained artifact caches, moved
 from IC Testkit, and feature-safe Cargo grouping from Canic.
-Version [0.1.1 is published on crates.io](https://crates.io/crates/ic-build/0.1.1).
+Version [0.1.2 is published on crates.io](https://crates.io/crates/ic-build/0.1.2).
 The owning
 [extraction issue](https://github.com/dragginzgame/ic-build/issues/1) tracks
 producer and consumer acceptance.
@@ -20,6 +20,8 @@ owners, retained safety boundaries and extraction sequence. Read the
 [current handoff](docs/status/current.md) before implementation.
 The [artifact API guide](docs/artifacts.md) covers recipes, retained records,
 freshness, batching and explicit maintenance.
+Pending 0.1.3 also provides temporary staging and bounded capture of producer
+outputs, with caller-owned qualification and publication.
 
 The dependency direction is application adapters → IC Build → IC Host
 Tooling. IC Build must not depend on Canic, IcyDB, PocketIC or IC Testkit.
@@ -63,7 +65,7 @@ Shared Tooling 0.9.5 is pinned in
 local snapshot. The [Make interface](docs/make-interface.md) owns common setup,
 formatting, hook installation and release entrypoints.
 
-The virtual root [Cargo manifest](Cargo.toml) owns version `0.1.1`, edition 2024,
+The virtual root [Cargo manifest](Cargo.toml) owns version `0.1.2`, edition 2024,
 MSRV 1.88.0, common metadata and lints. The
 [ic-build package](crates/ic-build/Cargo.toml) inherits them and permits registry
 publication through the explicit tagged-release command. The [library root](crates/ic-build/src/lib.rs)
@@ -93,6 +95,9 @@ the PATH selection in [local developer setup](docs/local-setup.md).
 Fetch the selected workspace dependencies before the offline validation gate;
 installing developer tools does not populate this project cache. CI performs the
 same locked fetch on each host and retains its preparation log on failure.
+`make test` resolves the repository-selected compiler and passes its absolute
+path as `RUSTC` to the test command. Independent Cargo/Wasm fixtures therefore
+use the prepared compiler even outside this repository's toolchain selection.
 
 | Command | Purpose |
 | --- | --- |
@@ -130,7 +135,7 @@ on Linux; native macOS qualification remains pending. The
 [release and publication guide](docs/publishing.md) describes the consumer
 adapters, exact tagged-source admission and retained recovery evidence.
 The adapter fixtures qualify command behavior; they do not establish publication
-of the pending 0.1.2 changes or native macOS support.
+of the pending 0.1.3 changes or native macOS support.
 
 Existing Testkit v1 stamp bytes, digest domains and `.ic-testkit` cache/lock names
 are retained unchanged during the ownership move. There is one reader and no

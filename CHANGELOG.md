@@ -3,6 +3,18 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.1.3]
+
+- Add temporary artifact staging and bounded capture of completed producer outputs.
+  Keep captured bytes alive across later compilations; callers retain recipes,
+  qualification and release publication. This prepares Canic's staging removal
+  ([Canic #529](https://github.com/dragginzgame/canic/issues/529)); consumer adoption
+  requires this API to be published.
+- Carry the repository-prepared compiler through the test gate into independent
+  real Wasm fixtures, so a different ambient default does not lose the installed
+  Wasm target. Keep heartbeat rejection and positive-build qualification
+  ([#6](https://github.com/dragginzgame/ic-build/issues/6)).
+
 ## [0.1.2] - 2026-10-12
 
 - Prepare the locked workspace dependency cache on every CI host before offline

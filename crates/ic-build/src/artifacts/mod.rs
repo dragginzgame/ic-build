@@ -61,6 +61,7 @@
 mod cache_fs;
 mod digest;
 mod icp;
+mod staging;
 mod transaction;
 mod transaction_batch;
 mod wasm;
@@ -79,6 +80,7 @@ pub use digest::InputDigest;
 pub use icp::{
     WatchedInputSnapshot, icp_artifact_ready_for_build, icp_artifact_ready_with_snapshot,
 };
+pub use staging::{ArtifactStagingDirectory, CapturedArtifact};
 pub use transaction::{
     ArtifactBuildTransaction, ArtifactCacheArtifact, ArtifactCacheError, ArtifactCacheOutcome,
     ArtifactCachePreparation, ArtifactCacheRecord, ArtifactCacheSpec, ArtifactCacheTimings,

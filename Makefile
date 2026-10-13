@@ -72,8 +72,10 @@ docs-check:
 	+CARGO_NET_OFFLINE=true RUSTUP_AUTO_INSTALL=0 RUSTDOCFLAGS='-D warnings' \
 		cargo doc --workspace --all-features --no-deps --offline --locked
 
+# Carry the repository-selected compiler into independent fixture workspaces.
 test:
-	+CARGO_NET_OFFLINE=true RUSTUP_AUTO_INSTALL=0 cargo test -p ic-build \
+	+@task_rustc="$$(RUSTUP_AUTO_INSTALL=0 rustup which rustc)" && \
+		CARGO_NET_OFFLINE=true RUSTUP_AUTO_INSTALL=0 RUSTC="$$task_rustc" cargo test -p ic-build \
 		--all-features --offline --locked
 
 msrv:

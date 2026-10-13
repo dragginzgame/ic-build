@@ -4,6 +4,29 @@ These generic APIs are extracted from IC Testkit. Recipes, budgets, tool
 selection, credentials, source custody and lifecycle remain with the caller.
 The existing v1 retained formats and namespaces are unchanged.
 
+## Temporary staging and captured outputs
+
+`ArtifactStagingDirectory::new(parent)` allocates one owned child beneath an
+existing caller-selected parent. Callers choose candidate filenames and perform
+their recipe and qualification there before publishing any product files.
+The directory remains alive through its owner; `close()` reports cleanup errors,
+and Drop performs best-effort cleanup of that invocation's child. The caller
+keeps custody of the parent and staging paths against unrelated writers.
+
+`CapturedArtifact::capture(source, parent, maximum_bytes)` copies a completed
+producer output synchronously with the caller's byte budget. Keep the returned
+record through every use of `path()`, including later Cargo commands that may
+overwrite or delete the original output. Multiple captures remain independent,
+including captures of identical source bytes. Closing or dropping a capture
+releases only its temporary staging directory.
+
+These temporary owners create no cache entry, cache hit or release admission.
+They do not prune retained artifacts, run transforms, install tools or select
+an elapsed-time deadline. Canic retains transform order, validation, release
+binding, build coordination and durable product publication. Its producer and
+consumer adoption evidence is tracked in
+[Canic #529](https://github.com/dragginzgame/canic/issues/529).
+
 ## Wasm artifact helpers
 
 The host-only `artifacts` module provides workspace-relative paths, dedicated

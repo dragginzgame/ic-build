@@ -1,5 +1,93 @@
 # Current handoff
 
+## Current release and compiler qualification
+
+Version 0.1.2 is published from `24c5f49a1684e62f67a659a931a628ada6cd2cdd`;
+package metadata remains 0.1.2 and the next pending notes are 0.1.3. The later
+sections preserve prior batch receipts, including historical version and
+working-tree references.
+
+The working-tree repair for
+[#6](https://github.com/dragginzgame/ic-build/issues/6) selects the prepared
+compiler in the `make test` entrypoint and passes its absolute path as `RUSTC`
+to the test command. This existing caller-environment contract covers both
+identity probes and Cargo builds in all independent fixtures. Heartbeat
+zero-interval rejection and the real positive-interval build remain unchanged;
+the library API, cache formats and process implementation are unchanged.
+
+The original heartbeat failure was reproduced locally with inherited compiler
+selection removed. The ambient stable toolchain lacked the Wasm standard library,
+while the repository-selected 1.99.0 toolchain had it. An initial fixture-only
+fix exposed the same cause in 11 integration cases; the common entrypoint now
+qualifies all 141 unit tests and all 14 real Cargo/Wasm cases with a direct
+prepared Cargo executable and no inherited toolchain/compiler selection.
+The focused heartbeat invocation also passes from that ambient environment
+with the selected `RUSTC`. No global default or installed targets were changed.
+
+The standard full Linux `make ci lint check-secrets` passed, including actual
+Rust 1.88.0 and release-adapter fixtures. Evidence remains under
+`/tmp/ic-build-6-ambient-qualification.puIRI8/`; `compiler-selection.log`,
+`focused-after.log` and `full-validation.log` own the successful receipts.
+`ambient-direct-cargo-gate.log` retains the adversarial suite pass and a
+qualification-harness-only MSRV dispatch failure: direct Cargo cannot interpret
+rustup's `+1.88.0` syntax. Normal MSRV dispatch subsequently passed.
+The original failures remain in `/tmp/ic-build-6-ambient-before.log` and
+`/tmp/ic-build-6-ambient-suite-before.log`.
+
+The authorized Toko adoption finding was added to existing
+[Toko #1796](https://github.com/dragginzgame/toko/issues/1796#issuecomment-6140005110)
+without sibling file changes. Git delivery remains user-owned; this repair is
+uncommitted and native macOS qualification requires CI against the delivered
+change. Local Linux evidence does not establish native macOS acceptance.
+
+The maintainer separately authorized implementing
+[Canic #528](https://github.com/dragginzgame/canic/issues/528). Canic now delegates
+declaration caching to its existing registry IC Build 0.1.1 transaction API;
+private JSON persistence is removed in the same working-tree change. Its recipe
+adapter retains optional-cache fallback, input/tool custody and bounded workers.
+All 17 scoped extraction/cache tests, including real extractor byte parity, and
+strict Host Clippy pass on Linux. Detailed custody and qualification live in
+Canic's handoff and the issue; native macOS acceptance remains pending. This
+consumer change needs no new IC Build API or dependency update and does not
+expand the producer's pending 0.1.3 notes beyond the compiler-selection repair.
+
+## Temporary staging producer and pending Canic adoption
+
+Pending 0.1.3 now also prepares temporary artifact staging and producer-output
+capture for [Canic #529](https://github.com/dragginzgame/canic/issues/529).
+`ArtifactStagingDirectory` owns an invocation's temporary child and explicit
+close/best-effort Drop cleanup. `CapturedArtifact` keeps exact copied producer
+bytes alive across later source replacement, with a caller-selected read budget.
+These APIs do not publish/reuse cache entries, select recipes, prune retained
+artifacts or admit a release. No dependencies or package versions were added.
+
+The full Linux `make ci lint check-secrets` passes on the maintainer's current
+staged Host 0.15.2 lock graph, including 146 unit tests, the existing real
+Cargo/Wasm/process suites and actual Rust 1.88.0. Its receipt is
+`/tmp/ic-build-529-final-ci.log`; the five focused staging tests and updated
+docs/format checks are retained separately. Optional strict Rust Clippy still
+reports 43 distinct existing diagnostics. A disposable pre-staging baseline on
+the same graph produces identical normalized diagnostics; the new module adds
+none. [IC Build #8](https://github.com/dragginzgame/ic-build/issues/8) owns that
+independent follow-up.
+
+The Canic replacement is prepared as `/tmp/canic-529-adoption.patch` with its
+source candidate and independent qualification checkout under
+`/tmp/canic-529-candidate/` and `/tmp/canic-529-review/`. Its compiled-output,
+artifact qualification and release-binding checks plus strict Host Clippy pass
+in isolation (22 passing checks, with the governed PocketIC case still ignored).
+That frozen consumer graph selects Host 0.15.1 and Memory 0.35.19; unrelated
+live Canic catalog/lock updates are preserved and need qualification when the
+patch is adopted. The producer is represented as 0.1.3 only in the disposable
+qualification fixture; real metadata stays 0.1.2. This is candidate evidence,
+not registry adoption or native macOS acceptance. The live Canic staging path
+has not been removed yet: publish the new API, then update its registry
+selection/lock and apply the qualified replacement and retirement together.
+Canic retains its source-read policy, transform/output limits, release binding,
+qualification and durable publication order. No live source override or dual
+compatibility pipeline is introduced. User-owned staging and other dirty work
+remain untouched; the new API and notes are unstaged.
+
 ## CI dependency preparation
 
 Version 0.1.1 is published from `dbb17982557174eed29e1a499a2b1a7bb278d5a7`.
