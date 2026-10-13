@@ -2,7 +2,7 @@
 
 IC Build provides common Cargo/Wasm builds and retained artifact caches, moved
 from IC Testkit, and feature-safe Cargo grouping from Canic.
-Version [0.1.3 is published on crates.io](https://crates.io/crates/ic-build/0.1.3).
+Version [0.1.4 is published on crates.io](https://crates.io/crates/ic-build/0.1.4).
 The owning
 [extraction issue](https://github.com/dragginzgame/ic-build/issues/1) tracks
 producer and consumer acceptance.
@@ -53,6 +53,10 @@ fn build(workspace: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
 ```
 
 Consumers select packages, profiles, environment and maintenance policy.
+The [deployable-Wasm LTO guidance](docs/artifacts.md#deployable-wasm-lto) records
+whole-canister measurements and shows how a common adapter can apply full LTO
+through the existing API, with complete-application qualification before adopting
+a shared release default.
 Publication makes the engine available; [#1](https://github.com/dragginzgame/ic-build/issues/1)
 still tracks consumer acceptance, Canic production convergence and required native
 macOS qualification. See the artifact guide for source custody and retained-cache
@@ -65,7 +69,7 @@ Shared Tooling 0.9.5 is pinned in
 local snapshot. The [Make interface](docs/make-interface.md) owns common setup,
 formatting, hook installation and release entrypoints.
 
-The virtual root [Cargo manifest](Cargo.toml) owns version `0.1.3`, edition 2024,
+The virtual root [Cargo manifest](Cargo.toml) owns version `0.1.4`, edition 2024,
 MSRV 1.88.0, common metadata and lints. The
 [ic-build package](crates/ic-build/Cargo.toml) inherits them and permits registry
 publication through the explicit tagged-release command. The [library root](crates/ic-build/src/lib.rs)
@@ -87,6 +91,12 @@ make install-tools
 cargo fetch --locked
 make install-hooks
 ```
+
+`make install-tools` also prepares the consumer-pinned `cargo-set-version`
+release editor from [ci/release-tools.env](ci/release-tools.env) through the
+canonical shared Cargo tool installer. `make tools-check` admits it offline;
+release adapters use that admitted executable directly. Global Cargo plugins
+are not setup prerequisites.
 
 [rust-toolchain.toml](rust-toolchain.toml) selects the existing Rust 1.99.0
 development compiler, rustfmt, Clippy and its Wasm target independently of the qualified Linux

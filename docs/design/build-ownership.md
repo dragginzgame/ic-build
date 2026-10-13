@@ -135,6 +135,12 @@ flags, ordering, metadata choices, limits and acceptance requirements. Do not
 flatten these into a universal optimization profile or silently weaken a
 consumer's validation to match another implementation.
 
+A common deployable-Wasm adapter may select a qualified shared LTO policy through
+IC Build's existing explicit environment. This centralizes the recipe without
+making the generic engine reinterpret consumer profiles. The
+[LTO guidance](../artifacts.md#deployable-wasm-lto) records initial whole-canister
+evidence and the complete-application comparison needed for adoption.
+
 Retain the distinction between publishing a cache entry and publishing a product
 release. Canic currently qualifies a staged Wasm/Candid/gzip set and replaces its
 files under its build coordination boundary. A cached directory transaction alone

@@ -1,5 +1,79 @@
 # Current handoff
 
+## 0.2.0 release setup and consumer qualification — 2026-10-13
+
+The authorized continuation fixes [#11](https://github.com/dragginzgame/ic-build/issues/11):
+`make install-tools` explicitly prepares consumer-pinned cargo-edit 0.13.13
+through the canonical shared selected-tool installer. Offline checks and release
+metadata use its admitted absolute executable. Preflight checks both pin files
+for input changes; failed adapter fixtures print bounded inner diagnostics and
+retain complete logs. The existing Host 0.17 and LTO work remains intact.
+
+Linux `make ci lint check-secrets` passes, including 146 units, real Cargo/Wasm
+and process contracts, strict Clippy and actual Rust 1.88. Receipts:
+`/tmp/ic-build-020-11-validation.log` and the final shell/documentation/adapter
+rerun `/tmp/ic-build-020-11-final-focused.log`. Private Cargo-home/no-global-plugin
+adapters pass under `/tmp/ic-build-11-no-global.Um1McV/`. Missing editor selection
+refuses offline; explicit setup and adapters pass under
+`/tmp/ic-build-11-fresh-selection.COoG9r/`. An injected admission fault prints
+the retained inner log. The first fresh harness omitted common-tool link targets;
+that harness failure is retained separately from the corrected proof.
+
+Frozen candidate qualification lives under `/tmp/ic-build-020-consumers.GxZq30/`.
+Only those disposable producers/manifests select 0.2.0 and local overrides.
+Current Canic `0d6779da5d9f1f7e92ef532ef32663f28fff4677` passes strict Host
+all-target/all-feature Clippy and 45 artifact/output/binding/declaration checks,
+including the real extractor; one governed PocketIC binding case stays ignored.
+Its original Blob 0.23.1 selection is preserved after explicit exact cache setup.
+Testkit's existing dirty retention work passes driver Clippy and all 17 tests;
+initial temporary proofs lacked nested Cargo override/Git provenance and are
+retained as fixture failures. IcyDB's corrected `candid-service` integration
+profile passes strict selected Clippy and nine artifact/Candid tests on both its
+registry graph and the candidate; its ordinary CLI remains parser-free.
+
+Real consumer catalogs remain registry-based. Publish 0.2.0 before adopting its
+requirement in Canic, IcyDB and Testkit; Canic's normal Host boundary still needs
+that release. Toko's existing [#1796](https://github.com/dragginzgame/toko/issues/1796)
+now names direct IC Build/current Testkit ownership. The larger Canic #530
+removal remains behind native/application acceptance. Native macOS is unqualified;
+0.1.4 CI still has the recorded Linux failure and queued macOS jobs. Package
+metadata remains 0.1.4. No live Git, version, release, publication or CI effects.
+
+## Host 0.17 public-boundary alignment — 2026-10-13
+
+The maintainer authorized this sibling change to unblock Canic. IC Build now
+selects Host artifacts/fs/process 0.17 together. No Rust API implementation or
+cache-format change was needed. Its public grouping `OutputLimits` and typed
+Host failures now belong to 0.17, so the pending release is correctly classified
+as breaking 0.2.0. Package metadata remains 0.1.4; publication is maintainer-owned.
+
+Linux delivery evidence passes across `/tmp/ic-build-host017-validation.log`
+and `/tmp/ic-build-host017-followup.log`: compilation, strict Clippy, rustdoc,
+146 unit tests, real Cargo/Wasm and process cases, actual Rust 1.88, release
+commands/adapters, shell/workflow lint and secret scanning. The first adapter
+fixture failed because it reused the live minor draft for a patch transaction;
+it now authors its own disposable patch notes, and its focused rerun passes.
+No live Git release effects ran. Native macOS remains unqualified for this graph.
+
+Canic Host compiles against the frozen producer in
+`/tmp/canic-host017-proof.oEVphD`, using an override only in that temporary copy.
+Its strict all-feature library/test Clippy check also passes
+(`/tmp/canic-host017-consumer-clippy.log`). The real Canic catalog/lock remain registry-based; publication and adoption are
+still needed to clear its normal build. Concurrent LTO documentation was
+preserved. No commit, package-version edit, push or publication was performed.
+
+## Prepared deployable-Wasm guidance — 2026-10-13
+
+Released HEAD is 0.1.4 at `848ae20548527f5595ea68e7edf9cfec4f3188ce`.
+The undated 0.2.0 draft adds [LTO guidance](../artifacts.md#deployable-wasm-lto):
+IC Timers' linked probes save 18.67–18.85% raw Wasm with full LTO. This motivates
+complete-application qualification, including final transforms and instruction
+budgets, before a common deployable-Wasm adapter adopts the selection. Existing
+`with_extra_env` already makes an explicit override part of build identity.
+Engine defaults, public API and Cargo inputs are unchanged. Documentation checks
+are scoped separately from builds and product acceptance. Earlier sections retain
+their original source and qualification identities.
+
 ## Pending 0.1.4 qualification batch — 2026-10-13
 
 The maintainer requested more work for 0.1.4. The existing fresh-runner Wasm

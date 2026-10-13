@@ -3,6 +3,25 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.2.0]
+
+- Document full LTO as a candidate shared deployable-Wasm release default,
+  using the existing profile/environment API. Record IC Timers' linked-canister
+  measurements and require complete-application qualification through final
+  transforms before adoption; engine defaults and public APIs are unchanged.
+
+- **Breaking:** align the public Cargo grouping/capture boundary with IC Host
+  0.17. Consumers supplying `OutputLimits` or matching typed Host failures must
+  select Host 0.17. Artifact, filesystem and process dependencies now share that
+  family; retained artifact and cache formats are unchanged
+  ([#9](https://github.com/dragginzgame/ic-build/issues/9)).
+- Keep release-adapter tests independent of the live draft by supplying their
+  own disposable patch notes, so a pending minor release can be validated.
+- Prepare and admit a pinned Cargo editor through shared tooling, so fresh CI
+  and release preparation do not depend on a global `cargo set-version`.
+  Failed adapter fixtures show bounded inner diagnostics and retain full logs
+  ([#11](https://github.com/dragginzgame/ic-build/issues/11)).
+
 ## [0.1.4] - 2026-10-13
 
 - Qualify the extracted library, tests and examples with warning-denied Rust

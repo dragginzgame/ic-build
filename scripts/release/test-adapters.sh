@@ -12,14 +12,27 @@ root="${BASH_SOURCE[0]}"
 root="$(cd -P "${root%/*}/../.." && printf '%s/.' "$PWD")"; root="${root%/.}"
 fixture="$(mktemp -d "${TMPDIR:-/tmp}/ic-build-release-adapters.XXXXXX")"
 complete=false
+failed_command=''
 finish() {
-    local status=$?
+    local status=$? log latest=''
     [[ "$complete" == true || "$status" != 0 ]] || status=1
     if [[ "$status" == 0 ]]; then rm -rf "$fixture"
-    else echo "Release adapter fixture retained: $fixture" >&2; fi
+    else
+        echo "Release adapter fixture retained: $fixture" >&2
+        printf 'Failed adapter command: %.2000s\n' "$failed_command" >&2
+        for log in "$fixture"/*.log; do
+            [[ -f "$log" ]] || continue
+            if [[ -z "$latest" || "$log" -nt "$latest" ]]; then latest="$log"; fi
+        done
+        if [[ -n "$latest" ]]; then
+            printf 'Last adapter log (up to 80 lines): %s\n' "$latest" >&2
+            tail -n 80 "$latest" | awk '{ print substr($0, 1, 1000) }' >&2 || :
+        fi
+    fi
     exit "$status"
 }
 trap finish EXIT
+trap 'failed_command=$BASH_COMMAND' ERR
 mkdir -p "$fixture/workspace" "$fixture/bin" "$fixture/tmp"
 export TMPDIR="$fixture/tmp"
 for path in Cargo.toml Cargo.lock CHANGELOG.md README.md LICENSE Makefile .gitignore rust-toolchain.toml crates scripts make ci; do
@@ -55,6 +68,10 @@ ci lint check-secrets:
 check-shell check-workflows:
 	@:
 GATES
+# The adapter fixture exercises a patch independently of the live release draft.
+fixture_previous="$(make --no-print-directory -s release-version)"
+fixture_version="$(bash scripts/ci/next-release-version.sh "$fixture_previous" patch)"
+printf '# Changelog\n\n## [%s]\n\n- Exercise the release adapter transaction.\n' "$fixture_version" > CHANGELOG.md
 git init --quiet --template=
 git config user.name Fixture
 git config user.email fixture@example.invalid

@@ -4,6 +4,79 @@ These generic APIs are extracted from IC Testkit. Recipes, budgets, tool
 selection, credentials, source custody and lifecycle remain with the caller.
 The existing v1 retained formats and namespaces are unchanged.
 
+## Deployable Wasm LTO
+
+Full LTO is the leading candidate for a shared deployable-Wasm release default.
+Qualify it against complete applications, then apply the selected policy in their
+common build adapter. A library's own profile does not control its consumers:
+[Cargo reads profiles from the workspace root](https://doc.rust-lang.org/cargo/reference/profiles.html#lto),
+and full LTO optimizes across the linked dependency graph. There is no requirement
+for every application to maintain a separate manifest edit.
+
+The existing API can apply a shared release selection explicitly:
+
+```rust,no_run
+use ic_build::artifacts::WasmBuildSpec;
+use std::path::Path;
+
+let workspace = Path::new("/application/workspace");
+let target = workspace.join("target/canister-builds");
+let spec = WasmBuildSpec::new(workspace, &target, &["application_canister"], "release")
+    .with_cargo_profile_args(["--release", "--locked", "--offline"])
+    .with_extra_env([("CARGO_PROFILE_RELEASE_LTO", "fat")]);
+```
+
+For a custom profile, select its matching output directory and Cargo argument,
+and use its corresponding `CARGO_PROFILE_<NAME>_LTO` variable. Keep other explicit
+overrides in the same `with_extra_env` call; the setter replaces that map.
+[Cargo's profile environment configuration](https://doc.rust-lang.org/cargo/reference/config.html#profilenamelto)
+overrides the manifest. IC Build fingerprints explicit child environment and
+workspace profiles, so thin and fat selections have distinct cache identities.
+Prefer this declared selection over an untracked ambient override. The engine
+continues to execute the caller's recipe; it does not silently change profiles.
+
+### Initial whole-canister evidence
+
+IC Timers measured its four linked size-probe canisters at released source
+`44935d6188a0da82314e00a56f5f68a9d0c59638` (0.21.4), using Rust 1.88.0,
+`wasm32-unknown-unknown`, and the same frozen Cargo.lock (Metrics 0.8.3). The
+`timer-probe` profile inherited release with `opt-level = "z"`, `panic = "abort"`
+and `strip = "symbols"`. Only LTO changed. All variants used the same source
+path and locked/offline inputs. These are complete probe artifacts containing
+CDK, Candid and other dependencies, rather than an isolated library size.
+
+| Canister cohort | Thin LTO bytes | Full LTO bytes | Reduction |
+| --- | ---: | ---: | ---: |
+| Baseline | 264,414 | 214,565 | 18.85% |
+| Once | 324,104 | 263,405 | 18.73% |
+| After-completion | 324,974 | 264,288 | 18.67% |
+| Watchdog | 325,763 | 264,670 | 18.75% |
+
+Export names matched. No Wasm optimizer or PocketIC execution was performed;
+instruction cost, heap use and comparable build-time changes remain unmeasured.
+These small canisters establish a promising candidate, not the best setting for
+every production app or compiler. The comparison excludes the later incoming
+Metrics 0.8.4 selection. The source and four feature selections are maintained
+in [IC Timers](https://github.com/dragginzgame/ic-timers/tree/44935d6188a0da82314e00a56f5f68a9d0c59638/testing/crates/ic-timers-size-probe).
+
+### Qualifying a common release default
+
+Compare thin and fat at the same application source, lockfile, compiler, target,
+features and optimization recipe. Use the current profile's optimization level;
+do not attribute simultaneous flag changes to LTO. Keep both retained outputs
+alive through inspection. Apply the normal final transforms before comparing
+deployable bytes, required exports, Candid and required Wasm features. Measure
+representative instruction costs and clean/warm build time; run the application's
+existing PocketIC acceptance against the selected final artifact.
+
+If full LTO wins the representative application matrix within its accepted build
+time and instruction budgets, adopt it once in the common deployable-Wasm adapter
+and reuse it across applications. Keep development, native tools and deliberately
+different product recipes scoped separately. Revisit the evidence after compiler
+or optimizer changes. Build identity and execution remain in IC Build; product
+acceptance and release publication remain with consumers. No new comparison
+framework or public configuration type is needed for this initial qualification.
+
 ## Temporary staging and captured outputs
 
 `ArtifactStagingDirectory::new(parent)` allocates one owned child beneath an

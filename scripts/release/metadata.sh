@@ -44,9 +44,10 @@ case "$operation" in
         # Refuse conflicting pending notes before a gate or preparation intent.
         awk -v version="${RELEASE_VERSION:?}" -v previous="$RELEASE_PREVIOUS" -v date="${RELEASE_DATE:?}" \
             -f scripts/ci/finalize-release-changelog.awk CHANGELOG.md > /dev/null
-        cargo set-version --help >/dev/null
         tool_versions="$root/ci/tool-versions.env"
         tool_versions_digest="$(bash "$root/scripts/ci/verify-file-checksum.sh" --print sha256 "$tool_versions")"
+        release_tools="$root/ci/release-tools.env"
+        release_tools_digest="$(bash "$root/scripts/ci/verify-file-checksum.sh" --print sha256 "$release_tools")"
         tool_targets=(tools-check)
         case "$release_cache_prepare" in
             1)
@@ -64,7 +65,13 @@ case "$operation" in
                 echo 'selected Rust tool pins changed during release preflight' >&2
                 exit 1
             fi
+            if [[ "$(bash "$root/scripts/ci/verify-file-checksum.sh" --print sha256 "$release_tools")" != "$release_tools_digest" ]]; then
+                echo 'selected release tool pins changed during release preflight' >&2
+                exit 1
+            fi
         done
+        editor="$(bash "$root/scripts/release/cargo-editor.sh" --check)"
+        "$editor" set-version --help > /dev/null
         ;;
     prepare)
         bash "$root/scripts/ci/check-release-source.sh" \
@@ -109,7 +116,8 @@ case "$operation" in
         trap cleanup EXIT
         trap 'exit 130' INT
         trap 'exit 143' TERM
-        cargo set-version --workspace --offline "${RELEASE_VERSION:?}"
+        editor="$(bash "$root/scripts/release/cargo-editor.sh" --check)"
+        "$editor" set-version --workspace --offline "${RELEASE_VERSION:?}"
         # Only root metadata changes; members were sorted by the validation gate.
         cargo sort
         # Retain registry selections; advance every workspace-owned local row.
