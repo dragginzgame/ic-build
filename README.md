@@ -2,7 +2,7 @@
 
 IC Build provides common Cargo/Wasm builds and retained artifact caches, moved
 from IC Testkit, and feature-safe Cargo grouping from Canic.
-Version [0.1.4 is published on crates.io](https://crates.io/crates/ic-build/0.1.4).
+Version [0.2.0 is published on crates.io](https://crates.io/crates/ic-build/0.2.0).
 The owning
 [extraction issue](https://github.com/dragginzgame/ic-build/issues/1) tracks
 producer and consumer acceptance.
@@ -32,7 +32,7 @@ Add the registry dependency to your host-side package:
 
 ```toml
 [dependencies]
-ic-build = "0.1"
+ic-build = "0.2"
 ```
 
 Import the engine directly and keep the returned record alive while using its
@@ -53,6 +53,8 @@ fn build(workspace: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
 ```
 
 Consumers select packages, profiles, environment and maintenance policy.
+Select IC Host 0.17 when passing `OutputLimits` or typed Host failures across
+IC Build's public grouping/capture boundary.
 The [deployable-Wasm LTO guidance](docs/artifacts.md#deployable-wasm-lto) records
 whole-canister measurements and shows how a common adapter can apply full LTO
 through the existing API, with complete-application qualification before adopting
@@ -64,12 +66,12 @@ contracts.
 
 ## Development
 
-Shared Tooling 0.9.5 is pinned in
+Shared Tooling 0.10.0 is pinned in
 [.shared-tooling.snapshot](.shared-tooling.snapshot); commands use this reviewed
 local snapshot. The [Make interface](docs/make-interface.md) owns common setup,
 formatting, hook installation and release entrypoints.
 
-The virtual root [Cargo manifest](Cargo.toml) owns version `0.1.4`, edition 2024,
+The virtual root [Cargo manifest](Cargo.toml) owns version `0.2.0`, edition 2024,
 MSRV 1.88.0, common metadata and lints. The
 [ic-build package](crates/ic-build/Cargo.toml) inherits them and permits registry
 publication through the explicit tagged-release command. The [library root](crates/ic-build/src/lib.rs)

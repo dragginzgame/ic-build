@@ -1,5 +1,51 @@
 # Current handoff
 
+## Published 0.2.0 adoption and pending 0.2.1 tooling — 2026-10-13
+
+Version 0.2.0 is published from
+`9ddcd4ee0b2ac85f0608b8aaf49493cf015f295a`; archive SHA-256 is
+`fb055d1b5649636c09a52f23fdc091417c732cbb87a2125d5a24f93c043c8df8`.
+Its [release CI](https://github.com/dragginzgame/ic-build/actions/runs/38389784699)
+passes Linux and lint/security, including fresh release-editor setup. Both macOS
+jobs remain queued at inspection; earlier cancelled runs do not qualify them.
+
+The authorized continuation adopts the published registry line in IcyDB and
+Testkit. Their unused Host 0.16 artifact/fs/process packages leave the lockfiles;
+all other selected registry versions/checksums remain unchanged. Canic's owner
+had already selected 0.2.0. No real consumer carries a producer path override.
+Focused registry qualification passes strict Canic Host all-target/all-feature
+Clippy and 45 artifact/output/binding/declaration cases, including the extractor;
+one governed PocketIC binding case stays ignored. IcyDB passes selected Clippy,
+nine artifact/Candid and five cache cases, including real Wasm flag identity;
+the ordinary CLI remains parser-free. Testkit passes library/driver Clippy,
+17 driver, six diagnostics and six pure pool tests, plus actual Rust 1.88.
+Receipts and consumer before-images are under
+`/tmp/ic-build-020-registry-adoption/`. Incoming consumer work is preserved.
+
+Pending compatible 0.2.1 adopts [Shared 0.10](https://github.com/dragginzgame/ic-build/issues/10)
+at `ed9c26f015691859f67b50b512a94709dcdc0c6c`: 70 roots, 88 canonical files.
+Twenty-seven payloads update, and the newly referenced reporting rule is added
+as a canonical entrypoint. Initial link validation caught that omitted rule;
+the retained failed log precedes the complete, verified closure. Common tool
+versions/digests match; no exception or alternate installation owner is added.
+Release-editor selection remains consumer-owned. Explicit setup/offline admission
+and full Linux `make ci lint check-secrets` pass with the incoming Host 0.17.1
+lock graph, including actual Rust 1.88. Final receipt:
+`/tmp/ic-build-020-registry-adoption/shared010-final-validation.log`.
+README registry guidance and the local baseline identify the current owners.
+KEEP-only repeat refresh and integrity pass. Canonical Make, formatting,
+freshness, host/IC store and actual evidence-collector fixtures pass on Bash 5
+and genuine Bash 3.2. Corruption cases use only synthetic owned installations;
+their receipts are the `shared010-final-owner-*` and `shared010-host-ic-*` logs.
+
+Native/application acceptance remains open on the existing issues; the larger
+[Canic #530](https://github.com/dragginzgame/canic/issues/530) engine removal
+still requires those prerequisites. Toko's migration remains on
+[#1796](https://github.com/dragginzgame/toko/issues/1796). Own metadata stays
+0.2.0, IcyDB's compatible draft stays 0.273.1, and Testkit's stays 0.37.1.
+No staging, commit, push, version change, release, publication or CI action ran
+in this continuation. Historical sections retain their original graph scope.
+
 ## 0.2.0 release setup and consumer qualification — 2026-10-13
 
 The authorized continuation fixes [#11](https://github.com/dragginzgame/ic-build/issues/11):

@@ -3,6 +3,13 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.2.1]
+
+- Adopt Shared Tooling 0.10.0's snapshot-owned common catalogs. Keep existing
+  executable versions and digests; select host, Rust and IC exceptions
+  independently. Library APIs and cache formats are unchanged
+  ([#10](https://github.com/dragginzgame/ic-build/issues/10)).
+
 ## [0.2.0] - 2026-10-13
 
 - Document full LTO as a candidate shared deployable-Wasm release default,
