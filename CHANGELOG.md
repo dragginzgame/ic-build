@@ -3,7 +3,7 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.2.4]
+## [0.2.4] - 2026-10-13
 
 - Adopt Shared Tooling 0.11.2 and its unified CI binary installer, retaining
   existing tool pins and incorporating release/evidence fixes.
