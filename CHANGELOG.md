@@ -3,6 +3,16 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.2.3]
+
+- Make the native-path evidence fixture use filesystem-admissible filenames on
+  macOS, retaining native capture, digest and descendant-error coverage. Linux
+  still exercises invalid-byte filenames
+  ([#15](https://github.com/dragginzgame/ic-build/issues/15)).
+- Keep the remaining generic source-inventory and generated-root discovery
+  regressions at IC Build as Canic adopts standalone evidence and removes its
+  duplicate input engine ([#12](https://github.com/dragginzgame/ic-build/issues/12)).
+
 ## [0.2.2] - 2026-10-13
 
 - Add standalone input evidence and strict Cargo depfile discovery for caller-owned

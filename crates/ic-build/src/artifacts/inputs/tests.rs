@@ -363,21 +363,110 @@ fn native_paths_are_preserved_and_descendant_io_retains_leaf_context() {
         ffi::OsString,
         os::unix::{ffi::OsStringExt as _, fs::symlink},
     };
-    let root = unique_temp_directory("input-evidence-native");
-    let native = root.join(OsString::from_vec(vec![b'x', 0xff]));
-    fs::write(&native, b"native").unwrap();
-    let evidence = capture(b"authority", std::slice::from_ref(&root));
-    assert!(evidence.entries().contains_key(&native));
+    // macOS filesystems require valid UTF-8; retain actual native-path/leaf-error
+    // checks there, and exercise Linux's invalid-byte filenames on Linux.
+    let names: &[&[u8]] = &[
+        b"x\xce\xbb",
+        #[cfg(target_os = "linux")]
+        b"x\xff",
+    ];
+    for name in names {
+        let root = unique_temp_directory("input-evidence-native");
+        let native = root.join(OsString::from_vec(name.to_vec()));
+        fs::write(&native, b"native").unwrap();
+        let evidence = capture(b"authority", std::slice::from_ref(&root));
+        assert!(evidence.entries().contains_key(&native));
+        if native.to_str().is_some() {
+            evidence.digest().unwrap();
+        } else {
+            assert!(
+                matches!(evidence.digest(), Err(InputEvidenceError::Io { path, source })
+                if path == native && source.kind() == io::ErrorKind::InvalidData)
+            );
+        }
+        let leaf = root.join("leaf-link");
+        symlink(&native, &leaf).unwrap();
+        assert!(
+            matches!(InputEvidence::capture(&InputEvidenceSpec::new(Vec::new()).with_input(&root)),
+            Err(InputEvidenceError::Io { path, source })
+            if path == leaf && source.kind() == io::ErrorKind::InvalidInput)
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[test]
+fn source_bytes_additions_deletions_and_renames_change_the_input_set() {
+    let root = unique_temp_directory("input-evidence-source-set");
+    fs::create_dir_all(root.join("src")).unwrap();
+    let source = root.join("src/lib.rs");
+    fs::write(&source, b"one").unwrap();
+    let spec = InputEvidenceSpec::new(Vec::new())
+        .with_input(&root)
+        .with_excluded_entry_name("target");
+    let collect = || InputEvidence::capture(&spec).unwrap().entries().clone();
+    let original = collect();
+    fs::write(&source, b"two").unwrap();
+    assert_ne!(original, collect());
+    fs::write(&source, b"one").unwrap();
+    assert_eq!(original, collect());
+    fs::rename(&source, root.join("src/other.rs")).unwrap();
+    assert_ne!(original, collect());
+    fs::rename(root.join("src/other.rs"), &source).unwrap();
+    fs::write(root.join("src/include.txt"), b"new input").unwrap();
+    assert_ne!(original, collect());
+    fs::remove_file(root.join("src/include.txt")).unwrap();
+    fs::create_dir_all(root.join("target")).unwrap();
+    fs::write(root.join("target/build-output"), b"generated").unwrap();
+    assert_eq!(original, collect());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn generated_ownership_uses_resolved_paths_and_preserves_external_inputs() {
+    let root = unique_temp_directory("depfile-output-ownership");
+    let output = root.join("target");
+    fs::create_dir_all(&output).unwrap();
+    fs::create_dir_all(root.join("alias")).unwrap();
+    let source = root.join("authored.json");
+    fs::write(&source, "authored").unwrap();
+    fs::write(output.join("translations.json"), "generated").unwrap();
+    let record = output.join("role.d");
+    fs::write(&record, "role: alias/../target/translations.json\n").unwrap();
+    let discover = || {
+        discover_cargo_depfile_inputs(
+            &root,
+            std::slice::from_ref(&output),
+            &[root.join("alias/../target")],
+            4096,
+        )
+        .unwrap()
+    };
+    assert_eq!(discover(), [] as [PathBuf; 0]);
+    fs::write(&record, "role: target/../authored.json\n").unwrap();
+    let paths = discover();
+    assert_eq!(paths, [source.canonicalize().unwrap()]);
+    let before = capture(b"authority", &paths);
+    fs::write(&source, "edited").unwrap();
+    assert!(matches!(
+        before.validate_after(&capture(b"authority", &discover())),
+        Err(InputEvidenceError::ChangedInput { .. })
+    ));
+    let missing = output.join("../not-yet-authored.json");
+    let foreign = root.join("foreign/target/translations.json");
+    fs::create_dir_all(foreign.parent().unwrap()).unwrap();
+    fs::write(&foreign, "foreign").unwrap();
+    fs::write(
+        &record,
+        "role: target/../not-yet-authored.json foreign/target/translations.json\n",
+    )
+    .unwrap();
+    let evidence = capture(b"authority", &discover());
+    assert_eq!(evidence.entries()[&missing], InputEvidenceValue::Missing);
     assert!(
-        matches!(evidence.digest(), Err(InputEvidenceError::Io { path, source })
-        if path == native && source.kind() == io::ErrorKind::InvalidData)
-    );
-    let leaf = root.join("leaf-link");
-    symlink(&native, &leaf).unwrap();
-    assert!(
-        matches!(InputEvidence::capture(&InputEvidenceSpec::new(Vec::new()).with_input(&root)),
-        Err(InputEvidenceError::Io { path, source })
-        if path == leaf && source.kind() == io::ErrorKind::InvalidInput)
+        evidence
+            .entries()
+            .contains_key(&foreign.canonicalize().unwrap())
     );
     fs::remove_dir_all(root).unwrap();
 }

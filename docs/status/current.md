@@ -1,5 +1,58 @@
 # Current handoff
 
+## Published 0.2.2 and Canic input-engine integration — 2026-10-13
+
+Version 0.2.2 is published from
+`e9be97fa356c14cb5431b879e304a0f8cc5077c3`; archive SHA-256 is
+`d408281094f1ae6928f02102131a904b8edcf5693b6c8f01b105e6488d0c4d82`, and
+its registry VCS receipt names that release. The newer
+[0.2.2 CI](https://github.com/dragginzgame/ic-build/actions/runs/38407403272)
+passes Linux and lint/security; Intel fails the new native-path fixture before
+capture because its `0xff` filename is inadmissible (`Illegal byte sequence`).
+Apple Silicon is queued. Exact
+[0.2.1 CI](https://github.com/dragginzgame/ic-build/actions/runs/38394499212)
+passes Linux x86-64, native macOS 15 Intel/Apple Silicon and lint/security.
+This closes the delivered setup/compiler/Clippy/catalog/editor repairs at
+#5, #6, #8, #10 and #11; it does not qualify the new 0.2.2 evidence APIs.
+[#15](https://github.com/dragginzgame/ic-build/issues/15) records the bounded
+fixture repair: valid Unicode native files on every Unix host, with invalid-byte
+files only on Linux, following the existing digest fixture. Actual capture,
+digest and descendant symlink/path-error checks remain active on macOS. Engine
+semantics are unchanged; exact delivered native qualification is still needed.
+
+The maintainer authorized Canic integration after publication. Canic's catalog
+requires registry 0.2.2; its incoming lock already selected that release. Its
+complete-build production path now consumes `InputEvidence` directly for capture,
+digest and before/after validation, and the strict shared depfile discovery API
+for explicitly selected records. Its old recursive scanner, snapshot engine and
+parser are removed. Canic retains role/family/generated-export/fixture recipes,
+source custody, tool/environment identity, complete-release record format and
+namespace, output projection, release/role admission, locks and diagnostics.
+
+Two remaining generic regression declarations move from Canic to IC Build:
+source edits/renames/exclusions and generated-root alias/external-input discovery.
+They use the existing shared APIs. Complete Linux `make ci lint check-secrets`
+passes with 161 units, integration/real Cargo/Wasm/process cases, strict Clippy,
+docs and actual Rust 1.88. Own metadata stays 0.2.2; compatible pending 0.2.3
+notes cover this producer fixture/test ownership cleanup. Canic's focused reuse suite
+passes 40 cases, with its governed opt-in synthetic-sealing case ignored. These
+include real Cargo generation, source/tool/environment drift, disappearing
+inputs, cold/repeat release reuse, tampered outputs, diagnostics, cancellation and
+required-tool absence retaining the original filesystem failure.
+
+Receipts and task-owned before-images are under `/tmp/ic-build-canic-022/`:
+`producer-final-validation.log`, `canic-final-clippy.log` and
+`canic-final-reuse-tests.log`. Initial receipts remain alongside them. Concurrent
+Canic Backup/query/dependency work is preserved. Explicit locked preparation
+admits its incoming graph; final strict Host library/test Clippy and reuse checks
+pass with Host 0.17.3/Query 0.55.4. Lock SHA-256 is
+`0b30060e6d39ff08ac2c54b2d07de74b21f10863e19426ebba89a5630d78bc10`, unchanged
+through those checks. The query owner resolves its duration lint. New-source
+native and complete consumer acceptance remain at #12/#530/#1/#15.
+The wider Canic 0.112 Auth/Backup/Blob batch remains open. No staging, commit,
+package-version change, push, release, publication, CI dispatch or broad Canic
+gate ran. Historical sections below retain their original source identities.
+
 ## Published 0.2.1 and pending 0.2.2 input evidence — 2026-10-13
 
 Version 0.2.1 is published from

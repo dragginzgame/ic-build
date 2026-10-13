@@ -26,13 +26,13 @@ preserved through a shared execution path.
 
 | Consumer | Shared owner and retained consumer responsibility |
 | --- | --- |
-| Canic | IC Build supplies grouping, declaration-cache transactions, captured outputs and staging. Canic retains recipes, source custody, transforms and complete-release admission. |
+| Canic | IC Build supplies grouping, declaration-cache transactions, captured outputs, staging, standalone input evidence and strict depfile discovery. Canic retains recipes, source custody, transforms and complete-release admission. |
 | IcyDB | IC Build supplies Cargo/Wasm and post-link artifact caching. IcyDB retains optimizer choices, feature policy and interface validation. |
 | IC Testkit | IC Build supplies native fixture/probe builds. Testkit retains PocketIC infrastructure, testing contracts and benchmark policy. |
 
 The larger Canic input-engine convergence is tracked in
-[#530](https://github.com/dragginzgame/canic/issues/530); its current work and
-acceptance remain at that owner. Generic compilation or a cache hit does not
+[#530](https://github.com/dragginzgame/canic/issues/530); its local replacement and
+remaining delivery/native acceptance are recorded in the handoff. Generic compilation or a cache hit does not
 establish complete-release validity.
 
 ## Historical build paths at the 2026-10-12 audit
