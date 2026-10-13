@@ -66,7 +66,7 @@ contracts.
 
 ## Development
 
-Shared Tooling 0.10.0 is pinned in
+Shared Tooling 0.11.2 is pinned in
 [.shared-tooling.snapshot](.shared-tooling.snapshot); commands use this reviewed
 local snapshot. The [Make interface](docs/make-interface.md) owns common setup,
 formatting, hook installation and release entrypoints.

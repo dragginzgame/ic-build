@@ -108,11 +108,11 @@ check-release-adapters:
 install-validation-tools:
 	@bash -ec 'test "$$(uname -s):$$(uname -m)" = Linux:x86_64; \
 		. ci/tool-versions.env; \
-		bash scripts/ci/install-shellcheck.sh --version "$$SHARED_TOOLING_SHELLCHECK_VERSION" \
+		bash scripts/ci/install-ci-tool.sh shellcheck --version "$$SHARED_TOOLING_SHELLCHECK_VERSION" \
 			--sha256 "$$SHARED_TOOLING_SHELLCHECK_SHA256_LINUX_X86_64" --install-dir "$(CURDIR)/.tools/ci/bin"; \
-		bash scripts/ci/install-actionlint.sh --version "$$SHARED_TOOLING_ACTIONLINT_VERSION" \
+		bash scripts/ci/install-ci-tool.sh actionlint --version "$$SHARED_TOOLING_ACTIONLINT_VERSION" \
 			--sha256 "$$SHARED_TOOLING_ACTIONLINT_SHA256_LINUX_AMD64" --install-dir "$(CURDIR)/.tools/ci/bin"; \
-		bash scripts/ci/install-gitleaks.sh --version "$$SHARED_TOOLING_GITLEAKS_VERSION" \
+		bash scripts/ci/install-ci-tool.sh gitleaks --version "$$SHARED_TOOLING_GITLEAKS_VERSION" \
 			--sha256 "$$SHARED_TOOLING_GITLEAKS_SHA256_LINUX_X64" --install-dir "$(CURDIR)/.tools/ci/bin"'
 
 lint: check-shell check-workflows

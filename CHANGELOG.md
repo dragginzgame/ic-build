@@ -5,6 +5,11 @@ archive also includes the extracted artifact engine and Cargo grouping API.
 
 ## [0.2.4]
 
+- Adopt Shared Tooling 0.11.2 and its unified CI binary installer, retaining
+  existing tool pins and incorporating release/evidence fixes.
+- Require compatible IC Host 0.17.4 releases for artifact, filesystem and process
+  mechanics; retain explicit features and qualify the locked graph on Rust 1.88.
+
 - Admit Cargo's default underscored cdylib filenames for hyphenated packages in
   every cache mode; refuse colliding outputs and genuinely renamed libraries
   ([#16](https://github.com/dragginzgame/ic-build/issues/16)).

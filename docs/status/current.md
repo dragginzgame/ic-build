@@ -1,5 +1,38 @@
 # Current handoff
 
+## Shared Tooling 0.11.2 and Host 0.17.4 adoption — 2026-10-13
+
+The maintainer authorized both upgrades. Shared Tooling 0.11.2 is exported from
+clean committed source `81bdf144482b21f146acf542f8013eefe1dfeba8`, matching remote
+main at review, through its canonical preview/refresh workflow. The snapshot
+verifies all 86 payloads. Local CI setup uses `install-ci-tool.sh TOOL`; obsolete
+snapshot-owned forwarding commands retire through the exporter. Existing common
+host/IC/Rust and CI versions/digests are unchanged. Shared release recovery uses
+the annotated-tag checker; selected evidence and setup fixes arrive with the
+same reviewed snapshot. No live release or hosted evidence round trip ran.
+
+The workspace catalog now requires compatible artifact/fs/process Host 0.17.4
+releases, preserving explicit features and disabled defaults. Cargo registry
+search confirms 0.17.4 is the newest stable release for all three; their registry
+VCS receipts agree on `28f3a6d5771ecb941b86cd3c6ea2507de82b101e`.
+The incoming dirty lockfile already selected these versions and is preserved
+byte-for-byte. No unrelated dependency upgrade or sibling edit ran.
+
+Explicit locked fetch, `make install-tools tools-check` and actual unified CI
+installer preparation pass. Full Linux `make ci lint check-secrets` passes with
+162 unit cases, real Cargo/Wasm and retained/process checks, strict Clippy/docs,
+actual Rust 1.88 and isolated release-adapter fixtures. Final local links and
+snapshot integrity also pass. Evidence and before-images are retained under
+`/tmp/ic-build-tooling-upgrade/`; `full-validation.log` is the complete gate receipt.
+
+This compatible consumer adoption joins the existing pending 0.2.4 notes; Shared
+Tooling's CLI retirement does not break IC Build's published library boundary.
+Own version stays 0.2.3. No staging, commit, push, package-version change, release,
+publication or CI dispatch ran. Native qualification of this source/graph remains
+pending at #1/#9. Prior 0.2.3 CI passes Linux, Apple Silicon and lint/security;
+Intel is running at inspection. Those results do not qualify this new snapshot
+or Host selection. Earlier sections preserve their original evidence.
+
 ## Published 0.2.3 and pending 0.2.4 consumer boundaries — 2026-10-13
 
 Registry 0.2.3 resolves to source
