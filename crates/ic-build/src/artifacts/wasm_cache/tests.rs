@@ -2644,3 +2644,48 @@ fn observed_cargo_panic_stops_compiler_descendants() {
     }
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn optional_duration_addition_preserves_absence_and_saturates() {
+    for (left, right, expected) in [
+        (None, None, None),
+        (Some(Duration::ZERO), None, Some(Duration::ZERO)),
+        (
+            None,
+            Some(Duration::from_secs(2)),
+            Some(Duration::from_secs(2)),
+        ),
+        (
+            Some(Duration::from_secs(2)),
+            None,
+            Some(Duration::from_secs(2)),
+        ),
+        (
+            Some(Duration::MAX),
+            Some(Duration::from_nanos(1)),
+            Some(Duration::MAX),
+        ),
+    ] {
+        let left = super::WasmBuildTimings {
+            shared_incremental_lock_wait: left,
+            cargo_build: left,
+            cache_maintenance: left,
+            ..Default::default()
+        };
+        let right = super::WasmBuildTimings {
+            shared_incremental_lock_wait: right,
+            cargo_build: right,
+            cache_maintenance: right,
+            ..Default::default()
+        };
+        let total = left.saturating_add(right);
+        assert_eq!(
+            [
+                total.shared_incremental_lock_wait(),
+                total.cargo_build(),
+                total.cache_maintenance()
+            ],
+            [expected; 3]
+        );
+    }
+}

@@ -9,8 +9,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::timing::saturating_add_optional_duration;
-
 use super::{
     cache_fs::{
         ArtifactCacheMaintenance, ArtifactCachePrunePolicy, ArtifactCachePruneReport, CacheFsError,
@@ -626,7 +624,7 @@ impl ArtifactCacheTimings {
         self.total
     }
 
-    pub(super) const fn saturating_add(self, other: Self) -> Self {
+    pub(super) fn saturating_add(self, other: Self) -> Self {
         Self {
             coordination_lock_wait: self
                 .coordination_lock_wait
@@ -639,13 +637,19 @@ impl ArtifactCacheTimings {
                 .saturating_add(other.namespace_lock_wait),
             input_capture: self.input_capture.saturating_add(other.input_capture),
             cache_lookup: self.cache_lookup.saturating_add(other.cache_lookup),
-            caller_build: saturating_add_optional_duration(self.caller_build, other.caller_build),
+            caller_build: [self.caller_build, other.caller_build]
+                .into_iter()
+                .flatten()
+                .reduce(Duration::saturating_add),
             output_validation: self
                 .output_validation
                 .saturating_add(other.output_validation),
             publication: self.publication.saturating_add(other.publication),
             materialization: self.materialization.saturating_add(other.materialization),
-            maintenance: saturating_add_optional_duration(self.maintenance, other.maintenance),
+            maintenance: [self.maintenance, other.maintenance]
+                .into_iter()
+                .flatten()
+                .reduce(Duration::saturating_add),
             total: self.total.saturating_add(other.total),
         }
     }

@@ -30,7 +30,7 @@ preserved through a shared execution path.
 | IcyDB | IC Build supplies Cargo/Wasm and post-link artifact caching. IcyDB retains optimizer choices, feature policy and interface validation. |
 | IC Testkit | IC Build supplies native fixture/probe builds. Testkit retains PocketIC infrastructure, testing contracts and benchmark policy. |
 
-Pending 0.2.4 supplies explicit capture retention for Jobs recovery evidence and
+IC Build 0.2.4 supplies explicit capture retention for Jobs recovery evidence and
 structural named-example input/output admission with the existing Cargo command
 factory for Query. These producer capabilities do not establish consumer adoption.
 Jobs owns evidence publication and lifecycle; Query owns its executor, receipt

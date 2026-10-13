@@ -1,5 +1,51 @@
 # Current handoff
 
+## Published 0.2.4, helper cleanup and Canic integration — 2026-10-13
+
+Registry IC Build 0.2.4 names source
+`b3eba0f4b45fbca8a2a8cba6afcc3cfd88be5348`; checksum is
+`68c9379fb1224f483d1896cb91448d0bf17f46a2c98277c1402d71867adb0a23`.
+Its [exact CI](https://github.com/dragginzgame/ic-build/actions/runs/38424234824)
+passes Linux/lint, with Intel running and Apple Silicon queued at inspection.
+The cancelled 0.2.3 run does not establish its unfinished Intel result.
+
+The maintainer authorized Canic integration and continued issue work. For
+[#7](https://github.com/dragginzgame/ic-build/issues/7), IC Build now uses standard
+optional-duration reduction in both timing aggregates, preserving absent and
+measured-zero values plus saturation. The duplicated timing module retires and
+its regression follows the Wasm aggregate; artifact aggregation has its own
+boundary coverage. Testkit's separate owner has already removed its generic
+label/timing modules in the current dirty draft, with contract-specific label
+admission and phase accumulation retained there. That source inspection is not
+Testkit delivery or a new consumer qualification. No Testkit source was edited.
+
+Compatible pending notes select 0.2.5; own metadata stays 0.2.4. Full Linux
+`make ci lint check-secrets` passes with 163 units, actual Cargo/Wasm/process and
+retention cases, strict Clippy/docs, actual Rust 1.88 and isolated release adapters.
+The incoming Host 0.17.5 lock selection remains byte-for-byte unchanged.
+
+Canic's catalog and lock advance only registry IC Build 0.2.3 to 0.2.4; other
+selected packages/checksums are unchanged. Configured and infrastructure Cargo
+commands now select libraries, preserving named-library JSON selection, profiles,
+features and qualification/publication policy. A new actual Cargo collision case
+fails on the original command and passes after the repair. The redundant generic
+subcommand helper retires into the existing build command owner. The maintainer
+committed these applied files while restarting the Canic release; this agent
+performed no staging, commit, release or publication action.
+
+The further shared selector/complete-build identity patch is qualified in the
+isolated consumer and retained at `/tmp/ic-build-canic-024/canic-selector-followup.patch`.
+The maintainer explicitly requests queueing it until the restarted release
+finishes. Its application must preserve that admitted source. Record
+format and namespace remain unchanged; the selected library recipe contributes
+to identity without reading a parallel cache format or deleting retained records.
+Evidence and before-images are under `/tmp/ic-build-canic-024/`; producer validation
+is `producer-full-validation.log`. Final consumer checks and application status
+are recorded on Canic #528/#529/#530 and IC Build #9/#12. The queued follow-up
+is [Canic #542](https://github.com/dragginzgame/canic/issues/542), by explicit
+maintainer instruction; it is not applied to the active release source. Native and complete
+application acceptance remain open. Historical sections keep their source identities.
+
 ## Shared Tooling 0.11.2 and Host 0.17.4 adoption — 2026-10-13
 
 The maintainer authorized both upgrades. Shared Tooling 0.11.2 is exported from

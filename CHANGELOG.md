@@ -3,6 +3,13 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.2.5]
+
+- Replace the duplicated optional-duration helper with standard-library reduction
+  in Wasm and artifact timing aggregation. Preserve absent measurements, measured
+  zero and saturation; keep regression coverage at the aggregate owners
+  ([#7](https://github.com/dragginzgame/ic-build/issues/7)).
+
 ## [0.2.4] - 2026-10-13
 
 - Adopt Shared Tooling 0.11.2 and its unified CI binary installer, retaining

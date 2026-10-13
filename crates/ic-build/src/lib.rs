@@ -9,7 +9,6 @@ pub mod artifacts;
 pub mod cargo;
 
 mod batch;
-mod timing;
 
 #[cfg(all(test, unix))]
 mod test_executable;

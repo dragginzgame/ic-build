@@ -24,8 +24,6 @@ use std::{
 };
 use toml::Value as TomlValue;
 
-use crate::timing::saturating_add_optional_duration;
-
 use super::{
     cache_fs::{
         ArtifactCacheMaintenance, ArtifactCachePrunePolicy, ArtifactCachePruneReport, CacheFsError,
@@ -1288,21 +1286,27 @@ impl WasmBuildTimings {
         self.total
     }
 
-    pub(super) const fn saturating_add(self, other: Self) -> Self {
+    pub(super) fn saturating_add(self, other: Self) -> Self {
         let mut input_resolution = self.input_resolution;
         input_resolution.include(other.input_resolution);
         Self {
             lock_wait: self.lock_wait.saturating_add(other.lock_wait),
-            shared_incremental_lock_wait: saturating_add_optional_duration(
+            shared_incremental_lock_wait: [
                 self.shared_incremental_lock_wait,
                 other.shared_incremental_lock_wait,
-            ),
+            ]
+            .into_iter()
+            .flatten()
+            .reduce(Duration::saturating_add),
             input_resolution,
-            cargo_build: saturating_add_optional_duration(self.cargo_build, other.cargo_build),
-            cache_maintenance: saturating_add_optional_duration(
-                self.cache_maintenance,
-                other.cache_maintenance,
-            ),
+            cargo_build: [self.cargo_build, other.cargo_build]
+                .into_iter()
+                .flatten()
+                .reduce(Duration::saturating_add),
+            cache_maintenance: [self.cache_maintenance, other.cache_maintenance]
+                .into_iter()
+                .flatten()
+                .reduce(Duration::saturating_add),
             total: self.total.saturating_add(other.total),
         }
     }

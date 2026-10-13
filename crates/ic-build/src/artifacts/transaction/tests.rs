@@ -1372,3 +1372,39 @@ fn missing_declared_input_and_tool_errors_include_the_failed_path() {
         fs::remove_dir_all(root).unwrap();
     }
 }
+
+#[test]
+fn cache_timing_accumulation_preserves_optional_presence_and_saturates() {
+    for (left, right, expected) in [
+        (None, None, None),
+        (Some(Duration::ZERO), None, Some(Duration::ZERO)),
+        (
+            None,
+            Some(Duration::from_secs(2)),
+            Some(Duration::from_secs(2)),
+        ),
+        (
+            Some(Duration::from_secs(2)),
+            None,
+            Some(Duration::from_secs(2)),
+        ),
+        (
+            Some(Duration::MAX),
+            Some(Duration::from_nanos(1)),
+            Some(Duration::MAX),
+        ),
+    ] {
+        let left = super::ArtifactCacheTimings {
+            caller_build: left,
+            maintenance: left,
+            ..Default::default()
+        };
+        let right = super::ArtifactCacheTimings {
+            caller_build: right,
+            maintenance: right,
+            ..Default::default()
+        };
+        let total = left.saturating_add(right);
+        assert_eq!([total.caller_build(), total.maintenance()], [expected; 2]);
+    }
+}
