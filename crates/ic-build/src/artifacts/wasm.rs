@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 /// Resolve one crate's Wasm artifact under a caller-selected Cargo target directory.
+/// Supply the actual library target name; Cargo changes package hyphens to underscores.
 #[must_use]
 pub fn wasm_path(target_dir: &Path, crate_name: &str, profile_target_dir: &str) -> PathBuf {
     target_dir

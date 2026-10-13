@@ -2,7 +2,8 @@
 //!
 //! Callers own the parent directory, recipes and publication boundary. This
 //! module allocates only its own child and removes it after the last owner is
-//! dropped. It never prunes existing artifacts or publishes a product release.
+//! dropped. Explicit retention transfers cleanup to the caller.
+//! It never prunes existing artifacts or publishes a product release.
 
 use std::{
     fs, io,
@@ -89,7 +90,8 @@ impl Drop for ArtifactStagingDirectory {
 /// Owned copy of one completed producer output, independent of later source replacement.
 ///
 /// Keep this record alive through every use of [`Self::path`]. The copy is
-/// temporary rather than a reusable cache entry; dropping its owner removes it.
+/// temporary rather than a reusable cache entry; ordinary Drop removes it.
+/// [`Self::retain`] explicitly transfers cleanup to the caller.
 #[derive(Debug)]
 pub struct CapturedArtifact {
     staging: ArtifactStagingDirectory,
@@ -118,6 +120,17 @@ impl CapturedArtifact {
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// Transfer the captured file and its staging child to caller-owned retention.
+    ///
+    /// Unlike close or Drop, this keeps the exact captured bytes after this owner
+    /// is consumed. The caller owns later cleanup of the returned path's parent.
+    /// Keep custody of those paths; this grants no cache or release admission.
+    #[must_use]
+    pub fn retain(mut self) -> PathBuf {
+        self.staging.armed = false;
+        self.path
     }
 
     /// Remove the captured output and its owned staging child, reporting cleanup failure.

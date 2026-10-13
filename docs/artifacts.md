@@ -138,6 +138,10 @@ record through every use of `path()`, including later Cargo commands that may
 overwrite or delete the original output. Multiple captures remain independent,
 including captures of identical source bytes. Closing or dropping a capture
 releases only its temporary staging directory.
+`retain()` explicitly transfers the captured path and its staging child to
+caller-owned evidence retention. It preserves the bytes after the record is
+consumed; the caller owns later cleanup and custody. It creates no cache or
+release admission. Normal close/Drop behavior remains unchanged.
 
 These temporary owners create no cache entry, cache hit or release admission.
 They do not prune retained artifacts, run transforms, install tools or select
@@ -145,6 +149,39 @@ an elapsed-time deadline. Canic retains transform order, validation, release
 binding, build coordination and durable product publication. Its producer and
 consumer adoption evidence is tracked in
 [Canic #529](https://github.com/dragginzgame/canic/issues/529).
+
+## Caller-executed Cargo examples
+
+`WasmBuildSpec::cargo_build_command()` prepares the same Cargo command used by
+cached acquisition, using the specification's explicit target directory. It
+starts no process or cache and executes no maintenance. Resolve the specification
+first and call `ResolvedCargoBuildInputs::artifact_paths()` to admit its selected
+Wasm output. Generic snapshots can describe non-Wasm packages, but this output
+accessor refuses absent, non-cdylib, renamed or colliding targets.
+
+For Query's probe, select package `ic-query`, example `governance_probe`, profile
+`release`, and arguments `--release --no-default-features --features canister
+--locked --offline`. Explicit compiler/tool/environment selection remains in the
+specification. The command's `CARGO_TARGET_DIR` overrides a configured Cargo
+output directory; discovered configuration still contributes to input identity.
+
+Keep the existing caller executor: Query owns its 600-second deadline,
+cancellation, TERM grace, bounded reaping and original command/output/cleanup
+errors. Preserve the generated command's arguments and environment. Hold source
+and target custody, capture pre-build `InputEvidence` from resolved inputs and
+exclusions, execute, re-resolve identity and validate before capturing outputs.
+Discover caller-selected example depfiles and validate their expanded inventory;
+a newly discovered external input needs pre-build authority. Predeclare it or
+perform a fresh build after inventory discovery. Command success alone does not
+admit retained bytes or a product release.
+
+Query's receipt encoding remains caller-owned: sorted relative paths, NUL,
+raw file bytes, NUL. Use shared inventory facts to select its existing explicit
+files and Rust sources, then retain that encoder. `InputEvidence::digest()`
+uses different framing and is not a replacement for Query's `source_sha256`.
+Query also retains DID selection, public metadata, smoke/deployment lifecycle and
+publication. Host owns generic custom-section framing. This capability does not
+establish Query adoption or native smoke qualification.
 
 ## Wasm artifact helpers
 
@@ -313,15 +350,22 @@ The profile output directory must match the Cargo arguments: default builds and
 returns `InvalidSpec` before input resolution or cache work. Setting the output
 directory alone does not select a Cargo profile.
 
-Wasm acquisition always builds package libraries with Cargo's `--lib` flag.
-Binary, example, test, bench, and `--all-targets` selectors return `InvalidSpec`
-before input resolution or cache work. Run other targets separately; they can
-share the library's output filename and overwrite the canister Wasm. An explicit
-`--lib` in `with_cargo_profile_args` remains accepted.
+Wasm acquisition builds package libraries with Cargo's `--lib` flag by default.
+Use `with_example(name)` to select one named `cdylib` example from exactly one
+package. Metadata admits that target before acquisition; its name contributes to
+the fingerprint and selects `<target>/<profile>/examples/<library_name>.wasm`,
+with hyphens normalized to underscores in the filename. Default-library cache
+identity and output layout remain unchanged.
 
-Acquired packages must declare a `cdylib` library with the same name as the
-package, matching the expected `<package>.wasm` output. Acquisition validates
-this declaration from Cargo metadata before reuse, compilation, or scheduled
+Raw binary, example, test, bench, and `--all-targets` arguments return
+`InvalidSpec` before input resolution or cache work. Target selection belongs to
+the specification; other targets can overwrite the canister library's output.
+An explicit `--lib` remains accepted only for the default-library selection.
+
+Acquired packages must declare a `cdylib` library with Cargo's default library
+name: package hyphens become underscores. That admitted name selects every cached
+and published Wasm path; packages whose default names collide are refused.
+Acquisition validates this declaration from Cargo metadata before reuse, compilation, or scheduled
 shared-target maintenance. Libraries that only produce an `rlib`, renamed
 libraries, and binary-only packages return `InvalidSpec`. Input-only snapshots
 from `resolve_cargo_build_inputs` can still describe arbitrary Cargo targets

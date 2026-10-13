@@ -3,6 +3,18 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.2.4]
+
+- Admit Cargo's default underscored cdylib filenames for hyphenated packages in
+  every cache mode; refuse colliding outputs and genuinely renamed libraries
+  ([#16](https://github.com/dragginzgame/ic-build/issues/16)).
+- Add explicit captured-artifact retention for caller-owned recovery evidence
+  ([#14](https://github.com/dragginzgame/ic-build/issues/14)).
+- Bind named cdylib examples to shared Cargo input identity and output admission.
+  Expose the existing command recipe for caller-owned execution without requiring
+  a cache or changing deadlines, cleanup or consumer receipt encoding
+  ([#13](https://github.com/dragginzgame/ic-build/issues/13)).
+
 ## [0.2.3] - 2026-10-13
 
 - Make the native-path evidence fixture use filesystem-admissible filenames on

@@ -35,6 +35,103 @@ use support::wait::wait_for_path;
 const PERF_PROBE_PACKAGE: &str = "fixture";
 
 #[test]
+fn hyphenated_packages_use_the_default_library_artifact_in_every_cache_mode() {
+    for shared in [false, true] {
+        let root = real_wasm_workspace();
+        let manifest = root.join("Cargo.toml");
+        let original = fs::read_to_string(&manifest)
+            .unwrap()
+            .replace("name=\"fixture\"", "name=\"fixture-canister\"");
+        fs::write(&manifest, &original).unwrap();
+        let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+        assert!(
+            std::process::Command::new(cargo)
+                .current_dir(&root)
+                .args(["generate-lockfile", "--offline"])
+                .status()
+                .unwrap()
+                .success()
+        );
+        let target = root.join("exact");
+        let mut spec = WasmBuildSpec::new(&root, &target, &["fixture-canister"], "debug")
+            .with_isolated_builds();
+        if shared {
+            spec = spec.with_shared_incremental_target(root.join("target/shared"));
+        }
+        let first = build_wasm_canisters_cached(&spec).unwrap();
+        assert_eq!(
+            first.record().artifacts()[0].file_name().unwrap(),
+            "fixture_canister.wasm"
+        );
+        let bytes = fs::read(&first.record().artifacts()[0]).unwrap();
+        assert!(bytes.starts_with(b"\0asm"));
+        assert!(
+            target
+                .join("wasm32-unknown-unknown/debug/fixture_canister.wasm")
+                .is_file()
+        );
+        assert!(
+            !target
+                .join("wasm32-unknown-unknown/debug/fixture-canister.wasm")
+                .exists()
+        );
+        assert!(build_wasm_canisters_cached(&spec).unwrap().is_reused());
+        fs::write(
+            &manifest,
+            original.replace("[lib]", "[lib]\nname=\"renamed\""),
+        )
+        .unwrap();
+        resolve_cargo_build_inputs(&spec).unwrap();
+        assert!(matches!(
+            build_wasm_canisters_cached(&spec),
+            Err(WasmBuildError::InvalidSpec { .. })
+        ));
+        assert_eq!(fs::read(&first.record().artifacts()[0]).unwrap(), bytes);
+        fs::write(&manifest, original).unwrap();
+        assert!(build_wasm_canisters_cached(&spec).unwrap().is_reused());
+        drop(first);
+        fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[test]
+fn packages_with_colliding_default_library_names_cannot_publish_one_artifact() {
+    let root = unique_temp_dir("normalized-library-collision");
+    fs::write(
+        root.join("Cargo.toml"),
+        "[workspace]\nmembers=[\"a\",\"b\"]\nresolver=\"3\"\n",
+    )
+    .unwrap();
+    for (directory, name) in [("a", "same-name"), ("b", "same_name")] {
+        fs::create_dir_all(root.join(directory).join("src")).unwrap();
+        fs::write(root.join(directory).join("Cargo.toml"),
+            format!("[package]\nname=\"{name}\"\nversion=\"0.0.0\"\nedition=\"2024\"\n[lib]\ncrate-type=[\"cdylib\"]\n")).unwrap();
+        fs::write(root.join(directory).join("src/lib.rs"), "").unwrap();
+    }
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    assert!(
+        std::process::Command::new(cargo)
+            .current_dir(&root)
+            .args(["generate-lockfile", "--offline"])
+            .status()
+            .unwrap()
+            .success()
+    );
+    let spec = WasmBuildSpec::new(
+        &root,
+        &root.join("exact"),
+        &["same-name", "same_name"],
+        "debug",
+    );
+    resolve_cargo_build_inputs(&spec).unwrap();
+    assert!(matches!(
+        build_wasm_canisters_cached(&spec),
+        Err(WasmBuildError::InvalidSpec { .. })
+    ));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn shared_wasm_target_rejects_library_that_no_longer_produces_wasm() {
     let root = unique_temp_dir("ic-testkit-shared-library-kind");
     let workspace = root.join("workspace");

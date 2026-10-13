@@ -721,6 +721,7 @@ fn semantic_package_identity_uses_selected_registry_lock_checksum() {
         source: Some(source),
         semantic_fields: Vec::new(),
         cdylib_name: None,
+        cdylib_examples: Vec::new(),
     };
     let write_lock = |checksum: Option<&str>| {
         let checksum = checksum.map_or_else(String::new, |checksum| {

@@ -72,6 +72,7 @@ pub struct WasmBuildSpec {
     workspace_root: PathBuf,
     target_dir: PathBuf,
     packages: Vec<String>,
+    example: Option<String>,
     profile_target_dir: String,
     cargo_profile_args: Vec<OsString>,
     extra_env: BTreeMap<OsString, OsString>,
@@ -231,6 +232,7 @@ pub struct ResolvedCargoBuildInputs {
     inputs: Arc<[CargoBuildInput]>,
     exclusions: Arc<[PathBuf]>,
     wasm_artifact_error: Option<String>,
+    artifact_paths: Arc<[PathBuf]>,
     timings: WasmInputResolutionTimings,
 }
 
@@ -873,10 +875,11 @@ impl WasmBuildSpec {
     /// Misses share the workspace-relative `target/ic-testkit-incremental`
     /// Cargo target by default. Use [`Self::with_isolated_builds`] when compiler
     /// state must be independent, and select retention limits explicitly.
-    /// Acquisition always builds package libraries with Cargo's `--lib` flag;
-    /// binary and other targets cannot replace the canister library output.
-    /// Each acquired package must declare a `cdylib` library with the same name
-    /// as the package, matching its expected `<package>.wasm` output path.
+    /// By default, acquisition builds package libraries with Cargo's `--lib`
+    /// flag. Use [`Self::with_example`] for one named `cdylib` example.
+    /// Each default-library package must declare a `cdylib` with Cargo's default
+    /// library name: package hyphens become underscores. Artifact paths use that
+    /// admitted name; genuinely renamed libraries are refused.
     #[must_use]
     pub fn new(
         workspace_root: &Path,
@@ -894,6 +897,7 @@ impl WasmBuildSpec {
             workspace_root: workspace_root.to_owned(),
             target_dir: target_dir.to_owned(),
             packages,
+            example: None,
             profile_target_dir: profile_target_dir.to_owned(),
             cargo_profile_args: Vec::new(),
             extra_env: BTreeMap::new(),
@@ -911,6 +915,39 @@ impl WasmBuildSpec {
         }
     }
 
+    /// Select one named `cdylib` example instead of the default package library.
+    ///
+    /// Requires exactly one package. Metadata must declare that exact example;
+    /// its selection contributes to identity and outputs live under `examples/`.
+    /// Raw example/other-target selectors in profile arguments remain refused.
+    #[must_use]
+    pub fn with_example(mut self, name: impl Into<String>) -> Self {
+        self.example = Some(name.into());
+        self
+    }
+
+    /// Borrow the explicit example selection, if this is not a library recipe.
+    #[must_use]
+    pub fn example(&self) -> Option<&str> {
+        self.example.as_deref()
+    }
+
+    /// Prepare this recipe's Cargo command without starting a process or cache.
+    ///
+    /// External execution uses `target_dir` directly; cache/maintenance choices
+    /// are not executed. Resolve inputs first and borrow their admitted output
+    /// paths, retain source/target custody, execute this command with caller-owned
+    /// deadline/cancellation/cleanup, and validate inputs before capturing outputs.
+    /// Keep the selected arguments and environment intact. Command success alone
+    /// does not admit an artifact or release.
+    ///
+    /// # Errors
+    /// Returns invalid selections or target-directory resolution errors.
+    pub fn cargo_build_command(&self) -> Result<Command, WasmBuildError> {
+        validate_spec(self)?;
+        cargo_build_command(self, &self.target_dir)
+    }
+
     /// Set Cargo profile and feature arguments used for the build and fingerprint.
     ///
     /// Workspace, package, compilation target, and target-directory overrides
@@ -922,8 +959,8 @@ impl WasmBuildSpec {
     /// without building. The selected profile must match `profile_target_dir`;
     /// declaring an output directory does not select a Cargo profile.
     /// Binary, example, test, bench, and all-target selectors are rejected to
-    /// keep acquisition restricted to canister libraries. `--lib` is supported
-    /// and already included in every build command.
+    /// preserve structural library/example selection. Use [`Self::with_example`]
+    /// for a named example. `--lib` is supported only for the default library.
     #[must_use]
     pub fn with_cargo_profile_args<I, S>(mut self, arguments: I) -> Self
     where
@@ -1409,6 +1446,24 @@ impl CargoBuildInput {
 }
 
 impl ResolvedCargoBuildInputs {
+    /// Borrow declared output paths after metadata admits the selected targets.
+    ///
+    /// These are paths under the specification's `target_dir`, not retained or
+    /// captured outputs. External producers must execute the same recipe under
+    /// source/target custody and validate before consuming or capturing bytes.
+    /// Generic snapshots for non-Wasm packages remain useful independently.
+    ///
+    /// # Errors
+    /// Returns missing/non-cdylib/renamed targets or colliding artifact names.
+    pub fn artifact_paths(&self) -> Result<&[PathBuf], WasmBuildError> {
+        if let Some(message) = &self.wasm_artifact_error {
+            return Err(WasmBuildError::InvalidSpec {
+                message: message.clone(),
+            });
+        }
+        Ok(&self.artifact_paths)
+    }
+
     /// Exact build fingerprint including Cargo inputs, tools, arguments, and environment.
     #[must_use]
     pub const fn fingerprint(&self) -> InputDigest {
@@ -1827,12 +1882,10 @@ impl<'a, 'session> WasmBuildBatchInputResolver<'a, 'session> {
                 ),
                 input_digest,
                 validation_digest,
-                inputs: inputs
-                    .into_iter()
-                    .map(|(label, path)| CargoBuildInput { label, path })
-                    .collect(),
+                inputs: cargo_build_inputs(inputs),
                 exclusions: exclusions.into(),
                 wasm_artifact_error,
+                artifact_paths: expected_artifacts(spec, &spec.target_dir).into(),
                 timings: if Some(index) == timing_index {
                     timings
                 } else {
@@ -3545,6 +3598,34 @@ fn validate_spec(spec: &WasmBuildSpec) -> Result<(), WasmBuildError> {
 }
 
 fn validate_cargo_target_selection(spec: &WasmBuildSpec) -> Result<(), WasmBuildError> {
+    if let Some(example) = &spec.example {
+        let mut components = Path::new(example).components();
+        if spec.packages.len() != 1
+            || !matches!(
+                (components.next(), components.next()),
+                (Some(Component::Normal(_)), None)
+            )
+            || spec
+                .cargo_profile_args
+                .iter()
+                .any(|argument| argument == "--lib")
+        {
+            return Err(WasmBuildError::InvalidSpec {
+                message: "a named Cargo example requires one package, a normal target name and no --lib override".to_owned(),
+            });
+        }
+    }
+    if spec.packages.iter().any(|package| {
+        let mut components = Path::new(package).components();
+        !matches!(
+            (components.next(), components.next()),
+            (Some(Component::Normal(_)), None)
+        )
+    }) {
+        return Err(WasmBuildError::InvalidSpec {
+            message: "Cargo package names must be normal path components".to_owned(),
+        });
+    }
     if spec.cargo_profile_args.iter().any(|argument| {
         let option = argument
             .as_encoded_bytes()
@@ -3565,7 +3646,7 @@ fn validate_cargo_target_selection(spec: &WasmBuildSpec) -> Result<(), WasmBuild
         )
     }) {
         return Err(WasmBuildError::InvalidSpec {
-            message: "Wasm acquisition builds canister libraries only; remove other Cargo target selectors".to_owned(),
+            message: "Cargo target selection is owned by the build specification; use with_example for a named cdylib example".to_owned(),
         });
     }
     Ok(())
@@ -3673,13 +3754,10 @@ fn build_fingerprint_with_progress(
         fingerprint,
         input_digest,
         validation_digest,
-        inputs: inputs
-            .validation_inputs
-            .into_iter()
-            .map(|(label, path)| CargoBuildInput { label, path })
-            .collect(),
+        inputs: cargo_build_inputs(inputs.validation_inputs),
         exclusions: exclusions.into(),
         wasm_artifact_error: inputs.wasm_artifact_error,
+        artifact_paths: expected_artifacts(spec, &spec.target_dir).into(),
         timings: WasmInputResolutionTimings {
             tool_identity,
             cargo_metadata,
@@ -3688,6 +3766,13 @@ fn build_fingerprint_with_progress(
             total: total_started.elapsed(),
         },
     })
+}
+
+fn cargo_build_inputs(inputs: Vec<(PathBuf, PathBuf)>) -> Arc<[CargoBuildInput]> {
+    inputs
+        .into_iter()
+        .map(|(label, path)| CargoBuildInput { label, path })
+        .collect()
 }
 
 fn finish_build_fingerprint(
@@ -3701,7 +3786,12 @@ fn finish_build_fingerprint(
         hasher.field("package", package.as_bytes());
     }
     hasher.field("target", spec.target.as_bytes());
-    hasher.field("cargo-target-selection", b"lib");
+    if let Some(example) = &spec.example {
+        hasher.field("cargo-target-selection", b"example");
+        hasher.field("cargo-example", example.as_bytes());
+    } else {
+        hasher.field("cargo-target-selection", b"lib");
+    }
     hasher.field("profile-target-dir", spec.profile_target_dir.as_bytes());
     for argument in &spec.cargo_profile_args {
         hasher.field("cargo-argument", &os_bytes(argument));
@@ -3871,6 +3961,7 @@ struct MetadataPackage<'a> {
     source: Option<&'a str>,
     semantic_fields: Vec<(&'static str, Option<String>)>,
     cdylib_name: Option<&'a str>,
+    cdylib_examples: Vec<&'a str>,
 }
 
 // Parsed once per Cargo resolution context. Each specification still selects
@@ -3960,14 +4051,25 @@ fn resolve_local_inputs(
     let mut selected_ids = selected_package_ids(spec, metadata)?;
     // Cargo snapshots also serve generic transactions; defer this acquisition
     // constraint until the resolved snapshot is used to acquire Wasm artifacts.
+    let mut artifact_names = BTreeSet::new();
     let wasm_artifact_error = selected_ids.iter().find_map(|id| {
         let package = &metadata.packages[id];
-        (package.cdylib_name != Some(package.name)).then(|| {
-            format!(
+        if let Some(example) = &spec.example {
+            return (!package.cdylib_examples.contains(&example.as_str())).then(|| {
+                format!("Cargo package `{}` must declare the cdylib example `{example}`", package.name)
+            });
+        }
+        let library = default_library_name(package.name);
+        if package.cdylib_name != Some(library.as_str()) {
+            Some(format!(
                 "Cargo package `{}` must declare a cdylib library named `{}` to produce its expected Wasm artifact",
-                package.name, package.name,
-            )
-        })
+                package.name, library,
+            ))
+        } else if !artifact_names.insert(library.clone()) {
+            Some(format!("selected Cargo packages share the Wasm artifact name `{library}`"))
+        } else {
+            None
+        }
     });
     let mut closure = BTreeSet::new();
     while let Some(id) = selected_ids.pop_front() {
@@ -4035,6 +4137,23 @@ fn metadata_packages(metadata: &Value) -> Result<HashMap<&str, MetadataPackage<'
                 })
                 .and_then(|target| target.get("name"))
                 .and_then(Value::as_str),
+            cdylib_examples: value
+                .get("targets")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter(|target| {
+                    target
+                        .get("kind")
+                        .and_then(Value::as_array)
+                        .is_some_and(|kinds| kinds.iter().any(|kind| kind == "example"))
+                        && target
+                            .get("crate_types")
+                            .and_then(Value::as_array)
+                            .is_some_and(|types| types.iter().any(|kind| kind == "cdylib"))
+                })
+                .filter_map(|target| target.get("name").and_then(Value::as_str))
+                .collect(),
         };
         packages.insert(package.id, package);
     }
@@ -4853,6 +4972,14 @@ fn run_cargo_build(
     build_target_dir: &Path,
     progress: &mut ProgressReporter<'_>,
 ) -> Result<(), WasmBuildError> {
+    let command = cargo_build_command(spec, build_target_dir)?;
+    communicate_cargo_build(spec, build_target_dir, command, progress)
+}
+
+fn cargo_build_command(
+    spec: &WasmBuildSpec,
+    build_target_dir: &Path,
+) -> Result<Command, WasmBuildError> {
     let absolute_target_dir =
         canonicalize_allow_missing(build_target_dir).map_err(|source| WasmBuildError::Io {
             operation: "resolve Cargo build target directory",
@@ -4863,18 +4990,23 @@ fn run_cargo_build(
     command
         .current_dir(&spec.workspace_root)
         .env("CARGO_TARGET_DIR", absolute_target_dir)
-        .args(["build", "--lib", "--target", &spec.target])
-        .args(
-            spec.cargo_profile_args
-                .iter()
-                .filter(|argument| argument.as_os_str() != OsStr::new("--lib")),
-        );
+        .arg("build");
+    if let Some(example) = &spec.example {
+        command.args(["--example", example]);
+    } else {
+        command.arg("--lib");
+    }
+    command.args(["--target", &spec.target]).args(
+        spec.cargo_profile_args
+            .iter()
+            .filter(|argument| argument.as_os_str() != OsStr::new("--lib")),
+    );
     apply_command_environment(&mut command, spec);
     for package in &spec.packages {
         command.args(["-p", package]);
     }
 
-    communicate_cargo_build(spec, build_target_dir, command, progress)
+    Ok(command)
 }
 
 fn communicate_cargo_build(
@@ -4996,14 +5128,23 @@ fn ensure_command_success(
     })
 }
 
+fn default_library_name(package: &str) -> String {
+    package.replace('-', "_")
+}
+
 fn expected_artifacts(spec: &WasmBuildSpec, target_dir: &Path) -> Vec<PathBuf> {
     spec.packages
         .iter()
         .map(|package| {
-            target_dir
-                .join(&spec.target)
-                .join(&spec.profile_target_dir)
-                .join(format!("{package}.wasm"))
+            let profile = target_dir.join(&spec.target).join(&spec.profile_target_dir);
+            spec.example.as_ref().map_or_else(
+                || profile.join(format!("{}.wasm", default_library_name(package))),
+                |example| {
+                    profile
+                        .join("examples")
+                        .join(format!("{}.wasm", default_library_name(example)))
+                },
+            )
         })
         .collect()
 }

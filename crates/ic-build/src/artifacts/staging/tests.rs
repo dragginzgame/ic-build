@@ -98,3 +98,21 @@ fn staging_preserves_unowned_children_and_requires_an_existing_parent() {
     assert_eq!(fs::read(foreign.join("evidence")).unwrap(), b"preserve");
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn retained_capture_survives_owner_and_source_without_retaining_other_captures() {
+    let root = unique_temp_directory("retained-capture");
+    let source = root.join("producer.wasm");
+    fs::write(&source, b"exact evidence").unwrap();
+    let retained = CapturedArtifact::capture(&source, &root, 32).unwrap();
+    let temporary = CapturedArtifact::capture(&source, &root, 32).unwrap();
+    let temporary_path = temporary.path().to_owned();
+    let path = retained.retain();
+    fs::remove_file(&source).unwrap();
+    drop(temporary);
+    assert!(!temporary_path.exists());
+    assert_eq!(fs::read(&path).unwrap(), b"exact evidence");
+    fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    assert!(!path.exists());
+    fs::remove_dir_all(root).unwrap();
+}

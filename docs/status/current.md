@@ -1,5 +1,54 @@
 # Current handoff
 
+## Published 0.2.3 and pending 0.2.4 consumer boundaries — 2026-10-13
+
+Registry 0.2.3 resolves to source
+`23e047b7672aae0d5ba442c4b384c4b782835c87`; its archive SHA-256 is
+`9f5baf0449153f28de324d37dc9787298d77788940e0bce88f3d0c252b018ca5`.
+Its [exact CI](https://github.com/dragginzgame/ic-build/actions/runs/38416043907)
+passes Linux and lint/security; both native macOS 15 jobs are running at inspection.
+[#15](https://github.com/dragginzgame/ic-build/issues/15) remains open for that
+source's native qualification. The older 0.2.2 run was cancelled.
+
+The maintainer accepted the #16/#14/#13 producer batch. Pending notes select
+compatible 0.2.4: additive APIs and corrected default Cargo filenames, with
+existing default-library identity, v1 formats, namespaces and execution policy
+preserved. Own manifests and lock remain 0.2.3.
+
+- [#16](https://github.com/dragginzgame/ic-build/issues/16): package hyphens become
+  underscores in default cdylib output paths across cache modes. Renamed/non-cdylib
+  libraries and colliding normalized filenames remain refused before acquisition.
+- [#14](https://github.com/dragginzgame/ic-build/issues/14): adopt the prepared
+  `CapturedArtifact::retain` transfer. Normal close/Drop still clean only their
+  owned child. The Jobs adapter preserves original/O3/Os/Oz bytes, including
+  retained capture after a failed rename and process exit. Published producer
+  dependency and caller admission still precede Jobs adoption.
+- [#13](https://github.com/dragginzgame/ic-build/issues/13): the existing resolver
+  structurally selects one named cdylib example, fingerprints that selection and
+  admits its output. The existing Cargo command factory is public for uncached,
+  caller-executed builds. Query keeps deadlines, cancellation/cleanup, receipts,
+  DID/metadata publication and smoke/deployment lifecycle. Shared input inventory
+  projects Query's unchanged relative-path/raw-byte framing; it does not replace
+  that receipt with `InputEvidence::digest()`.
+
+Complete Linux `make ci lint check-secrets` passes: 162 units, six named-example
+integration cases, 16 actual Cargo/Wasm cases, retained artifacts/process/input
+checks, strict Clippy/docs, actual Rust 1.88 and isolated release adapters. The
+new cases cover isolated/shared reuse, normalized example/library filenames,
+changed/missing target admission, configured target-directory override, prepared
+snapshot selection, source changes, late depfiles, capture lifetime and caller
+failure/deadline/cancellation evidence. A frozen 796-file Query inventory gives
+identical old/shared-projection source hashes and rejects mutation. Current Query
+locked/offline metadata admits its named probe and selected output; a repeated
+resolution confirms identity. These are
+producer and adapter checks, not Query smoke or new native qualification.
+
+Evidence is under `/tmp/ic-build-024/`: `full-validation.log`,
+`jobs-adapter-proof.log` and `query-receipt-final.log`. Sibling repositories stay
+read-only. No staging, commit, version change, push, release, publication or CI
+trigger ran. Issues stay open for delivery/native acceptance and actual adoption;
+historical sections below preserve their original identities.
+
 ## Published 0.2.2 and Canic input-engine integration — 2026-10-13
 
 Version 0.2.2 is published from
