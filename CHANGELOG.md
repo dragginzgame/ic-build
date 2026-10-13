@@ -3,6 +3,18 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.2.2]
+
+- Add standalone input evidence and strict Cargo depfile discovery for caller-owned
+  build inventories. Recheck original inputs when inventories shrink or change,
+  refuse late input authority, and preserve consumer evidence and existing cache
+  encodings through the shared traversal. Recipes and release admission remain
+  with consumers ([#12](https://github.com/dragginzgame/ic-build/issues/12)).
+- Correct the artifact guide's IC Build ownership and Host 0.17 requirements.
+  Keep source-lease and retained-cache contracts here, and bind historical
+  Testkit references to their extraction revision
+  ([#2](https://github.com/dragginzgame/ic-build/issues/2)).
+
 ## [0.2.1] - 2026-10-13
 
 - Adopt Shared Tooling 0.10.0's snapshot-owned common catalogs. Keep existing

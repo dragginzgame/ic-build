@@ -1,14 +1,15 @@
 # Build ownership and extraction
 
-IC Build should become the single reusable Cargo and Wasm artifact build engine
-used by Canic, IC Testkit and IcyDB. Canic remains responsible for Canic release
+IC Build owns the extracted reusable Cargo/Wasm and artifact-cache engine used
+directly by Canic, IC Testkit and IcyDB. Canic remains responsible for Canic release
 orchestration; Testkit remains responsible for testing and PocketIC lifecycle.
 Neither should independently implement the common build and artifact-cache engine.
 
 This design preserves the ownership audit discussed on 2026-10-12. Repository
 bootstrap and saving the design were initially authorized. The maintainer has
-since authorized the IC Testkit and Canic source extraction. IcyDB mutation,
-installation changes and artifact cleanup remain outside that scope.
+since authorized the IC Testkit and Canic source extraction and scoped consumer
+adoption recorded in the handoff. These past authorizations do not grant blanket
+sibling mutation, installation changes or artifact cleanup.
 The design is the coordination reference; GitHub issues own assignments,
 acceptance and delivery status.
 
@@ -16,12 +17,29 @@ The current implementation and qualification evidence is recorded in the
 [handoff](../status/current.md); [IC Build #1](https://github.com/dragginzgame/ic-build/issues/1)
 owns extraction acceptance. The generic engine retains Testkit's exact `v1`
 stamp/digest bytes and `.ic-testkit` cache/lock namespaces. No migration reader or
-automatic cleanup is introduced. Canic's feature-equivalent Cargo grouping moves
+automatic cleanup is introduced. Canic's feature-equivalent Cargo grouping moved
 to IC Build with caller-supplied environment and output policy; complete-release
 reuse/finalization remains Canic-owned until its additional invariants can be
 preserved through a shared execution path.
 
-## Current build paths
+## Implemented ownership
+
+| Consumer | Shared owner and retained consumer responsibility |
+| --- | --- |
+| Canic | IC Build supplies grouping, declaration-cache transactions, captured outputs and staging. Canic retains recipes, source custody, transforms and complete-release admission. |
+| IcyDB | IC Build supplies Cargo/Wasm and post-link artifact caching. IcyDB retains optimizer choices, feature policy and interface validation. |
+| IC Testkit | IC Build supplies native fixture/probe builds. Testkit retains PocketIC infrastructure, testing contracts and benchmark policy. |
+
+The larger Canic input-engine convergence is tracked in
+[#530](https://github.com/dragginzgame/canic/issues/530); its current work and
+acceptance remain at that owner. Generic compilation or a cache hit does not
+establish complete-release validity.
+
+## Historical build paths at the 2026-10-12 audit
+
+The following inventory and extraction proposals preserve the inspected source
+at that audit. They describe the original duplication, rather than the current
+dependency route; the implementation handoff above owns subsequent evidence.
 
 | Entry point | Execution path |
 | --- | --- |
@@ -66,7 +84,7 @@ Canic projects it into its release schema. Consumers should not reconstruct
 compiler arguments, tool identities or transform outcomes after execution.
 Independent verification at a release or trust boundary remains necessary.
 
-## Structural findings
+## Historical structural findings
 
 ### Generic build mechanics are coupled to the testing package
 
@@ -184,7 +202,7 @@ before retiring Canic's installer, preserving platform runtime-library layout,
 archive and executable verification, retries and existing retained installations.
 Consumer-selected qualified versions need not become identical by accident.
 
-## Extraction sequence
+## Original extraction sequence
 
 1. Consolidate Candid/export interpretation and qualify the behavior differences.
    This can proceed independently of build-engine extraction.

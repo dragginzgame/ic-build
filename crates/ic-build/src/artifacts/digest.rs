@@ -2,7 +2,7 @@ use sha2::{Digest, Sha256};
 use std::{
     borrow::Cow,
     collections::BTreeSet,
-    ffi::OsStr,
+    ffi::{OsStr, OsString},
     fmt::Write as _,
     fs::{self, File},
     io::{self, Read as _},
@@ -44,6 +44,9 @@ impl std::error::Error for AtomicCopyErrorContext {
 pub struct InputDigest([u8; 32]);
 
 impl InputDigest {
+    pub(super) const fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
     /// Borrow the raw SHA-256 bytes.
     #[must_use]
     pub const fn as_bytes(&self) -> &[u8; 32] {
@@ -407,79 +410,214 @@ fn hash_path(
     excluded_roots: &[PathBuf],
     visited_directories: &mut BTreeSet<PathBuf>,
     declared_root: bool,
-    mut trace: Option<&mut HashPathTrace>,
+    trace: Option<&mut HashPathTrace>,
 ) -> io::Result<()> {
-    let context =
-        |error: io::Error| io::Error::new(error.kind(), format!("{}: {error}", path.display()));
-    let canonical = path.canonicalize().map_err(context)?;
-    if let Some(trace) = &mut trace
-        && !canonical.starts_with(&trace.canonical_root)
-    {
-        trace.traversed_external_path = true;
-    }
-    if excluded_roots
-        .iter()
-        .any(|excluded| canonical.starts_with(excluded))
-    {
-        if declared_root {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!(
-                    "declared input is located inside an excluded cache root: {}",
-                    path.display()
-                ),
-            ));
+    let mut traversal = InputTreeWalk {
+        excluded_roots,
+        excluded_names: &[],
+        visited_directories,
+        trace,
+        observe_missing: false,
+        reject_links: false,
+    };
+    traversal.visit(label, path, declared_root, &mut |entry| {
+        match entry {
+            InputTreeEntry::File { label, path } => {
+                hasher.field("file-path", &os_bytes(label.as_os_str()));
+                hasher.file_field("file-content", path)?;
+            }
+            InputTreeEntry::Directory {
+                label, repeated, ..
+            } => {
+                hasher.field("directory", &os_bytes(label.as_os_str()));
+                if repeated {
+                    hasher.field("directory-already-visited", &os_bytes(label.as_os_str()));
+                }
+            }
+            InputTreeEntry::Missing { path } => {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    path.display().to_string(),
+                ));
+            }
         }
-        return Ok(());
-    }
+        Ok(())
+    })
+}
 
-    let metadata = fs::metadata(path).map_err(context)?;
-    let label_bytes = os_bytes(label.as_os_str());
-    if metadata.is_file() {
-        hasher.field("file-path", &label_bytes);
-        hasher.file_field("file-content", path).map_err(context)?;
-        return Ok(());
-    }
-    if !metadata.is_dir() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!(
-                "watched input is not a regular file or directory: {}",
-                path.display()
-            ),
-        ));
-    }
+/// One filesystem observation emitted by the shared input traversal.
+pub(super) enum InputTreeEntry<'a> {
+    File {
+        label: &'a Path,
+        path: &'a Path,
+    },
+    Directory {
+        label: &'a Path,
+        path: &'a Path,
+        repeated: bool,
+    },
+    Missing {
+        path: &'a Path,
+    },
+}
 
-    hasher.field("directory", &label_bytes);
-    if !visited_directories.insert(canonical) {
-        hasher.field("directory-already-visited", &label_bytes);
-        return Ok(());
-    }
+/// Path context shared by fingerprint and standalone-evidence failures.
+#[derive(Debug)]
+pub(super) struct InputPathError {
+    pub(super) path: PathBuf,
+    pub(super) source: io::Error,
+}
 
-    let mut entries = fs::read_dir(path)
-        .map_err(context)?
-        .map(|entry| entry.map(|entry| entry.file_name()))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(context)?;
-    // Unix names already own their native byte ordering. Compare borrowed
-    // bytes rather than allocating a second name and cached key per entry.
-    #[cfg(unix)]
-    entries.sort_unstable_by(|left, right| os_bytes(left).cmp(&os_bytes(right)));
-    // Other hosts may need an allocated native encoding; compute it once.
-    #[cfg(not(unix))]
-    entries.sort_by_cached_key(|name| os_bytes(name).into_owned());
-    for name in entries {
-        hash_path(
-            hasher,
-            &label.join(&name),
-            &path.join(&name),
+impl std::fmt::Display for InputPathError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}: {}", self.path.display(), self.source)
+    }
+}
+
+impl std::error::Error for InputPathError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.source)
+    }
+}
+
+/// One traversal owner; cache fingerprints retain their original follow-link policy.
+pub(super) struct InputTreeWalk<'a> {
+    excluded_roots: &'a [PathBuf],
+    excluded_names: &'a [OsString],
+    visited_directories: &'a mut BTreeSet<PathBuf>,
+    trace: Option<&'a mut HashPathTrace>,
+    observe_missing: bool,
+    reject_links: bool,
+}
+
+impl<'a> InputTreeWalk<'a> {
+    pub(super) const fn evidence(
+        excluded_roots: &'a [PathBuf],
+        excluded_names: &'a [OsString],
+        visited_directories: &'a mut BTreeSet<PathBuf>,
+    ) -> Self {
+        Self {
             excluded_roots,
+            excluded_names,
             visited_directories,
-            false,
-            trace.as_deref_mut(),
-        )?;
+            trace: None,
+            observe_missing: true,
+            reject_links: true,
+        }
     }
-    Ok(())
+
+    pub(super) fn visit(
+        &mut self,
+        label: &Path,
+        path: &Path,
+        declared_root: bool,
+        visitor: &mut impl FnMut(InputTreeEntry<'_>) -> io::Result<()>,
+    ) -> io::Result<()> {
+        let context = |source: io::Error| {
+            io::Error::new(
+                source.kind(),
+                InputPathError {
+                    path: path.to_owned(),
+                    source,
+                },
+            )
+        };
+        // Standalone evidence records absence and refuses links. Existing cache
+        // hashing still canonicalizes first and follows links exactly as before.
+        let inspected = if self.reject_links {
+            match fs::symlink_metadata(path) {
+                Ok(metadata) if metadata.file_type().is_symlink() => {
+                    return Err(context(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "input is a symbolic link",
+                    )));
+                }
+                Ok(metadata) => Some(metadata),
+                Err(error) if self.observe_missing && error.kind() == io::ErrorKind::NotFound => {
+                    let resolved =
+                        super::cache_fs::canonicalize_allow_missing(path).map_err(context)?;
+                    if self
+                        .excluded_roots
+                        .iter()
+                        .any(|root| resolved.starts_with(root))
+                    {
+                        if declared_root {
+                            return Err(context(io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                "declared missing input is inside an excluded root",
+                            )));
+                        }
+                        return Ok(());
+                    }
+                    return visitor(InputTreeEntry::Missing { path }).map_err(context);
+                }
+                Err(error) => return Err(context(error)),
+            }
+        } else {
+            None
+        };
+        let canonical = path.canonicalize().map_err(context)?;
+        if let Some(trace) = &mut self.trace
+            && !canonical.starts_with(&trace.canonical_root)
+        {
+            trace.traversed_external_path = true;
+        }
+        if self
+            .excluded_roots
+            .iter()
+            .any(|root| canonical.starts_with(root))
+        {
+            if declared_root {
+                return Err(context(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "declared input is inside an excluded root",
+                )));
+            }
+            return Ok(());
+        }
+        let metadata = match inspected {
+            Some(metadata) => metadata,
+            None => fs::metadata(path).map_err(context)?,
+        };
+        if metadata.is_file() {
+            return visitor(InputTreeEntry::File { label, path }).map_err(context);
+        }
+        if !metadata.is_dir() {
+            return Err(context(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "input is not a regular file or directory",
+            )));
+        }
+        // Cache fingerprints preserve cycle/alias markers. Standalone evidence
+        // refuses child links, so each declared spelling can be fully scanned;
+        // an alias must not be recorded as an empty, complete directory.
+        let repeated = !self.visited_directories.insert(canonical) && !self.reject_links;
+        visitor(InputTreeEntry::Directory {
+            label,
+            path,
+            repeated,
+        })
+        .map_err(context)?;
+        if repeated {
+            return Ok(());
+        }
+        let mut entries = fs::read_dir(path)
+            .map_err(context)?
+            .map(|entry| entry.map(|entry| entry.file_name()))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(context)?;
+        #[cfg(unix)]
+        entries.sort_unstable_by(|left, right| os_bytes(left).cmp(&os_bytes(right)));
+        #[cfg(not(unix))]
+        entries.sort_by_cached_key(|name| os_bytes(name).into_owned());
+        for name in entries {
+            if self.excluded_names.contains(&name) {
+                continue;
+            }
+            self.visit(&label.join(&name), &path.join(&name), false, visitor)?;
+        }
+        Ok(())
+    }
 }
 
 pub(super) fn copy_file_atomic(source: &Path, destination: &Path) -> io::Result<u64> {

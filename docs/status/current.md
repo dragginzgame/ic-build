@@ -1,5 +1,57 @@
 # Current handoff
 
+## Published 0.2.1 and pending 0.2.2 input evidence — 2026-10-13
+
+Version 0.2.1 is published from
+`b797ed7cdfc3303987d8c02af5aad8dadd22eddd`; archive SHA-256 is
+`a52c3b1a7c80eb24899cd38bbf6767e792d1236cf6f9522f30dd075ab48fae79`.
+The archive's VCS receipt names that release. Shared Tooling 0.10 is delivered
+in this source. Its [CI](https://github.com/dragginzgame/ic-build/actions/runs/38394499212)
+passes Linux, Apple Silicon and lint/security; Intel is running
+at inspection. The prior 0.2.0 run was cancelled, so its unfinished hosts do not
+establish native acceptance.
+
+The maintainer reports Canic #530 is in progress with its own owner and asks for
+continued IC Build issue work. This batch addresses the remaining current-guide
+corrections in [#2](https://github.com/dragginzgame/ic-build/issues/2): generic
+resolution, source leases and transactions now name IC Build; the public type
+boundary selects Host 0.17. This guide and the implemented public Rustdoc own
+the supported contracts. Original Testkit designs/migrations remain historical
+references, pinned to extraction source
+`b906b1a44f8f5f0f2f23d2413a76103d99e4fbb3` with their paths/anchors verified.
+Retained `.ic-testkit` namespaces and stamp/cache bytes are untouched.
+
+The ownership design separates implemented consumer routes from the original
+audit/proposals. README and agent instructions refer to the canonical version
+and handoff instead of carrying a stale workspace-version assertion. Pending
+notes are compatible 0.2.2; own metadata remains 0.2.1. The initial documentation
+checkpoint passed link/diff checks with executable inputs unchanged.
+
+The active Canic #530 owner then filed
+[#12](https://github.com/dragginzgame/ic-build/issues/12) for standalone input
+authority. `InputEvidenceSpec`, `InputEvidence`, `InputEvidenceValue` and
+`InputEvidenceError` now capture and validate per-path bytes, directory membership
+and explicit absence independently of an artifact-cache transaction. Strict
+`parse_cargo_depfile` / `discover_cargo_depfile_inputs` use caller-selected
+directories, exclusions and record bounds. Original inputs are rechecked even
+when depfiles disappear or replace their inventories; late bytes cannot acquire
+pre-build authority. The existing traversal is shared, preserving old cache
+fingerprints and the consumer's string-sorted, big-endian length-framed encoding.
+No second production scanner, recipe, release admission or cache namespace is
+introduced. Source/parent custody remains the caller's responsibility.
+
+Thirteen focused cases and a real Cargo external-include depfile fixture pass.
+Complete Linux `make ci lint check-secrets` passes, including 159 units, retained
+artifact/process/real Wasm integration checks, strict Clippy, docs, actual Rust
+1.88 and isolated release-adapter fixtures. Receipts and before-images are under
+`/tmp/ic-build-022-docs/`; the final full receipt is `full-validation.log`.
+Canic's owner retains its implementation/migration and consumer acceptance; this
+batch changes only IC Build. New source is locally verified, unpublished and has
+no native macOS qualification yet. Released-source native rows and consumer
+delivery acceptance remain at their existing GitHub issues. Manifests, lockfile,
+tool selection and retained cache formats are unchanged. No staging, commit,
+push, version/release/publication or CI action ran.
+
 ## Published 0.2.0 adoption and pending 0.2.1 tooling — 2026-10-13
 
 Version 0.2.0 is published from

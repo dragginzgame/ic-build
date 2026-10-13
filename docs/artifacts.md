@@ -77,6 +77,52 @@ or optimizer changes. Build identity and execution remain in IC Build; product
 acceptance and release publication remain with consumers. No new comparison
 framework or public configuration type is needed for this initial qualification.
 
+## Standalone input evidence and depfiles
+
+`InputEvidenceSpec` declares absolute file/directory/missing roots, an opaque
+caller-derived non-file identity, generated-root exclusions and optional exact
+child-name exclusions. It selects no recipes, tools, output roots or time limits.
+`InputEvidence::capture` uses the same tree traversal as cache fingerprints,
+records complete non-excluded directory membership, hashes regular file bytes
+through Host's no-follow reader, and refuses child links or special files. Caller
+custody must cover sources and parent directories through capture, work and
+validation; evidence does not provide a lock or release admission.
+
+`entries()` supplies per-path `Missing`, `Directory`, or raw SHA-256 `File` facts
+for consumer-owned records. `digest()` retains the existing consumer encoding:
+identity followed by UTF-8 paths in lexical string order and their values, each
+field prefixed by its u64 big-endian byte length. Values are `absent`, `directory`,
+or lowercase file SHA-256. Capture preserves native paths; this particular digest
+encoding refuses non-UTF-8 paths. Existing cache domains and field encoding remain
+unchanged. Consumers keep their record formats and namespaces.
+
+`before.validate_after(&after)` permits replacement or expansion of the declared
+inventory while requiring the same identity and exclusion policy. It rechecks
+every original root, even if a later depfile no longer names it, and rejects
+changed bytes, absence or directory membership. Newly discovered bytes cannot
+gain retrospective authority. A newly named missing path is admissible only when
+an earlier complete directory scan proved its first child absent; excluded or
+unobserved paths cannot establish that proof. The caller supplies the after
+capture under the same source custody boundary and handles refusal according to
+its own build/release policy.
+
+`discover_cargo_depfile_inputs(current_dir, directories, excluded_roots,
+maximum_record_bytes)` reads `.d` files directly from explicitly selected
+directories. Missing directories yield an empty cold-build inventory. Each
+record uses a caller-sized bounded, no-follow read; any malformed, oversized or
+unsupported record refuses the entire discovery. Relative inputs bind to the
+explicit working directory. Existing aliases resolve before output exclusion;
+missing paths containing parent traversal remain conservative external inputs.
+The records themselves are not source inputs: Cargo may replace them during work.
+
+`parse_cargo_depfile` accepts Cargo/rustc Make dependency rules, escaped spaces,
+tabs, backslashes, hash/colon characters, doubled dollars, LF/CRLF continuations,
+multiple rules and empty phony targets. It refuses other Make expressions instead
+of interpreting them or returning partial evidence. Full-line comments are
+ignored, so environment dependencies belong in caller identity. Profile/target
+directory selection and generated-output policy remain consumer-owned. These APIs
+do not invoke Cargo, create another artifact cache or manage maintenance.
+
 ## Temporary staging and captured outputs
 
 `ArtifactStagingDirectory::new(parent)` allocates one owned child beneath an
@@ -324,7 +370,7 @@ eprintln!(
 
 Without integrated shared-target maintenance, an exact hit never acquires or
 mutates the shared target. On a miss, callers using that target serialize
-across processes; Cargo builds incrementally, then `ic-testkit` re-resolves
+across processes; Cargo builds incrementally, then IC Build re-resolves
 every exact input and publishes only the final Wasm files. A source race
 rejects publication, while a failed build preserves the caller-owned
 incremental state. Retention owns only immutable output entries, not the
@@ -493,6 +539,8 @@ label, index, error, primary failed phase, partial phase timings, and elapsed
 time. Successful entries continue to expose detailed phase timings through
 their build records.
 
+### Source immutability for sessions
+
 Repeated batches can reuse exact input snapshots when the caller owns a real
 write-exclusion boundary for every build input:
 
@@ -515,16 +563,17 @@ eprintln!("first={first}; second={second}; session={:?}", session.metrics());
 
 The `assume_sources_immutable` name is an explicit caller assertion. The
 borrowed guard is only a lifetime boundary, not filesystem locking or guard
-provenance validation performed by `ic-testkit`; supplying an unrelated value
+provenance validation performed by IC Build; supplying an unrelated value
 violates the contract and can reuse stale inputs. The lease covers Cargo and
 rustc executables, manifests, Cargo configuration, discovered sources,
 declared additional inputs, and relevant environment values. A detected input
 race permanently invalidates the session, clears pending snapshots, and makes
 later calls return
 `SourceLeaseInvalidated`. Ordinary batch functions still resolve current inputs
-per call, and there is no silent process-global cache. The complete contract is
-recorded in the
-[`0.7` orchestration design](https://github.com/dragginzgame/ic-testkit/blob/main/docs/design/0.7-artifact-orchestration/0.7-design.md#explicit-cross-call-immutable-build-session).
+per call, and there is no silent process-global cache. This guide and
+[IC Build's public session documentation](../crates/ic-build/src/artifacts/wasm_batch.rs)
+describe the supported contract. The earlier Testkit design is preserved below
+as a historical reference.
 
 When independent callers need the same resolution concurrently, prepare their
 complete exact specification set before starting readers:
@@ -654,25 +703,15 @@ resolution, execution and Git provenance belong to `ic_host_process`; Candid
 extraction and response decoding belong to `ic_host_tools`. Its pure Candid text
 APIs are portable; extraction, execution, resolution and provenance are Unix-only.
 Structural Wasm inspection does not replace PocketIC's runtime validation.
-The engine selects IC Host 0.15. Align direct Host dependencies
-where their types cross the engine boundary. Process execution returns completed
+The IC Build 0.2 family selects IC Host 0.17. Align direct Host dependencies
+when passing `OutputLimits` or matching typed Host failures across the engine
+boundary. This crate identity changed at IC Build 0.2.0; an `ic-build = "0.1"`
+requirement does not select it. Process execution returns completed
 results even for nonzero exits: call `require_success()` before admitting or
 publishing producer output, and return `io::Result<()>` from output observers.
-The [Host 0.14 migration guide](https://github.com/dragginzgame/ic-testkit/blob/main/crates/ic-testkit/CHANGELOG.md#0340) covers the
-completed-result and failure types. Descriptor-based locking replaced the pathname
-progress-lock helper in the [Host 0.13 upgrade](https://github.com/dragginzgame/ic-testkit/blob/main/crates/ic-testkit/CHANGELOG.md#0334).
-Durable writers retain typed publication phase and cleanup evidence; the
-[0.28 migration guide](https://github.com/dragginzgame/ic-testkit/blob/main/crates/ic-testkit/CHANGELOG.md#0280) covers those earlier
-writer changes.
-Gzip encoding accepts numeric levels 0–9. When upgrading from 0.21, update Wasm
-fact literals and exhaustive inspection
-error matches as described in the [0.22 migration guide](https://github.com/dragginzgame/ic-testkit/blob/main/crates/ic-testkit/CHANGELOG.md#0220).
-The [0.23 migration guide](https://github.com/dragginzgame/ic-testkit/blob/main/crates/ic-testkit/CHANGELOG.md#0230) covers Host's
-new `ExecutionError::group_error` and the expanded PocketIC startup errors.
-Startup errors retain their original cause and append secondary cleanup failures
-when displayed; builder failures also retain bounded server stdout/stderr.
-The [0.24 migration guide](https://github.com/dragginzgame/ic-testkit/blob/main/crates/ic-testkit/CHANGELOG.md#0240) covers Host's
-changed execution failure categories and replacing `read_wasm` with `read_file`.
+Durable writers retain typed publication phase and cleanup evidence. Gzip
+encoding accepts numeric levels 0–9. Testkit's earlier Host/PocketIC migration
+records remain historical references below; PocketIC startup remains Testkit-owned.
 
 The `transactional_artifact_cache` example uses shared digest/version admission
 and bounded execution for its transformer. Supply a reviewed raw executable
@@ -699,7 +738,7 @@ workspace scans while still rejecting source, workspace, or toolchain races.
 
 External deterministic tools use the transactional artifact-set cache. The
 caller declares exact inputs, tool bytes, arguments, relevant environment, and
-the complete output schema; `ic-testkit` owns cross-process locking, staging,
+the complete output schema; IC Build owns cross-process locking, staging,
 before/after input verification, validation, publication, materialization, and
 retention:
 
@@ -829,11 +868,34 @@ coordinate the build and verify inputs stayed unchanged before stamping. Use
 content validation, and retained consumption.
 
 The cache intentionally contains no Binaryen, `icp build`, package-name, or
-PocketIC policy. Its complete contract is recorded in the
-[`0.5` transactional artifact-set design](https://github.com/dragginzgame/ic-testkit/blob/main/docs/design/0.5-artifact-transactions/0.5-design.md).
-Shared Cargo-target ownership and exact-output guarantees are recorded in the
-[`0.6` shared-incremental Wasm design](https://github.com/dragginzgame/ic-testkit/blob/main/docs/design/0.6-shared-incremental-wasm/0.6-design.md).
-Independent orchestration, progress, and explicit mutable-target maintenance
-are recorded in the
-[`0.7` artifact orchestration design](https://github.com/dragginzgame/ic-testkit/blob/main/docs/design/0.7-artifact-orchestration/0.7-design.md).
+PocketIC policy. This guide and [IC Build's public cache documentation](../crates/ic-build/src/artifacts/transaction.rs)
+describe the supported transactional contract. Shared-target maintenance and
+session reuse likewise remain IC Build contracts with caller-owned policy.
+
+## Historical extraction references
+
+The following Testkit records explain the pre-extraction design. They are bound
+to extraction source `b906b1a44f8f5f0f2f23d2413a76103d99e4fbb3`; their version
+numbers refer to Testkit, and their historical contracts do not supersede this
+guide or IC Build's public API documentation.
+
+- [0.5 transactional artifact-set design](https://github.com/dragginzgame/ic-testkit/blob/b906b1a44f8f5f0f2f23d2413a76103d99e4fbb3/docs/design/0.5-artifact-transactions/0.5-design.md).
+- [0.6 shared-incremental Wasm design](https://github.com/dragginzgame/ic-testkit/blob/b906b1a44f8f5f0f2f23d2413a76103d99e4fbb3/docs/design/0.6-shared-incremental-wasm/0.6-design.md).
+- [0.7 artifact orchestration design](https://github.com/dragginzgame/ic-testkit/blob/b906b1a44f8f5f0f2f23d2413a76103d99e4fbb3/docs/design/0.7-artifact-orchestration/0.7-design.md).
+
+The [Host 0.14 migration guide](https://github.com/dragginzgame/ic-testkit/blob/b906b1a44f8f5f0f2f23d2413a76103d99e4fbb3/crates/ic-testkit/CHANGELOG.md#0340) covers the
+completed-result and failure types. Descriptor-based locking replaced the pathname
+progress-lock helper in the [Host 0.13 upgrade](https://github.com/dragginzgame/ic-testkit/blob/b906b1a44f8f5f0f2f23d2413a76103d99e4fbb3/crates/ic-testkit/CHANGELOG.md#0334).
+Durable writers retain typed publication phase and cleanup evidence; the
+[0.28 migration guide](https://github.com/dragginzgame/ic-testkit/blob/b906b1a44f8f5f0f2f23d2413a76103d99e4fbb3/crates/ic-testkit/CHANGELOG.md#0280) covers those earlier
+writer changes.
+Gzip encoding accepts numeric levels 0–9. When upgrading from 0.21, update Wasm
+fact literals and exhaustive inspection
+error matches as described in the [0.22 migration guide](https://github.com/dragginzgame/ic-testkit/blob/b906b1a44f8f5f0f2f23d2413a76103d99e4fbb3/crates/ic-testkit/CHANGELOG.md#0220).
+The [0.23 migration guide](https://github.com/dragginzgame/ic-testkit/blob/b906b1a44f8f5f0f2f23d2413a76103d99e4fbb3/crates/ic-testkit/CHANGELOG.md#0230) covers Host's
+new `ExecutionError::group_error` and the expanded PocketIC startup errors.
+Startup errors retain their original cause and append secondary cleanup failures
+when displayed; builder failures also retain bounded server stdout/stderr.
+The [0.24 migration guide](https://github.com/dragginzgame/ic-testkit/blob/b906b1a44f8f5f0f2f23d2413a76103d99e4fbb3/crates/ic-testkit/CHANGELOG.md#0240) covers Host's
+changed execution failure categories and replacing `read_wasm` with `read_file`.
 

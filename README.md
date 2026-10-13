@@ -2,7 +2,7 @@
 
 IC Build provides common Cargo/Wasm builds and retained artifact caches, moved
 from IC Testkit, and feature-safe Cargo grouping from Canic.
-Version [0.2.0 is published on crates.io](https://crates.io/crates/ic-build/0.2.0).
+The [published 0.2 family is available on crates.io](https://crates.io/crates/ic-build).
 The owning
 [extraction issue](https://github.com/dragginzgame/ic-build/issues/1) tracks
 producer and consumer acceptance.
@@ -71,7 +71,7 @@ Shared Tooling 0.10.0 is pinned in
 local snapshot. The [Make interface](docs/make-interface.md) owns common setup,
 formatting, hook installation and release entrypoints.
 
-The virtual root [Cargo manifest](Cargo.toml) owns version `0.2.0`, edition 2024,
+The virtual root [Cargo manifest](Cargo.toml) owns the workspace version, edition 2024,
 MSRV 1.88.0, common metadata and lints. The
 [ic-build package](crates/ic-build/Cargo.toml) inherits them and permits registry
 publication through the explicit tagged-release command. The [library root](crates/ic-build/src/lib.rs)
