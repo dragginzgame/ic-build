@@ -3,7 +3,7 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.2.0]
+## [0.2.0] - 2026-10-13
 
 - Document full LTO as a candidate shared deployable-Wasm release default,
   using the existing profile/environment API. Record IC Timers' linked-canister
