@@ -9,6 +9,8 @@ pub mod lock_projection;
 #[cfg(test)]
 mod tests;
 
+pub mod packages;
+
 use crate::batch::{BatchLabelError, validate_labels};
 use ic_host_process::tool::{CompletedExecution, OutputLimits, capture_command};
 use std::{collections::BTreeMap, path::Path, process::Command};

@@ -86,7 +86,7 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "ic-build"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "ic-host-artifacts",
  "ic-host-fs",
@@ -99,19 +99,20 @@ dependencies = [
 
 [[package]]
 name = "ic-host-artifacts"
-version = "0.17.12"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "398f0c63e2f00964019e302adaf908d7f9c9971937a794e5a041c9d134699000"
+checksum = "90c1815ca40faa66841324f62c0546d003f95891bc7ad343ecc509690556d38b"
 dependencies = [
+ "leb128",
  "sha2",
  "wasmparser",
 ]
 
 [[package]]
 name = "ic-host-fs"
-version = "0.17.12"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e6235251c21e900758561db66671d4c5e6baa096793fbe7bf27a8b54508d73b"
+checksum = "8e9e4ef75da8b005f678bb9033153aa19d62efcb2bde1d59c65a5f56f9470150"
 dependencies = [
  "ic-host-artifacts",
  "rustix",
@@ -119,9 +120,9 @@ dependencies = [
 
 [[package]]
 name = "ic-host-process"
-version = "0.17.12"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e38d1396f8e11a5104d6e956526455eb84259ac4f3a0e35c97f0683e9c11801"
+checksum = "62409f3f4eb2944dac5e62c9c9e6efa15c00851d6d0ba96283fed43cecc59590"
 dependencies = [
  "ic-host-artifacts",
  "ic-host-fs",
@@ -144,6 +145,12 @@ name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
+
+[[package]]
+name = "leb128"
+version = "0.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c83bff1d572d6b9aeef67ddfc8448e4a3737909cb28e81f97c791b9018703e52"
 
 [[package]]
 name = "libc"

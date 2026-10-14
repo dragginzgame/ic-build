@@ -1,5 +1,164 @@
 # Current handoff
 
+## PR and issue reconciliation — 2026-10-14
+
+PR #23 is closed as superseded by the pending canonical Shared Tooling 0.12.7
+adoption, without merging or deleting its branch. Exact released 0.3.0 CI
+`38546827916` passes Linux, lint/security and native Intel; Apple Silicon remains
+queued. Explicit native acceptance at #18–#21 is still outstanding. The old Host
+type/permission producer blockers are delivered; #9/#12 retain their separate
+consumer/application/native acceptance. Jobs' retained-artifact adoption is
+delivered in 0.10.0, with Linux CI passing and both native jobs queued at #14.
+
+Canic PRs #519/#546 fail embedded-peer preflight before PocketIC startup. The
+earlier compiler repair called `with_extra_env` twice; the second call replaced
+the first map and dropped path remaps and fixture settings. The isolated repair
+selects all settings together and extends real-Wasm reproduction to reject
+embedded Cargo/sysroot paths. Logs, before-fix failures and source/graph evidence
+are retained under `/tmp/ic-build-pr-reconcile-20261014/`.
+
+Both topic updates are pushed: #519 `836e6daf616787b52de91f25b0e508b429d45b63`
+and #546 `060b6a06e5a7f04231f14c2adfe78cfce554eab2`, through normal topic merges.
+Four peer cases, real path/version reproduction and wrapper/unwrapped admission
+pass; the combined selector graph also passes forced fresh-build qualification.
+New CI exposed yanked num-modular 0.6.6, tracked at
+[Canic #556 — Repair yanked dependency selection](https://github.com/dragginzgame/canic/issues/556).
+Separate commits select nonyanked 0.6.5, with byte-identical published Rust
+sources and peer Wasm. Both real risk gates, 51 Candid cases (one ignored), strict
+Host/fixture-owner Clippy and Rust 1.91 libraries pass on that graph. Graph
+provenance is refreshed; advisory refusal and all other selections are preserved.
+Required CI, native/app acceptance and owner integration remain open. No Root
+staging, own version/ref changes or release ran; live sibling work is untouched.
+An incoming Root catalog update to Host 0.18 appeared during closeout and is
+preserved. This task's Canic topic-graph evidence and documentation checks do
+not qualify that separate dependency-adoption graph.
+
+Host PR #103's documentation conflicts with released 0.18.0 are resolved through
+normal topic merge `9d2f0fe`; unpublished fixture notes now target 0.18.1.
+Its allocator/caller Rust is unchanged. Current-graph 94 filesystem and 94 process
+units, collision, strict lint/docs, default-feature and Rust 1.88 checks pass.
+The PR is mergeable; required native CI and publication remain open at Host #98
+and Build #27. Producer proof does not qualify the incoming Root Host 0.18 graph.
+
+## Shared release metadata, streamed hashes and fixture extraction — pending 0.3.1
+
+Shared Tooling 0.12.7 is exported from immutable source
+`9364ffe3f770a6d5d94809f0bf82c33202054bf8`, with the canonical Cargo release
+metadata entrypoint explicitly selected. All 95 payloads verify; repeat preview
+reports only KEEP and tool pins are unchanged. The local release adapter delegates
+metadata transactions while retaining source admission, selected Cargo editor,
+idempotent recovery and local commit checks. Existing isolated adapter fixtures
+pass rollback, lost-response recovery, frozen external selections, exact-commit
+validation, release routing and publication refusal/success substitutes.
+
+The pending archive qualifier now uses Host's published bounded no-follow
+streaming hash, preserving raw SHA-256, limits and caller source custody.
+All seven focused package units pass on the normal registry graph, as do strict
+all-target/all-feature Clippy and actual Rust 1.88 checking. Other owners' pending
+archive/resolver work and the incoming Host lock selection are preserved.
+
+[Host PR #103 — Fixture directory allocation](https://github.com/dragginzgame/ic-host-tooling/pull/103)
+adds the opt-in filesystem allocator and removes both upstream fixture allocation
+loops in an isolated clone based on released 0.17.13. Host's existing cleanup and
+process serialization remain local. Linux affected filesystem/process units,
+collision/alias/permission cases, strict lint/docs and Rust 1.88 pass.
+[Build #27 — Adopt published fixture allocation](https://github.com/dragginzgame/ic-build/issues/27)
+owns the remaining consumer switch. Its isolated rehearsal passes 157 artifact
+units and 15 integration cases (one environment-dependent case ignored), strict
+Clippy and Rust 1.88. The patch is retained under `/tmp/ic-build-cleanup-followup/`;
+the live Build helpers remain on published APIs until producer publication.
+
+Native macOS evidence, producer review/integration/publication and registry
+consumer qualification remain separate. Build source, index, versions and refs
+remain uncommitted; only the authorized Host topic branch was committed/pushed.
+The adopted canonical focused-check policy supersedes PR #23's separate 0.12.5
+reference once these local changes are integrated; that PR is not merged.
+
+## Coordinated archive qualification — pending 0.3.1
+
+[Build #25](https://github.com/dragginzgame/ic-build/issues/25) owns the
+maintainer-authorized generic Cargo archive engine. Consumers select packages,
+versions, tools, temporary path patches, source custody and budgets. Qualification
+retains an exact extracted graph and frozen external selections, uses a fresh
+compilation target, runs all-target/doc tests and checks original inputs,
+archives, source bytes/modes and admitted verification inputs afterward.
+Traversal is bounded by entries/depth and file bytes. Command failures retain
+original Host execution evidence separately from failed diagnostic writes.
+No retry, cleanup, installer, publication or release admission is supplied.
+
+Full Linux `make ci lint check-secrets` passes on the actual registry graph,
+including 170 units, real Cargo/Wasm/process suites and Rust 1.88. A subsequent
+malformed-lock correction passes all 170 units, strict lint/docs and Rust 1.88;
+unaffected full-gate evidence is retained. Blob's real same-version/refusal
+regression passes against the prospective producer in isolation. Source
+before-images, failed attempts, exact graphs and raw logs remain under
+`/tmp/blob-extract3.lPJtvW/`. Native macOS and registry consumer activation
+remain outstanding under Blob #69 / archive qualification #56.
+Real Build metadata remains 0.3.0; prospective 0.3.1 is confined to the isolated
+graph. No release, publication, staging or Git effects ran.
+
+
+## Shared-target export qualification — 2026-10-14
+
+Canic's current exact-depfile caller selects its Cargo graph, while its retained
+build-script export scanner still opens every shared-target `build/*/output`.
+The scanner/path helpers match committed Canic `644d4b13012b395d6211a6907e2e6aafdf391db9`.
+Two disposable probes compile those unchanged functions with the existing Host
+reader and IC Build evidence guard: a foreign export adds an unobserved input,
+and foreign invalid UTF-8 fails before selected-package admission. This is
+function-level evidence, with a qualification-only error projection; it is not
+a complete Canic build, PocketIC or native proof. Source comparisons and logs
+are retained under `/tmp/ic-build-next-issues/`.
+[Canic #553 — Scope retained build-script exports](https://github.com/dragginzgame/canic/issues/553)
+owns the remaining consumer recipe boundary. The live checkout is unchanged.
+
+Host PR #93 remains open, and the authoritative registry index ends at 0.17.13;
+the durable-copy API is not yet adoptable under Build #24. Released Build 0.3.0
+now passes native Intel CI; Apple Silicon remains queued. These inspection
+results do not qualify the pending bounded-resolver source or close acceptance.
+
+## Caller-bounded Cargo resolution and Canic CI repair — 2026-10-14
+
+The starting checkout is clean published 0.3.0 source
+`84cc436ddacf3e9ef21b62167bb9a50a52f871ff`. Its registry archive names that
+source and checksum `415c50c37611014ab87016292bffb7ca366498c52062d226a0c9e886346683f8`.
+Its Linux CI passes; both exact native macOS jobs remain queued at inspection.
+Earlier cleanup issues remain open through that required native qualification.
+
+[#22 — Caller-bounded Cargo input resolution](https://github.com/dragginzgame/ic-build/issues/22)
+now has an additive working-tree implementation and compatible 0.3.1 notes.
+The same resolver accepts an optional caller absolute deadline, cancellation and
+Host process-group cleanup for its three probes and repeated revalidation.
+Default probe execution, output limits, discovery, admission and fingerprinting
+are preserved. Filesystem discovery/hashing are outside the probe deadline.
+Query retains build execution, receipt framing, target custody and lifecycle;
+this producer change does not establish published adoption or native delivery.
+
+Full Linux `make ci lint check-secrets` passes: 163 unit tests, actual Cargo/Wasm
+examples and existing integration/retention checks, strict Clippy/docs, actual
+Rust 1.88 and isolated release adapters. Initial Clippy and fixture failures and
+the final gate are retained under `/tmp/ic-build-bounded-probes/`. Source, manifest
+versions and the index remain uncommitted; no root release or push ran.
+An incoming lock-only update to Host 0.17.13 arrived after the first passing gate.
+It is preserved separately from this task; the full gate passes on that graph too.
+
+Authorized Canic CI repairs use isolated PR checkouts. Worker custody now uses
+physical temporary paths, tool-resolution fixtures compare the physical
+namespace, and the normal allocation-peer owner refreshes stale bytes and
+provenance ([Canic #551 — Refresh embedded allocation peer](https://github.com/dragginzgame/canic/issues/551)).
+The live Canic checkout and its release graph remain untouched. Focused Linux
+worker, resolution, peer verification/freshness and Host lint checks pass;
+required native CI and review remain delivery boundaries. PR #23's revised
+immutable Shared Tooling 0.12.5 policy reference is consistent; its native checks
+are queued, and it is not merged or applied to this checkout.
+
+Canic [PR #519](https://github.com/dragginzgame/canic/pull/519) is updated at
+`a25f4fd22eab23e1a2a5fa9947a9bbfa064e25a0`; [PR #546](https://github.com/dragginzgame/canic/pull/546)
+includes that prerequisite through normal merge `f76ea5bf3835462920f8f4ff383cb6b979aecd95`.
+The peer recipe binds Cargo to the compiler whose sysroot it remaps. Implicit
+and explicit compiler entry points, actual path/version reproduction, fixture
+lint and Rust 1.91 pass. Updated required CI is in progress; neither PR is merged.
+
 ## Shared 0.12.4 and published Host 0.17.11 adoption — 2026-10-14
 
 The maintainer authorized both adoptions and dependent repairs. Shared Tooling

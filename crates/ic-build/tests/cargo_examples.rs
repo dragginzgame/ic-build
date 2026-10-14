@@ -6,12 +6,18 @@ mod support;
 use ic_host_process::testing::write_executable_script;
 
 use ic_build::artifacts::{
-    CapturedArtifact, InputEvidence, InputEvidenceError, InputEvidenceSpec,
+    CapturedArtifact, CargoInputProbePolicy, InputEvidence, InputEvidenceError, InputEvidenceSpec,
     ResolvedCargoBuildInputs, WasmBuildError, WasmBuildSpec, build_wasm_canisters_cached,
     discover_cargo_depfile_inputs, resolve_cargo_build_inputs,
+    resolve_cargo_build_inputs_with_probe_policy,
 };
 use ic_host_process::tool::{OutputLimit, OutputLimits, capture_command};
-use std::{fs, path::Path, process::Command, time::Duration};
+use std::{
+    fs,
+    path::Path,
+    process::Command,
+    time::{Duration, Instant},
+};
 
 fn workspace() -> std::path::PathBuf {
     let root = support::unique_temp_directory("cargo-example");
@@ -162,12 +168,31 @@ fn named_examples_build_and_reuse_without_aliasing_library_or_other_example() {
 fn external_example_execution_rechecks_inputs_before_capturing_exact_bytes() {
     let root = workspace();
     let spec = recipe(&root);
-    let inputs = resolve_cargo_build_inputs(&spec).unwrap();
+    let mut cancelled = || false;
+    let mut policy = CargoInputProbePolicy {
+        deadline: Some(Instant::now() + Duration::from_secs(600)),
+        cleanup: ic_host_process::child::CleanupPolicy::TermThenKill {
+            grace: Duration::from_millis(100),
+            reap_timeout: Duration::from_secs(2),
+        },
+        cancelled: &mut cancelled,
+    };
+    let inputs = resolve_cargo_build_inputs_with_probe_policy(&spec, &mut policy).unwrap();
+    assert_eq!(
+        inputs.fingerprint(),
+        resolve_cargo_build_inputs(&spec).unwrap().fingerprint()
+    );
     let before = InputEvidence::capture(&evidence(&inputs)).unwrap();
     execute(&spec);
-    assert!(inputs.is_current(&spec).unwrap());
-    let after =
-        InputEvidence::capture(&evidence(&resolve_cargo_build_inputs(&spec).unwrap())).unwrap();
+    assert!(
+        inputs
+            .is_current_with_probe_policy(&spec, &mut policy)
+            .unwrap()
+    );
+    let after = InputEvidence::capture(&evidence(
+        &resolve_cargo_build_inputs_with_probe_policy(&spec, &mut policy).unwrap(),
+    ))
+    .unwrap();
     before.validate_after(&after).unwrap();
     let output = &inputs.artifact_paths().unwrap()[0];
     let bytes = fs::read(output).unwrap();

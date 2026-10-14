@@ -1785,6 +1785,155 @@ fn overflowing_cargo_diagnostics_are_bounded_without_losing_forwarded_output() {
 
 #[test]
 #[cfg(unix)]
+fn caller_probe_policy_bounds_every_phase_and_revalidation() {
+    use super::{CargoInputProbePolicy, resolve_cargo_build_inputs_with_probe_policy};
+    use ic_host_process::{
+        child::CleanupPolicy,
+        tool::{ExecutionFailure, ToolError},
+    };
+    use std::time::{Duration, Instant};
+
+    for phase in ["--version", "-vV", "metadata"] {
+        for cancel in [false, true] {
+            let (root, original) = fake_wasm_build_spec("bounded-probes");
+            let before = resolve_cargo_build_inputs(&original).unwrap();
+            let program = root.join("stall");
+            let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+            let cargo = format!("'{}'", cargo.to_string_lossy().replace('\'', "'\"'\"'"));
+            write_executable_script(
+                &program,
+                format!(
+                    r#"#!/bin/sh
+if [ "$1" = '{phase}' ]; then
+    trap 'printf term > terminated; exit 0' TERM
+    printf original-stdout
+    printf original-stderr >&2
+    printf ready > ready
+    sh -c 'trap "" TERM; exec sleep 30' & wait
+fi
+exec {cargo} "$@"
+"#
+                ),
+            )
+            .unwrap();
+            let spec = if phase == "-vV" {
+                original.clone().with_rustc_program(&program)
+            } else {
+                original.clone().with_cargo_program(&program)
+            };
+            let mut ready_since = None;
+            let mut cancelled = || {
+                cancel
+                    && root.join("ready").exists()
+                    && ready_since.get_or_insert_with(Instant::now).elapsed()
+                        >= Duration::from_millis(100)
+            };
+            let mut policy = CargoInputProbePolicy {
+                deadline: Some(Instant::now() + Duration::from_secs(1)),
+                cleanup: CleanupPolicy::TermThenKill {
+                    grace: Duration::from_millis(100),
+                    reap_timeout: Duration::from_secs(2),
+                },
+                cancelled: &mut cancelled,
+            };
+            // Revalidation must use the same bounded path, including a stall
+            // introduced after the original successful acquisition.
+            let error = if cancel {
+                before
+                    .is_current_with_probe_policy(&spec, &mut policy)
+                    .unwrap_err()
+            } else {
+                resolve_cargo_build_inputs_with_probe_policy(&spec, &mut policy).unwrap_err()
+            };
+            let WasmBuildError::Io { path, source, .. } = error else {
+                panic!("expected retained Host execution evidence");
+            };
+            assert_eq!(path, program);
+            let host = source
+                .get_ref()
+                .unwrap()
+                .downcast_ref::<ToolError>()
+                .unwrap();
+            let execution = host.execution_error().unwrap();
+            assert!(matches!(
+                (&execution.failure, cancel),
+                (ExecutionFailure::Cancelled, true) | (ExecutionFailure::TimedOut, false)
+            ));
+            assert_eq!(execution.evidence.stdout, b"original-stdout");
+            assert_eq!(execution.evidence.stderr, b"original-stderr");
+            assert!(execution.evidence.status.is_some());
+            assert!(execution.cleanup.is_none());
+            // The leader may be escalated to KILL before its TERM trap finishes
+            // under load; a reaped status and original evidence are required.
+            // The elapsed policy stays expired; it must not restart a timeout
+            // or invoke the next command during revalidation.
+            fs::remove_file(root.join("ready")).unwrap();
+            policy.deadline = Some(Instant::now());
+            assert!(
+                before
+                    .is_current_with_probe_policy(&spec, &mut policy)
+                    .is_err()
+            );
+            assert!(!root.join("ready").exists());
+            fs::remove_dir_all(root).unwrap();
+        }
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn controlled_probes_keep_complete_output_bounds_and_spawn_causes() {
+    use super::CargoInputProbePolicy;
+    use ic_host_process::{
+        child::CleanupPolicy,
+        tool::{ExecutionFailure, ToolError},
+    };
+    use std::{io, process::Command};
+
+    let root = unique_temp_directory("controlled-probe-output");
+    let payload = root.join("payload");
+    fs::write(&payload, vec![b'x'; super::TOOL_IDENTITY_BYTES + 1]).unwrap();
+    let mut cancelled = || false;
+    let mut policy = CargoInputProbePolicy {
+        deadline: None,
+        cleanup: CleanupPolicy::KillAndWait,
+        cancelled: &mut cancelled,
+    };
+    let mut command = Command::new("/bin/cat");
+    command.arg(&payload);
+    let phase = super::WasmBuildPhase::CargoIdentity;
+    let error = super::capture_probe_output_with_policy(
+        &mut command,
+        phase,
+        super::TOOL_IDENTITY_BYTES,
+        &mut Some(&mut policy),
+    )
+    .unwrap_err();
+    let WasmBuildError::Io { source, .. } = error else {
+        panic!("expected Host evidence")
+    };
+    let host = source
+        .get_ref()
+        .unwrap()
+        .downcast_ref::<ToolError>()
+        .unwrap();
+    assert!(matches!(
+        host.execution_error().unwrap().failure,
+        ExecutionFailure::OutputLimit { .. }
+    ));
+    assert_eq!(
+        host.evidence().unwrap().stdout.len(),
+        super::TOOL_IDENTITY_BYTES
+    );
+    let mut missing = Command::new(root.join("missing"));
+    assert!(
+        matches!(super::capture_probe_output_with_policy(&mut missing, phase, super::TOOL_IDENTITY_BYTES, &mut Some(&mut policy)), Err(WasmBuildError::CommandSpawn { source, .. }) if source.kind() == io::ErrorKind::NotFound)
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+#[cfg(unix)]
 fn complete_probe_limits_preserve_status_spawn_causes_and_refuse_partial_data() {
     use ic_host_process::tool::{ExecutionFailure, ToolError};
     use std::{io, process::Command};
