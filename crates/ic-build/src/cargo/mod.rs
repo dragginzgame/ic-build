@@ -1,8 +1,10 @@
-//! Feature-safe Cargo package grouping extracted from Canic.
+//! Feature-safe Cargo grouping and strict workspace lockfile projections.
 //!
-//! Responsibility: batch packages only when Cargo preserves each resolved dependency tree.
+//! Responsibility: preserve resolved dependency trees and caller-selected lockfile changes.
 //! Does not own: feature selection, role contracts, or runtime compilation.
 //! Boundary: shared dependency feature unification must not change a role's isolated build.
+
+pub mod lock_projection;
 
 #[cfg(test)]
 mod tests;

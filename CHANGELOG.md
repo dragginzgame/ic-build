@@ -3,6 +3,13 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.3.1]
+
+- Verify exact workspace-version projections in Cargo lockfiles without allowing
+  dependency, source, checksum or unrelated metadata changes. Version selection
+  and release receipts remain caller-owned
+  ([#28 — Verify strict workspace lock projections](https://github.com/dragginzgame/ic-build/issues/28)).
+
 ## [0.3.0] - 2026-10-14
 
 - Adopt Shared Tooling 0.12.4 and published IC Host 0.17.11, retaining the
