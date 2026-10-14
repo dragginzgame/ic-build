@@ -28,9 +28,10 @@ The baseline is Shared Tooling 0.11.2 revision
 - Linux x86-64 and native macOS 15 Intel/Apple Silicon are the initial required
   hosts. Linux or substitute checks do not establish native macOS qualification.
 - Check active Cargo/rustc processes before edits or builds. Preserve dirty source
-  and artifacts. The bootstrap validation is `make check` (also `make ci`), plus
+  and artifacts. The full release validation is `make check` (also `make ci`), plus
   `make lint check-secrets` on Linux with explicitly prepared validation tools.
-  The gates cover formatting, dependency inheritance, compilation, rustdoc,
+  Local execution follows the validation cadence below. The gates cover
+  formatting, dependency inheritance, compilation, rustdoc,
   behavioral/process tests and the actual declared MSRV. Preserve the selected
   graph and distinguish native artifact mechanics from synthetic Wasm producers.
   Keep the root Cargo.lock tracked under the shared rules.
@@ -38,3 +39,20 @@ The baseline is Shared Tooling 0.11.2 revision
   package versions, releases and publication are user-owned unless delegated.
 - GitHub issues are the follow-up tracker. Keep the design and handoff as evidence
   and architecture; do not create local issue queues.
+
+## Validation cadence during shared-policy adoption
+
+Shared Tooling owns the [validation policy](DRAGGINZGAME.md#validation-and-evidence);
+local guidance supplies commands and product qualification requirements only.
+Maintainer-approved exception (2026-10-14): until this snapshot adopts Shared
+Tooling's focused-handoff policy, replace its full-suite-before-handoff requirement
+with focused checks of changed behavior and directly affected callers, including
+relevant failure/recovery paths. Reuse unchanged passing evidence. Documentation
+changes need link, consistency and diff checks only. Run local full suites only
+for an explicitly authorized release or an explicit request for those checks;
+implementation, continuation, PR preparation and readiness requests do not qualify.
+Report tested scope; an unrun full suite alone is not a handoff blocker. Configured
+CI, required branch checks, release gates and separate effect authority remain
+unchanged. This exception avoids redundant local testing; it does not claim a
+snapshot refresh. On reviewed adoption, remove this exception and retain only the
+link to the canonical policy and repository-specific commands.
