@@ -3,11 +3,26 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.2.8]
+## [0.3.0]
+
+- Adopt Shared Tooling 0.12.4 and published IC Host 0.17.11, retaining the
+  reviewed tool pins and explicit dependency features.
+- Delegate remaining descriptor locks and final-owner unlock to Host and remove
+  the direct `fs2` dependency. Preserve cloned-record retention, inherited
+  descriptor release and lock timing
+  ([#21 — Adopt Host descriptor locks](https://github.com/dragginzgame/ic-build/issues/21)).
+
+- **Breaking:** remove the watched-input stamp API (`WatchedInputSnapshot` and
+  `icp_artifact_ready_*`). Use `InputEvidence` for input guards and
+  `ArtifactCacheSpec` for verified retained outputs; existing sidecars are
+  preserved ([#19 — Retire the watched-input stamp API](https://github.com/dragginzgame/ic-build/issues/19)).
+- Share the verified destination-copy decision between Wasm and generic artifact
+  caches, preserving digest domains, cold publication and stamp ordering
+  ([#20 — Unify verified destination materialization](https://github.com/dragginzgame/ic-build/issues/20)).
 
 - Use IC Host 0.17.9's opt-in Unix test fixture writer and remove both local
   executable-script implementations. Keep fixture content and assertions with
-  IC Build ([#18](https://github.com/dragginzgame/ic-build/issues/18)).
+  IC Build ([#18 — Adopt Host executable fixtures](https://github.com/dragginzgame/ic-build/issues/18)).
 
 ## [0.2.7] - 2026-10-14
 

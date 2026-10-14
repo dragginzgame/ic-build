@@ -203,13 +203,23 @@ pub(super) fn read_file_with_limit(path: &Path, maximum_len: usize) -> io::Resul
 
 /// Only reuse an independent, caller-owned writable destination. The caller
 /// coordinates other writers and supplies a digest from a verified cache entry.
-pub(super) fn destination_matches_digest(
-    domain: &str,
-    destination: &Path,
-    expected: &FileDigest,
-) -> bool {
+fn destination_matches_digest(domain: &str, destination: &Path, expected: &FileDigest) -> bool {
     destination_is_reusable(destination, expected.bytes)
         && digest_file(domain, destination).is_ok_and(|actual| actual == *expected)
+}
+
+/// Cold publication always copies; only previously verified outputs may preserve
+/// matching caller-owned destinations and their metadata.
+pub(super) fn materialize_verified_output(
+    domain: &str,
+    source: &Path,
+    destination: &Path,
+    verified: Option<&FileDigest>,
+) -> io::Result<()> {
+    if verified.is_some_and(|info| destination_matches_digest(domain, destination, info)) {
+        return Ok(());
+    }
+    copy_file_atomic(source, destination).map(|_| ())
 }
 
 pub(super) fn destination_matches_bytes(destination: &Path, expected: &[u8]) -> bool {

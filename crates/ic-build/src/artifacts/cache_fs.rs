@@ -1,4 +1,3 @@
-use fs2::FileExt as _;
 use std::{
     fs::{self, File},
     io::{self, Read as _},
@@ -48,7 +47,7 @@ impl Drop for RetentionLock {
         // a concurrent spawn before exec. Release it when the final record owner
         // drops, rather than waiting for unrelated child descriptors to close.
         // If unlocking fails, closing the owned file remains the fallback.
-        let _ = fs2::FileExt::unlock(&self.0);
+        let _ = ic_host_fs::durable::unlock(&self.0);
     }
 }
 
@@ -67,7 +66,7 @@ impl RetainedCacheEntry {
 
     pub(super) fn acquire(path: &Path) -> Result<Self, CacheFsError> {
         let file = open_cache_lock_file(&path.join(RETENTION_LOCK_FILE))?;
-        fs2::FileExt::lock_shared(&file).map_err(|source| CacheFsError {
+        ic_host_fs::durable::lock_shared(&file).map_err(|source| CacheFsError {
             operation: "retain cache entry",
             path: path.to_owned(),
             source,
@@ -304,7 +303,7 @@ pub(super) fn ensure_cache_directory_tag(cache_root: &Path) -> Result<(), CacheF
 pub(super) fn lock_cache_file(path: &Path) -> Result<(File, Duration), CacheFsError> {
     let file = open_cache_lock_file(path)?;
     let started = Instant::now();
-    file.lock_exclusive().map_err(|source| CacheFsError {
+    ic_host_fs::durable::lock_exclusive(&file).map_err(|source| CacheFsError {
         operation: "lock cache",
         path: path.to_owned(),
         source,

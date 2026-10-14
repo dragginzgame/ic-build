@@ -36,8 +36,8 @@ use super::{
     },
     digest::{
         FileDigest, InputDigest, InputHasher, LabeledPathDigestCache, copy_file_atomic,
-        destination_matches_bytes, destination_matches_digest, digest_bytes, digest_file,
-        digest_labeled_paths_composable, os_bytes, read_stamp_with_limit,
+        destination_matches_bytes, digest_bytes, digest_file, digest_labeled_paths_composable,
+        materialize_verified_output, os_bytes, read_stamp_with_limit,
     },
 };
 
@@ -5261,10 +5261,13 @@ fn materialize_artifacts(
     preserve_matching: bool,
 ) -> Result<(), WasmBuildError> {
     for ((cached, artifact), info) in cached_artifacts.iter().zip(artifacts).zip(artifact_info) {
-        if preserve_matching && destination_matches_digest("wasm-artifact-v1", artifact, info) {
-            continue;
-        }
-        copy_file_atomic(cached, artifact).map_err(|source| WasmBuildError::Io {
+        materialize_verified_output(
+            "wasm-artifact-v1",
+            cached,
+            artifact,
+            preserve_matching.then_some(info),
+        )
+        .map_err(|source| WasmBuildError::Io {
             operation: "publish Wasm artifact",
             path: artifact.clone(),
             source,

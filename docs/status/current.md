@@ -1,5 +1,74 @@
 # Current handoff
 
+## Shared 0.12.4 and published Host 0.17.11 adoption — 2026-10-14
+
+The maintainer authorized both adoptions and dependent repairs. Shared Tooling
+0.12.4 is exported from clean committed source
+`8b2dbd70a24330fdc6c102a01772f4d3e5b628d7`, matching remote main at inspection.
+Uncommitted sibling work is excluded. Canonical preview/refresh
+retains existing roots and adds the publication guide explicitly for the missing
+companion at [Shared #176 — Export the publication guide](https://github.com/dragginzgame/shared-tooling/issues/176).
+All 89 payloads verify and repeat preview reports only KEEP. Host/IC/Cargo and CI
+tool pins are byte-identical to the starting snapshot; explicit common setup and
+offline checks pass. The actual collector's local archive, compaction, corruption
+and original-failure retention fixtures pass using isolated synthetic tool stores.
+
+The artifact/fs/process catalog now requires published registry Host 0.17.11,
+retaining disabled defaults and explicit features. All three registry VCS receipts
+name `afb05ee53c5ade59dad25fc4a9264a5200963e9c`. The incoming dirty lock already
+selected those packages and is preserved except for removing fs2, its three
+winapi-only dependencies and Build's direct edge. Remaining versions/checksums
+are unchanged. [#21 — Adopt Host descriptor locks](https://github.com/dragginzgame/ic-build/issues/21) now uses
+the published shared/exclusive descriptor locks and final-owner unlock in the
+actual checkout, with no path override. Namespace policy, cloned-record retention,
+duplicate-descriptor release, typed errors and lock timing remain local.
+
+Full Linux `make ci lint check-secrets` passes with 161 units, actual Cargo/Wasm,
+process/retention/repair/handoff and example cases, strict Clippy/docs, actual
+Rust 1.88 and isolated release adapters. The first missing-guide failure and the
+successful final gate are retained under `/tmp/ic-build-adopt-0123/`, alongside
+before-images, exporter previews and structured lock comparison. Own metadata
+remains 0.2.7; the accepted public removal keeps the combined draft at 0.3.0.
+The index and incoming cleanup source are preserved. No sibling mutation, staging,
+commit, push, release, publication or CI dispatch ran. This consumer source has
+no exact native CI result yet; Host's release CI passes Linux/MSRV and Apple
+Silicon, with Intel still running at inspection.
+
+## Accepted cleanup and breaking 0.3.0 draft — 2026-10-14
+
+The maintainer approved all three reviewed reductions over source
+`5f1b00e1ba6b60a3d78e8f43c16d24df78cd9de1`. The unused watched-input stamp API
+and its separate protocol/tests retire at
+[#19](https://github.com/dragginzgame/ic-build/issues/19). Local Rust searches and
+organization code search find no production callers outside Build; search results
+include historical sibling documentation, not proof about external consumers.
+Use `InputEvidence` for input guards and `ArtifactCacheSpec` for verified retained
+outputs. Existing sidecars stay untouched; no compatibility reexports or unused
+Canic replacement are introduced. Public removal makes the complete pending
+batch breaking, so its notes move from 0.2.8 to 0.3.0 and retain the fixture adoption
+notes. Own metadata remains 0.2.7; no release/version operation ran.
+
+[#20](https://github.com/dragginzgame/ic-build/issues/20) gives the verified
+destination-copy decision one private owner. Cold publications still copy;
+verified warm outputs preserve matching independent destinations under the same
+ownership/link/permission checks. Digest domains, typed caller error context and
+the all-copies-before-Wasm-stamps barrier remain unchanged. Full Linux
+`make ci lint check-secrets` passes with 161 units, existing real Cargo/Wasm,
+process/retention/repair/handoff cases, strict Clippy/docs and actual Rust 1.88.
+The initial missing-import failure and corrected complete gate are both retained.
+
+The authorized [Host #89](https://github.com/dragginzgame/ic-host-tooling/issues/89)
+adds regular-descriptor shared/exclusive acquisition and explicit unlock to the
+existing owner. Its focused tests and full Linux/MSRV gate pass, preserving
+incoming private-parent and concurrent tooling work. The fs2-free Build candidate
+passes the complete package checks with the same 161 units and integration cases.
+Producer overrides and prospective Host 0.17.11 metadata exist only in that
+disposable copy. [#21](https://github.com/dragginzgame/ic-build/issues/21) owns
+normal registry adoption after publication; the actual checkout retains published
+dependencies and fs2 until then. Reviewable patch and all evidence are under
+`/tmp/ic-build-cleanup3/`. Native macOS and producer publication remain distinct
+from Linux candidate proof. No staging, commit, push or publication ran.
+
 ## Published Host fixture adoption and isolated Canic PR — 2026-10-14
 
 IC Build HEAD is published 0.2.7 source

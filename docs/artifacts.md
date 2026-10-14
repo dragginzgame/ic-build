@@ -910,15 +910,11 @@ the examples use a 14-day age bound with a size appropriate to the entry type
 choose an explicit limit that fits its cache quota and expected fingerprint
 count rather than inheriting a machine-wide default.
 
-`WatchedInputSnapshot` likewise hashes file paths and contents instead of
-modification times. Generated artifacts become reusable only after
-`mark_artifact_fresh` atomically records the snapshot beside the successfully
-built artifact; an unstamped artifact is conservatively stale. This lightweight
-stamp records input identity only: it does not hash the output bytes, acquire
-producer locks, or retain artifact paths against replacement. The caller must
-coordinate the build and verify inputs stayed unchanged before stamping. Use
-`ArtifactCacheSpec` when a pipeline needs transactional publication, output
-content validation, and retained consumption.
+Use `InputEvidence` to capture inputs and reject changes across a caller-owned
+build. Use `ArtifactCacheSpec` for transactional publication, output content
+validation and retained consumption. The former watched-input stamp API is
+removed in 0.3.0; existing `.ic-testkit-input` sidecars are left untouched and
+grant no admission through these APIs. ICP readiness policy belongs to consumers.
 
 The cache intentionally contains no Binaryen, `icp build`, package-name, or
 PocketIC policy. This guide and [IC Build's public cache documentation](../crates/ic-build/src/artifacts/transaction.rs)

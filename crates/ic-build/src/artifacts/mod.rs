@@ -60,7 +60,6 @@
 
 mod cache_fs;
 mod digest;
-mod icp;
 mod inputs;
 mod staging;
 mod transaction;
@@ -78,9 +77,6 @@ mod host_tests;
 
 pub use cache_fs::{ArtifactCacheMaintenance, ArtifactCachePrunePolicy, ArtifactCachePruneReport};
 pub use digest::InputDigest;
-pub use icp::{
-    WatchedInputSnapshot, icp_artifact_ready_for_build, icp_artifact_ready_with_snapshot,
-};
 pub use inputs::{
     InputEvidence, InputEvidenceError, InputEvidenceSpec, InputEvidenceValue,
     discover_cargo_depfile_inputs, parse_cargo_depfile, read_cargo_depfile_inputs,

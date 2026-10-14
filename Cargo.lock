@@ -69,16 +69,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fs2"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9564fc758e15025b46aa6643b1b77d047d1a56a1aea6e01002ac0c7026876213"
-dependencies = [
- "libc",
- "winapi",
-]
-
-[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -98,7 +88,6 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 name = "ic-build"
 version = "0.2.7"
 dependencies = [
- "fs2",
  "ic-host-artifacts",
  "ic-host-fs",
  "ic-host-process",
@@ -110,9 +99,9 @@ dependencies = [
 
 [[package]]
 name = "ic-host-artifacts"
-version = "0.17.10"
+version = "0.17.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cb9c106db2525ec7b40c282c4a9665197896671416e6705e9659e3563412d31"
+checksum = "398f0c63e2f00964019e302adaf908d7f9c9971937a794e5a041c9d134699000"
 dependencies = [
  "sha2",
  "wasmparser",
@@ -120,9 +109,9 @@ dependencies = [
 
 [[package]]
 name = "ic-host-fs"
-version = "0.17.10"
+version = "0.17.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c72da59948eba149a222daaaf6d8bf1ae09a2c2da3ed0df86b84f41b296bfb9"
+checksum = "0e6235251c21e900758561db66671d4c5e6baa096793fbe7bf27a8b54508d73b"
 dependencies = [
  "ic-host-artifacts",
  "rustix",
@@ -130,9 +119,9 @@ dependencies = [
 
 [[package]]
 name = "ic-host-process"
-version = "0.17.10"
+version = "0.17.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a342a6752019dc8e7e8247858a35e17afaa494b9111ce078f6ae914b11f3c82a"
+checksum = "7e38d1396f8e11a5104d6e956526455eb84259ac4f3a0e35c97f0683e9c11801"
 dependencies = [
  "ic-host-artifacts",
  "ic-host-fs",
@@ -344,28 +333,6 @@ dependencies = [
  "bitflags",
  "indexmap",
 ]
-
-[[package]]
-name = "winapi"
-version = "0.3.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c839a674fcd7a98952e593242ea400abe93992746761e38641405d28b00f419"
-dependencies = [
- "winapi-i686-pc-windows-gnu",
- "winapi-x86_64-pc-windows-gnu",
-]
-
-[[package]]
-name = "winapi-i686-pc-windows-gnu"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6"
-
-[[package]]
-name = "winapi-x86_64-pc-windows-gnu"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "windows-link"

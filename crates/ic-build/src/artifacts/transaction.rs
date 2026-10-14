@@ -19,8 +19,8 @@ use super::{
         try_lock_cache_file,
     },
     digest::{
-        FileDigest, InputDigest, InputHasher, copy_file_atomic, destination_matches_digest,
-        digest_bytes, digest_file, digest_labeled_paths, os_bytes, read_file_with_limit,
+        FileDigest, InputDigest, InputHasher, copy_file_atomic, digest_bytes, digest_file,
+        digest_labeled_paths, materialize_verified_output, os_bytes, read_file_with_limit,
     },
     wasm_cache::{
         ResolvedCargoBuildInputs, WasmBuildError, WasmBuildSpec, resolve_cargo_build_inputs,
@@ -1706,18 +1706,17 @@ fn materialize_outputs(
     for (index, output) in spec.outputs.iter().enumerate() {
         // Only a hit supplies the complete output set checked against its manifest.
         // A cold commit always publishes; a hit may leave matching destinations alone.
-        if verified_outputs.is_some_and(|info| {
-            destination_matches_digest("artifact-set-output-v1", &output.destination, &info[index])
-        }) {
-            continue;
-        }
         let cached = staged_output_path(entry, index);
-        copy_file_atomic(&cached, &output.destination).map_err(|source| {
-            ArtifactCacheError::Io {
-                operation: "materialize artifact output",
-                path: output.destination.clone(),
-                source,
-            }
+        materialize_verified_output(
+            "artifact-set-output-v1",
+            &cached,
+            &output.destination,
+            verified_outputs.map(|info| &info[index]),
+        )
+        .map_err(|source| ArtifactCacheError::Io {
+            operation: "materialize artifact output",
+            path: output.destination.clone(),
+            source,
         })?;
     }
     Ok(())
