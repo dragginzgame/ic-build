@@ -22,6 +22,7 @@ use super::{
         FileDigest, InputDigest, InputHasher, copy_file_atomic, digest_bytes, digest_file,
         digest_labeled_paths, materialize_verified_output, os_bytes, read_file_with_limit,
     },
+    staging::OwnedDirectory,
     wasm_cache::{
         ResolvedCargoBuildInputs, WasmBuildError, WasmBuildSpec, resolve_cargo_build_inputs,
     },
@@ -123,7 +124,8 @@ pub struct ArtifactCacheTimings {
 pub struct ArtifactBuildTransaction {
     spec: Box<ArtifactCacheSpec>,
     resolved: ResolvedKey,
-    staging_directory: PathBuf,
+    // Drop the owned staging child before releasing either process lock below.
+    staging_directory: OwnedDirectory,
     entry_directory: PathBuf,
     namespace_directory: PathBuf,
     _coordination_lock: File,
@@ -131,7 +133,6 @@ pub struct ArtifactBuildTransaction {
     timings: ArtifactCacheTimings,
     total_started: Instant,
     caller_build_started: Instant,
-    staging_armed: bool,
 }
 
 /// Structured failure from transactional artifact caching.
@@ -695,7 +696,7 @@ impl ArtifactBuildTransaction {
     /// Callers must remove or relocate logs and other temporary root children.
     #[must_use]
     pub fn staging_directory(&self) -> &Path {
-        &self.staging_directory
+        self.staging_directory.path()
     }
 
     /// Checked staging destination for one declared logical output.
@@ -704,7 +705,7 @@ impl ArtifactBuildTransaction {
     /// Returns [`ArtifactCacheError::UnknownOutput`] for an undeclared output name.
     pub fn output_path(&self, name: &str) -> Result<PathBuf, ArtifactCacheError> {
         self.output_index(name)
-            .map(|index| staged_output_path(&self.staging_directory, index))
+            .map(|index| staged_output_path(self.staging_directory.path(), index))
             .ok_or_else(|| ArtifactCacheError::UnknownOutput {
                 name: name.to_owned(),
             })
@@ -733,13 +734,10 @@ impl ArtifactBuildTransaction {
         let result = self.commit_inner();
         match result {
             Ok(outcome) => Ok(outcome),
-            Err(transaction_error) if self.staging_armed => {
-                let path = self.staging_directory.clone();
-                match remove_path_if_present(&path) {
-                    Ok(()) => {
-                        self.staging_armed = false;
-                        Err(transaction_error)
-                    }
+            Err(transaction_error) if self.staging_directory.is_armed() => {
+                let path = self.staging_directory.path().to_owned();
+                match self.staging_directory.try_cleanup() {
+                    Ok(()) => Err(transaction_error),
                     Err(source) => Err(ArtifactCacheError::FailedTransactionCleanup {
                         transaction_error: Box::new(transaction_error),
                         path,
@@ -756,14 +754,13 @@ impl ArtifactBuildTransaction {
     /// # Errors
     /// Returns the filesystem error if removing the owned staging directory fails.
     pub fn abort(mut self) -> Result<(), ArtifactCacheError> {
-        remove_path_if_present(&self.staging_directory).map_err(|source| {
-            ArtifactCacheError::Io {
+        self.staging_directory
+            .try_cleanup()
+            .map_err(|source| ArtifactCacheError::Io {
                 operation: "abort artifact cache transaction",
-                path: self.staging_directory.clone(),
+                path: self.staging_directory.path().to_owned(),
                 source,
-            }
-        })?;
-        self.staging_armed = false;
+            })?;
         Ok(())
     }
 
@@ -778,7 +775,7 @@ impl ArtifactBuildTransaction {
         self.timings.caller_build = Some(self.caller_build_started.elapsed());
 
         let validation_started = Instant::now();
-        let output_info = inspect_complete_output_set(&self.spec, &self.staging_directory)?;
+        let output_info = inspect_complete_output_set(&self.spec, self.staging_directory.path())?;
         self.timings.output_validation = validation_started.elapsed();
 
         let capture_started = Instant::now();
@@ -799,12 +796,12 @@ impl ArtifactBuildTransaction {
         let manifest =
             manifest_contents(self.resolved.key, &self.spec, output_info.iter().copied());
         ic_host_fs::durable::write_bytes(
-            &self.staging_directory.join(MANIFEST_FILE),
+            &self.staging_directory.path().join(MANIFEST_FILE),
             manifest.as_bytes(),
         )
         .map_err(|source| ArtifactCacheError::Io {
             operation: "write artifact cache manifest",
-            path: self.staging_directory.join(MANIFEST_FILE),
+            path: self.staging_directory.path().join(MANIFEST_FILE),
             source: io::Error::other(source),
         })?;
         let namespace_lock_path = namespace_lock_path(&self.spec);
@@ -815,14 +812,14 @@ impl ArtifactBuildTransaction {
             .namespace_lock_wait
             .saturating_add(namespace_wait);
         remove_unretained_entry(&self.entry_directory).map_err(artifact_cache_fs_error)?;
-        fs::rename(&self.staging_directory, &self.entry_directory).map_err(|source| {
+        fs::rename(self.staging_directory.path(), &self.entry_directory).map_err(|source| {
             ArtifactCacheError::Io {
                 operation: "publish artifact cache entry",
                 path: self.entry_directory.clone(),
                 source,
             }
         })?;
-        self.staging_armed = false;
+        self.staging_directory.disarm();
         self.timings.publication = publication_started.elapsed();
 
         let materialization_started = Instant::now();
@@ -848,9 +845,7 @@ impl ArtifactBuildTransaction {
 
 impl Drop for ArtifactBuildTransaction {
     fn drop(&mut self) {
-        if self.staging_armed {
-            let _ = remove_path_if_present(&self.staging_directory);
-        }
+        self.staging_directory.cleanup_on_drop();
     }
 }
 
@@ -963,7 +958,7 @@ pub fn prepare_artifact_cache(
         return Ok(ArtifactCachePreparation::Build(ArtifactBuildTransaction {
             spec: Box::new(spec.clone()),
             resolved,
-            staging_directory,
+            staging_directory: OwnedDirectory::new(staging_directory),
             entry_directory,
             namespace_directory,
             _coordination_lock: coordination_lock,
@@ -971,7 +966,6 @@ pub fn prepare_artifact_cache(
             timings,
             total_started,
             caller_build_started: Instant::now(),
-            staging_armed: true,
         }));
     }
 
