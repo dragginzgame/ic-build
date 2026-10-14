@@ -32,6 +32,45 @@ use std::{
 };
 
 #[test]
+#[cfg(unix)]
+fn failed_commit_retains_primary_and_cleanup_errors_and_remaining_staging() {
+    let root = unique_temp_directory("transaction-cleanup-failure");
+    if fs::metadata(&root).unwrap().uid() == 0 {
+        fs::remove_dir_all(root).unwrap();
+        return;
+    }
+    let spec = ArtifactCacheSpec::new(&root.join("cache"), "cleanup", "recipe/v1")
+        .with_output("output", &root.join("published"));
+    let ArtifactCachePreparation::Build(transaction) = prepare_artifact_cache(&spec).unwrap()
+    else {
+        panic!("expected a fresh transaction");
+    };
+    let stage = transaction.staging_directory().to_owned();
+    let parent = stage.parent().unwrap();
+    let permissions = fs::metadata(parent).unwrap().permissions();
+    fs::set_permissions(parent, fs::Permissions::from_mode(0o500)).unwrap();
+    let error = transaction.commit().unwrap_err();
+    fs::set_permissions(parent, permissions).unwrap();
+    let ArtifactCacheError::FailedTransactionCleanup {
+        transaction_error,
+        path,
+        source,
+    } = error
+    else {
+        panic!("expected both transaction and cleanup failures");
+    };
+    assert!(matches!(
+        *transaction_error,
+        ArtifactCacheError::InvalidOutputs { .. }
+    ));
+    assert_eq!(source.kind(), std::io::ErrorKind::PermissionDenied);
+    assert_eq!(path, stage);
+    assert!(stage.exists());
+    assert!(!root.join("published").exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn os_native_argument_and_environment_builders_affect_identity() {
     let root = unique_temp_directory("os-native-identity");
     let input = root.join("input");

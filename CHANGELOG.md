@@ -3,6 +3,18 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.3.2]
+
+- Adopt published Host fixture allocation in both test helpers, preserving
+  caller-owned cleanup and retained evidence
+  ([#27 — Adopt Host fixture allocation](https://github.com/dragginzgame/ic-build/issues/27)).
+- Consolidate owned-directory cleanup across Wasm builds, artifact transactions
+  and captures, preserving failure retries, explicit recovery and lock lifetime
+  ([#32 — Consolidate cleanup guards](https://github.com/dragginzgame/ic-build/issues/32)).
+- Correct the Host dependency guidance for published 0.3.1. Callers exchanging
+  Host types with IC Build must align direct dependencies to Host 0.18
+  ([#9 — Align the exposed Host boundary](https://github.com/dragginzgame/ic-build/issues/9)).
+
 ## [0.3.1] - 2026-10-14
 
 - Adopt Shared Tooling 0.12.7 and delegate release metadata preparation and

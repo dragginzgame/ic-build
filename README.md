@@ -53,7 +53,7 @@ fn build(workspace: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
 ```
 
 Consumers select packages, profiles, environment and maintenance policy.
-Select IC Host 0.17 when passing `OutputLimits` or typed Host failures across
+Select IC Host 0.18 when passing `OutputLimits` or typed Host failures across
 IC Build's public grouping/capture boundary.
 The [deployable-Wasm LTO guidance](docs/artifacts.md#deployable-wasm-lto) records
 whole-canister measurements and shows how a common adapter can apply full LTO

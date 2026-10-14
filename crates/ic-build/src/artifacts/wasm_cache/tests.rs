@@ -2,15 +2,14 @@
 use ic_host_process::testing::write_executable_script;
 
 use super::{
-    IncompleteBuildDirectory, MetadataPackage, ProgressReporter,
-    SharedIncrementalTargetMaintenanceConfig, SharedIncrementalTargetMaintenanceFailureMode,
-    SharedIncrementalTargetMaintenanceOutcome, SharedIncrementalTargetPrunePolicy,
-    WasmBuildBatchInputResolver, WasmBuildError, WasmBuildOutcome, WasmBuildOutputStream,
-    WasmBuildProgressConfig, WasmBuildProgressEvent, WasmBuildProgressPhase, WasmBuildSpec,
-    append_cargo_configuration_inputs, artifact_stamp_path, build_wasm_canisters_cached,
-    build_wasm_canisters_cached_with_progress, ensure_cache_directory_tag, expected_artifacts,
-    finish_fingerprint_build, inspect_shared_incremental_target,
-    integrated_shared_maintenance_result, lock_wasm_build_cache,
+    MetadataPackage, OwnedDirectory, ProgressReporter, SharedIncrementalTargetMaintenanceConfig,
+    SharedIncrementalTargetMaintenanceFailureMode, SharedIncrementalTargetMaintenanceOutcome,
+    SharedIncrementalTargetPrunePolicy, WasmBuildBatchInputResolver, WasmBuildError,
+    WasmBuildOutcome, WasmBuildOutputStream, WasmBuildProgressConfig, WasmBuildProgressEvent,
+    WasmBuildProgressPhase, WasmBuildSpec, append_cargo_configuration_inputs, artifact_stamp_path,
+    build_wasm_canisters_cached, build_wasm_canisters_cached_with_progress,
+    ensure_cache_directory_tag, expected_artifacts, finish_fingerprint_build,
+    inspect_shared_incremental_target, integrated_shared_maintenance_result, lock_wasm_build_cache,
     lock_wasm_build_cache_with_progress, locked_package_identities,
     maintain_shared_incremental_target, maintain_shared_incremental_target_at_most_every,
     materialize_artifacts, metadata_arguments,
@@ -2029,7 +2028,7 @@ fn failed_build_removes_its_incomplete_fingerprint_directory() {
     let mut progress = ProgressReporter::silent();
     let result = finish_fingerprint_build(
         failure,
-        IncompleteBuildDirectory::new(fingerprint_dir.clone()),
+        OwnedDirectory::new(fingerprint_dir.clone()),
         &mut progress,
     );
 

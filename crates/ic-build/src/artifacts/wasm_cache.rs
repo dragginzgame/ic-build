@@ -40,6 +40,7 @@ use super::{
         destination_matches_bytes, digest_bytes, digest_file, digest_labeled_paths_composable,
         materialize_verified_output, os_bytes, read_stamp_with_limit,
     },
+    staging::OwnedDirectory,
 };
 
 const CACHE_FORMAT_VERSION: &str = "ic-testkit-wasm-build-v1";
@@ -3215,7 +3216,7 @@ fn reconstruct_exact_cache_entry(
             "create content-addressed Cargo target directory",
         )
     })?;
-    let incomplete = IncompleteBuildDirectory::new(cache_entry.to_owned());
+    let incomplete = OwnedDirectory::new(cache_entry.to_owned());
     let result = progress.run_phase(WasmBuildProgressPhase::ArtifactPublication, || {
         copy_wasm_artifacts(artifacts, &cached_artifacts)?;
         let missing = missing_artifacts(&cached_artifacts);
@@ -3256,7 +3257,7 @@ fn build_wasm_cache_miss(
         preparation_started.elapsed(),
     );
     preparation_result?;
-    let incomplete_directory = IncompleteBuildDirectory::new(cache_entry.clone());
+    let incomplete_directory = OwnedDirectory::new(cache_entry.clone());
     let build_result = (|| {
         if matches!(
             spec.cache_mode,
@@ -3398,40 +3399,9 @@ fn prune_wasm_build_cache_locked(
         .map_err(wasm_cache_fs_error)
 }
 
-struct IncompleteBuildDirectory {
-    path: PathBuf,
-    armed: bool,
-}
-
-impl IncompleteBuildDirectory {
-    const fn new(path: PathBuf) -> Self {
-        Self { path, armed: true }
-    }
-
-    fn preserve(mut self) {
-        self.armed = false;
-    }
-
-    fn cleanup(mut self) -> io::Result<()> {
-        let result = remove_path_if_present(&self.path);
-        if result.is_ok() {
-            self.armed = false;
-        }
-        result
-    }
-}
-
-impl Drop for IncompleteBuildDirectory {
-    fn drop(&mut self) {
-        if self.armed {
-            let _ = remove_path_if_present(&self.path);
-        }
-    }
-}
-
 fn finish_fingerprint_build<T>(
     result: Result<T, WasmBuildError>,
-    incomplete_directory: IncompleteBuildDirectory,
+    incomplete_directory: OwnedDirectory,
     progress: &mut ProgressReporter<'_>,
 ) -> Result<T, WasmBuildError> {
     match result {
@@ -3449,10 +3419,10 @@ fn finish_fingerprint_build<T>(
 
 fn cleanup_failed_fingerprint_build(
     build_error: WasmBuildError,
-    incomplete_directory: IncompleteBuildDirectory,
+    incomplete_directory: OwnedDirectory,
     progress: &mut ProgressReporter<'_>,
 ) -> WasmBuildError {
-    let path = incomplete_directory.path.clone();
+    let path = incomplete_directory.path().to_owned();
     let primary_phase = progress.failure_phase;
     let cleanup_started = Instant::now();
     let cleanup = incomplete_directory.cleanup();
