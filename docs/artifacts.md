@@ -767,11 +767,12 @@ resolution, execution and Git provenance belong to `ic_host_process`; Candid
 extraction and response decoding belong to `ic_host_tools`. Its pure Candid text
 APIs are portable; extraction, execution, resolution and provenance are Unix-only.
 Structural Wasm inspection does not replace PocketIC's runtime validation.
-The workspace requires compatible IC Host 0.17.8 releases, including checked
+IC Build 0.3.1 requires compatible IC Host 0.18 releases, including checked
 native permission conversion for retained staging on macOS. Align direct Host dependencies
 when passing `OutputLimits` or matching typed Host failures across the engine
-boundary. This crate identity changed at IC Build 0.2.0; an `ic-build = "0.1"`
-requirement does not select it. Process execution returns completed
+boundary. Host 0.17 and 0.18 values have different Rust crate identities even
+when their fields match. The earlier IC Build 0.2.0 boundary also means an
+`ic-build = "0.1"` requirement does not select this engine. Process execution returns completed
 results even for nonzero exits: call `require_success()` before admitting or
 publishing producer output, and return `io::Result<()>` from output observers.
 Durable writers retain typed publication phase and cleanup evidence. Gzip

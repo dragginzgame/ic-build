@@ -1,6 +1,59 @@
-use super::{ArtifactStagingDirectory, CapturedArtifact};
+use super::{ArtifactStagingDirectory, CapturedArtifact, OwnedDirectory};
 use crate::artifacts::test_support::unique_temp_directory;
 use std::{fs, io};
+
+#[test]
+fn owned_directory_cleans_up_on_unwind_and_preserves_transferred_custody() {
+    let root = unique_temp_directory("owned-directory-unwind");
+    let owned = root.join("owned");
+    let retained = root.join("retained");
+    fs::create_dir(&owned).unwrap();
+    fs::create_dir(&retained).unwrap();
+    fs::write(retained.join("evidence"), b"retained").unwrap();
+    let result = std::panic::catch_unwind(|| {
+        let _owned = OwnedDirectory::new(owned.clone());
+        OwnedDirectory::new(retained.clone()).preserve();
+        panic!("synthetic producer panic");
+    });
+    assert!(result.is_err());
+    assert!(!owned.exists());
+    assert_eq!(fs::read(retained.join("evidence")).unwrap(), b"retained");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn cleanup_failure_keeps_build_retry_but_explicit_close_transfers_recovery() {
+    use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
+
+    let root = unique_temp_directory("owned-directory-cleanup-failure");
+    // Root bypasses permission refusal; release evidence runs as an ordinary user.
+    if fs::metadata(&root).unwrap().uid() == 0 {
+        fs::remove_dir_all(root).unwrap();
+        return;
+    }
+    let owned = root.join("build");
+    fs::create_dir(&owned).unwrap();
+    let mut build = OwnedDirectory::new(owned.clone());
+    let staging = ArtifactStagingDirectory::new(&root).unwrap();
+    let stage_path = staging.path().to_owned();
+    let original_permissions = fs::metadata(&root).unwrap().permissions();
+    fs::set_permissions(&root, fs::Permissions::from_mode(0o500)).unwrap();
+    let build_error = build.try_cleanup().unwrap_err();
+    let close_error = staging.close().unwrap_err();
+    fs::set_permissions(&root, original_permissions).unwrap();
+
+    assert_eq!(build_error.kind(), io::ErrorKind::PermissionDenied);
+    assert_eq!(close_error.kind(), io::ErrorKind::PermissionDenied);
+    assert!(build.is_armed());
+    drop(build);
+    assert!(!owned.exists(), "failed build cleanup retries on Drop");
+    assert!(
+        stage_path.exists(),
+        "explicit close leaves recovery to the caller"
+    );
+    fs::remove_dir_all(root).unwrap();
+}
 
 // Moved from Canic's capture tests; producer paths and public publication remain distinct.
 #[test]

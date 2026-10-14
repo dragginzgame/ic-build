@@ -18,6 +18,57 @@ use super::cache_fs::remove_path_if_present;
 const STAGE_ATTEMPTS: usize = 64;
 static STAGE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
+#[derive(Debug)]
+pub(super) struct OwnedDirectory {
+    path: PathBuf,
+    armed: bool,
+}
+
+impl OwnedDirectory {
+    pub(super) const fn new(path: PathBuf) -> Self {
+        Self { path, armed: true }
+    }
+
+    pub(super) fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub(super) const fn is_armed(&self) -> bool {
+        self.armed
+    }
+
+    pub(super) const fn disarm(&mut self) {
+        self.armed = false;
+    }
+
+    pub(super) fn preserve(mut self) {
+        self.disarm();
+    }
+
+    pub(super) fn try_cleanup(&mut self) -> io::Result<()> {
+        remove_path_if_present(&self.path)?;
+        self.disarm();
+        Ok(())
+    }
+
+    pub(super) fn cleanup(mut self) -> io::Result<()> {
+        self.try_cleanup()
+    }
+
+    pub(super) fn cleanup_on_drop(&mut self) {
+        if self.armed {
+            let _ = remove_path_if_present(&self.path);
+            self.disarm();
+        }
+    }
+}
+
+impl Drop for OwnedDirectory {
+    fn drop(&mut self) {
+        self.cleanup_on_drop();
+    }
+}
+
 /// Temporary artifact directory retained until its owner is closed or dropped.
 ///
 /// The caller keeps custody of the parent and allocated child against unrelated
@@ -26,8 +77,7 @@ static STAGE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 /// cache entry is created, reused or removed.
 #[derive(Debug)]
 pub struct ArtifactStagingDirectory {
-    root: PathBuf,
-    armed: bool,
+    directory: OwnedDirectory,
 }
 
 impl ArtifactStagingDirectory {
@@ -46,7 +96,11 @@ impl ArtifactStagingDirectory {
                 std::process::id()
             ));
             match fs::create_dir(&root) {
-                Ok(()) => return Ok(Self { root, armed: true }),
+                Ok(()) => {
+                    return Ok(Self {
+                        directory: OwnedDirectory::new(root),
+                    });
+                }
                 Err(source) if source.kind() == io::ErrorKind::AlreadyExists => {}
                 Err(source) => return Err(source),
             }
@@ -63,7 +117,7 @@ impl ArtifactStagingDirectory {
     /// Borrow the owned staging directory through artifact production and consumption.
     #[must_use]
     pub fn path(&self) -> &Path {
-        &self.root
+        self.directory.path()
     }
 
     /// Remove this owned staging child, reporting cleanup failure without a hidden retry.
@@ -74,16 +128,14 @@ impl ArtifactStagingDirectory {
     /// # Errors
     /// Returns the filesystem error if removing the owned child fails.
     pub fn close(mut self) -> io::Result<()> {
-        self.armed = false;
-        remove_path_if_present(&self.root)
+        self.directory.disarm();
+        remove_path_if_present(self.directory.path())
     }
 }
 
 impl Drop for ArtifactStagingDirectory {
     fn drop(&mut self) {
-        if self.armed {
-            let _ = remove_path_if_present(&self.root);
-        }
+        self.directory.cleanup_on_drop();
     }
 }
 
@@ -129,7 +181,7 @@ impl CapturedArtifact {
     /// Keep custody of those paths; this grants no cache or release admission.
     #[must_use]
     pub fn retain(mut self) -> PathBuf {
-        self.staging.armed = false;
+        self.staging.directory.disarm();
         self.path
     }
 

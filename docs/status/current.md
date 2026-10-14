@@ -1,5 +1,63 @@
 # Current handoff
 
+## Fixture adoption and directory custody — pending 0.3.2
+
+Both Build test allocators use published Host 0.18.1's opt-in fixture API;
+local collision removal and counters are gone. The normal registry graph selects
+the coherent 0.18.1 family. A private owned-directory guard now serves Wasm,
+artifact transactions and captures, preserving public Drop contracts, protected
+lock lifetime, failed-build retry and explicit-close recovery. 159 artifact units,
+the added paired-error case, affected process/helper/handoff integrations, strict
+Clippy/docs and actual Rust 1.88 pass. Focused final guard regressions also pass.
+
+Host copy PR #93 is normally reconciled with published 0.18.1 at `60ceef4`, with
+pending 0.18.2 notes; its unchanged copy API passes 68 durable cases, strict lint,
+docs and Rust 1.88. It remains unpublished. Build's current-source stream-copy
+adoption patch is rehearsed under `/tmp/ic-build-cleanup-20261014/`; the live
+consumer retains its published implementation until that API is released.
+Native macOS and reviewed delivery remain open at Build #24/#27/#32. The earlier
+documentation edits are preserved; source/index/own versions/refs stay uncommitted.
+
+## Published 0.3.1 and remaining PR repairs — 2026-10-14
+
+The maintainer pushed/published 0.3.1 from `259e8c8c1bd8576bbfb3e306dba3fb2151b7fa90`.
+Its sparse-index/archive checksum is
+`671361f0f18d3d592e9ae652dc29325a986d2a0472c88c4627706132a997f986`;
+the VCS receipt names that source. The selected release CI `38567150403` passes
+Linux/lint; both native jobs are queued. Cancelled 0.3.0/Jobs 0.10.0 runs are
+historical; Jobs' active 0.10.2 run passes Linux with native acceptance queued.
+Publication clears #22/#25 delivery, not their native/consumer gates. Closed
+policy PR #23's obsolete queued workflow was cancelled without touching release CI.
+
+PR #29 is reconciled with 0.3.1 at `5271356`; only release notes conflicted.
+Its unchanged projection API passes four focused cases, strict Clippy/docs,
+actual Rust 1.88, formatting/snapshot/links on the current graph. The prior head's
+complete native matrix retains its identity; current Linux/lint pass and native
+checks are queued. Compatible pending notes select 0.3.2. Local guidance also
+corrects 0.3.1's exposed Host boundary to 0.18; those docs remain uncommitted.
+
+Canic's completed Apple run exposed Binaryen temporary-path expectations; all
+seven cases now pass through a real parent alias. Fresh Linux CI still differed
+because remapped source strings retained Cargo's cache-directory hash. The
+recipe normalizes registry source roots; a compiler-backed location regression,
+five peer cases and explicit real-Wasm path/version reproduction pass, with
+strict Host/fixture-owner Clippy and Rust 1.91 libraries. Byte comparison remains
+strict and mismatch errors retain both digests. The path-repair heads
+#519 `88009a0` and #546 `f77819a` are retained as separate evidence;
+combined verification uses the rebuilt owner API.
+Current hosted/native/application acceptance remains open. Original failures,
+qualification logs and before-images remain under `/tmp/ic-build-pr-next-20261014/`.
+
+The restarted Canic security jobs found four new 2026-10-14 RustSec advisories
+against rustls 0.23.45. [Canic #560](https://github.com/dragginzgame/canic/issues/560)
+tracks the isolated PR graph repair to 0.23.46; the live Canic checkout already
+selects that patch. The real risk gate passes against database revision
+`caee11f41fab07d676c0a4655a2a5dd1f94da97c`, preserving advisory refusal and the
+existing informational warnings. This is separate from native/application proof.
+The repair is pushed at #519 `b60c3c6` and normal topic merge #546 `bcc3cbc`.
+Peer bytes remain identical and graph provenance is refreshed. Both real risk
+gates and current-source peer qualification pass; current hosted acceptance is pending.
+
 ## PR and issue reconciliation — 2026-10-14
 
 PR #23 is closed as superseded by the pending canonical Shared Tooling 0.12.7
