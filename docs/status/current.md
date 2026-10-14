@@ -1,5 +1,93 @@
 # Current handoff
 
+## Selected-record input boundary and Canic handoff — 2026-10-14
+
+Pending compatible 0.2.6 adds `read_cargo_depfile_inputs` at the existing input
+owner ([#17](https://github.com/dragginzgame/ic-build/issues/17)). Exact-record
+and directory discovery share bounded no-follow reads, strict parsing, alias
+resolution and generated-root exclusion. Consumers choose target records and
+cold-inventory absence; malformed selected records and late inputs still refuse.
+Directory discovery's original contracts and retained evidence remain unchanged.
+Own metadata remains 0.2.5; the incoming Host 0.17.7 lock is preserved byte-for-byte.
+Full Linux `make ci lint check-secrets` passes with 164 units, Cargo/Wasm/process
+fixtures, strict Clippy/docs and actual Rust 1.88.
+
+Canic's stopped 0.112 release attempt rejected an unobserved foreign App manifest
+while Blob's worker shared the suite target. Retained diagnostics prove the
+before/after mismatch. A concurrent owner now scopes records to the selected
+Cargo graph; [Canic #544](https://github.com/dragginzgame/canic/issues/544) tracks
+that repair and shared-owner adoption. This task changes no live Canic source.
+The isolated adapter replaces repeated record interpretation with the new API;
+Canic retains target selection, generated-export recipes and release admission.
+Its 91 build-family checks pass, with three governed cases ignored. Strict Host
+library/test Clippy and actual Rust 1.91 all-feature library compilation pass.
+The temporary producer override is confined to
+the qualification copy. Registry package versions/checksums stay unchanged;
+Cargo also normalizes some existing Windows dependency edges there, retained in
+`adapter-lock-delta.json`. The real consumer graph is untouched.
+
+Evidence and adapter patch are under `/tmp/ic-build-canic-025-integration/`.
+Host 0.17.8 remains unpublished; its native repair must be delivered and adopted
+before exact macOS qualification. Publish the producer boundary before Canic's
+registry switch. The explicit #542 hold remains until release completion; the
+failed attempt and new concurrent source edits do not constitute delivery.
+
+[#7](https://github.com/dragginzgame/ic-build/issues/7) closes on published
+IC Build 0.2.5 and Testkit 0.38.0 helper consolidation. Testkit's exact source
+`35938ee0c8fc2c3e5efa2cf198e39d6e8c486b2e` passes all four Linux CI lanes;
+the separate Host/native and broader extraction acceptance issues remain open.
+
+## Authorized Host repair prepared — 2026-10-13
+
+The maintainer authorized [Host #84](https://github.com/dragginzgame/ic-host-tooling/issues/84).
+The repair is applied to Host's released 0.17.7 source
+`2bdc5f1cae2c12040bf08d03b5c68502291599cd`, with compatible pending 0.17.8 notes.
+Retained staging reuses its existing checked native-permissions helper; invalid
+high-bit permissions refuse before creation. Full Linux `make ci msrv-workspace`
+passes, including 82 filesystem tests, strict Clippy/docs, tooling/release fixtures
+and actual Rust 1.88 workspace compilation. Host's lockfile is unchanged.
+Evidence is under `/tmp/ic-build-host84/`. Native qualification and publication
+remain outstanding; IC Build's minimum requirement/locked graph adoption must
+follow the published repair. Own IC Build versions and dependency inputs remain unchanged.
+
+The completed 0.2.5 CI now fails on both macOS architectures at the same Host
+0.17.5 call, with Linux and lint/security passing. Apple Silicon's job log is
+`/tmp/ic-build-host84/ic-build-025-apple.log`. Canic's independent 0.112.0 release
+is still running governed tests on admitted `644d4b13012b395d6211a6907e2e6aafdf391db9`;
+its explicitly queued #542 patch remains unapplied. This follow-up performs no
+staging, commit, version bump, release, publication or CI dispatch.
+
+## Pushed 0.2.5, native dependency blocker and Canic hold — 2026-10-13
+
+The maintainer pushed finalized 0.2.5 source
+`1ae67242b73e002414105c8de55b05f9364c1e0a`. Its
+[exact CI](https://github.com/dragginzgame/ic-build/actions/runs/38441416124)
+passes Linux and lint/security; Intel fails during package compilation against
+locked Host 0.17.5, and Apple Silicon is queued at inspection. The previous
+0.2.4 run now has both native jobs failed against Host 0.17.4. These results
+supersede the running/queued observations in the historical sections below.
+
+Both completed native 0.2.4 jobs and the 0.2.5 Intel job report E0308 in Host's
+retained staging: its public `u32` permissions reach a Darwin `u16` mode
+constructor. The existing checked native-permissions helper already handles
+Apple narrowing in the same filesystem owner. The repair and native acceptance
+are tracked at [Host #84](https://github.com/dragginzgame/ic-host-tooling/issues/84).
+Registry 0.17.6/0.17.7 and current Host source retain the offending call; source
+inspection does not qualify those releases. A published Host repair and its
+minimum requirement/locked graph adoption must precede new exact native
+producer qualification. No downstream workaround or Host source edit was made.
+Local logs are `/tmp/ic-build-024-intel.log`, `/tmp/ic-build-024-arm.log` and
+`/tmp/ic-build-025-intel.log`; the hosted jobs retain portable evidence.
+
+Canic's independent release remains active on admitted source
+`644d4b13012b395d6211a6907e2e6aafdf391db9`, preparing 0.112.0 from 0.111.0.
+Its release validation is running governed PocketIC tests and infrastructure
+Cargo builds at inspection. The maintainer's explicit hold still applies to
+[Canic #542](https://github.com/dragginzgame/canic/issues/542). The retained
+selector/identity patch remains unapplied until that release finishes; IC Build's
+push does not end Canic's source admission. No sibling source, Git refs, package
+versions, release, publication or workflow dispatch were changed in this follow-up.
+
 ## Published 0.2.4, helper cleanup and Canic integration — 2026-10-13
 
 Registry IC Build 0.2.4 names source

@@ -115,6 +115,14 @@ explicit working directory. Existing aliases resolve before output exclusion;
 missing paths containing parent traversal remain conservative external inputs.
 The records themselves are not source inputs: Cargo may replace them during work.
 
+`read_cargo_depfile_inputs(current_dir, record, excluded_roots,
+maximum_record_bytes)` applies the same discovery mechanics to one exact record.
+Consumers select records from their own Cargo graph when sharing an output
+directory with unrelated builds. A missing record returns `NotFound`; deciding
+whether that is an admissible cold-build inventory remains caller policy. This
+selection never grants pre-build authority to newly named source bytes; capture
+and validate the resulting inventory through `InputEvidence` as above.
+
 `parse_cargo_depfile` accepts Cargo/rustc Make dependency rules, escaped spaces,
 tabs, backslashes, hash/colon characters, doubled dollars, LF/CRLF continuations,
 multiple rules and empty phony targets. It refuses other Make expressions instead

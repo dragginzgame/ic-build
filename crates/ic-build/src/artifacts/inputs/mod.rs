@@ -4,7 +4,7 @@ mod depfiles;
 #[cfg(test)]
 mod tests;
 
-pub use depfiles::{discover_cargo_depfile_inputs, parse_cargo_depfile};
+pub use depfiles::{discover_cargo_depfile_inputs, parse_cargo_depfile, read_cargo_depfile_inputs};
 
 use crate::artifacts::{
     cache_fs::canonicalize_allow_missing,

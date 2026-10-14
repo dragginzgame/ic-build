@@ -3,6 +3,13 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.2.6]
+
+- Add exact Cargo depfile reads through the existing discovery owner, allowing
+  consumers to select their build graph without inspecting unrelated records
+  in shared targets. Preserve bounded reads, exclusions and late-input rejection
+  ([#17](https://github.com/dragginzgame/ic-build/issues/17)).
+
 ## [0.2.5] - 2026-10-13
 
 - Replace the duplicated optional-duration helper with standard-library reduction

@@ -83,7 +83,7 @@ pub use icp::{
 };
 pub use inputs::{
     InputEvidence, InputEvidenceError, InputEvidenceSpec, InputEvidenceValue,
-    discover_cargo_depfile_inputs, parse_cargo_depfile,
+    discover_cargo_depfile_inputs, parse_cargo_depfile, read_cargo_depfile_inputs,
 };
 pub use staging::{ArtifactStagingDirectory, CapturedArtifact};
 pub use transaction::{

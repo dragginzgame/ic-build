@@ -1,7 +1,7 @@
 use crate::artifacts::{
     InputEvidence, InputEvidenceError, InputEvidenceSpec, InputEvidenceValue,
     digest::{InputHasher, digest_labeled_paths},
-    discover_cargo_depfile_inputs, parse_cargo_depfile,
+    discover_cargo_depfile_inputs, parse_cargo_depfile, read_cargo_depfile_inputs,
     test_support::unique_temp_directory,
 };
 use sha2::{Digest as _, Sha256};
@@ -261,6 +261,52 @@ fn depfile_discovery_and_disappearing_records_preserve_external_custody() {
     fs::write(&added, b"late bytes").unwrap();
     assert!(
         matches!(before.validate_after(&after), Err(InputEvidenceError::ChangedInput { path }) if path == added)
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn selected_depfile_keeps_foreign_records_out_and_refuses_late_input_authority() {
+    let root = unique_temp_directory("input-evidence-selected-record");
+    let records = root.join("target");
+    fs::create_dir(&records).unwrap();
+    let source = root.join("source.rs");
+    fs::write(&source, b"before").unwrap();
+    fs::write(records.join("generated"), b"output").unwrap();
+    let record = records.join("selected.d");
+    fs::write(&record, "selected: source.rs target/generated\n").unwrap();
+    fs::write(records.join("foreign.d"), "foreign: $(unadmitted)\n").unwrap();
+    let read = || read_cargo_depfile_inputs(&root, &record, std::slice::from_ref(&records), 4096);
+    let paths = read().unwrap();
+    assert_eq!(paths, std::slice::from_ref(&source));
+    assert!(read_cargo_depfile_inputs(&root, &record, &[], 1).is_err());
+    #[cfg(unix)]
+    {
+        let alias = records.join("alias.d");
+        std::os::unix::fs::symlink(&record, &alias).unwrap();
+        assert!(read_cargo_depfile_inputs(&root, &alias, &[], 4096).is_err());
+    }
+    let before = capture(b"selected recipe", &paths);
+    assert!(
+        discover_cargo_depfile_inputs(&root, std::slice::from_ref(&records), &[], 4096).is_err()
+    );
+    let late = root.join("late.rs");
+    fs::write(&late, b"late bytes").unwrap();
+    fs::write(&record, "selected: source.rs late.rs\n").unwrap();
+    let after = capture(b"selected recipe", &read().unwrap());
+    assert!(matches!(
+        before.validate_after(&after),
+        Err(InputEvidenceError::UnobservedInput { path }) if path == late
+    ));
+    fs::write(&record, "selected: $(unadmitted)\n").unwrap();
+    assert_eq!(read().unwrap_err().kind(), io::ErrorKind::InvalidData);
+    fs::remove_file(&record).unwrap();
+    assert_eq!(read().unwrap_err().kind(), io::ErrorKind::NotFound);
+    assert_eq!(
+        read_cargo_depfile_inputs(&root, Path::new("relative.d"), &[], 4096)
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::InvalidInput
     );
     fs::remove_dir_all(root).unwrap();
 }

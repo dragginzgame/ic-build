@@ -131,33 +131,85 @@ pub fn discover_cargo_depfile_inputs(
             if record.extension().is_none_or(|extension| extension != "d") {
                 continue;
             }
-            let bytes = ic_host_fs::read::read_file_no_follow(&record, maximum_record_bytes)
-                .map_err(io::Error::from)?;
-            let text = std::str::from_utf8(&bytes)
-                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-            for path in parse_cargo_depfile(text)? {
-                let path = if path.is_absolute() {
-                    path
-                } else {
-                    current_dir.join(path)
-                };
-                let path = match path.canonicalize() {
-                    Ok(path) => path,
-                    Err(error) if error.kind() == io::ErrorKind::NotFound => path,
-                    Err(error) => return Err(error),
-                };
-                if !path
-                    .components()
-                    .any(|component| component == std::path::Component::ParentDir)
-                    && excluded.iter().any(|root| path.starts_with(root))
-                {
-                    continue;
-                }
-                inputs.insert(path);
-            }
+            inputs.extend(read_record_inputs(
+                current_dir,
+                &record,
+                &excluded,
+                maximum_record_bytes,
+            )?);
         }
     }
     Ok(inputs.into_iter().collect())
+}
+
+/// Read source inputs from one explicitly selected Cargo/rustc depfile.
+///
+/// The caller owns target selection, so unrelated records in a shared output
+/// directory are not inspected. Uses the same bounded, regular-file/no-follow
+/// reads, strict parsing, alias resolution and generated-root exclusions as
+/// directory discovery. Missing records return `NotFound`; the caller decides
+/// whether absence is an admissible cold-build inventory.
+///
+/// # Errors
+/// Returns non-absolute selections, record overflow, unsupported syntax or I/O.
+pub fn read_cargo_depfile_inputs(
+    current_dir: &Path,
+    record: &Path,
+    excluded_roots: &[PathBuf],
+    maximum_record_bytes: usize,
+) -> io::Result<Vec<PathBuf>> {
+    if !current_dir.is_absolute()
+        || !record.is_absolute()
+        || excluded_roots.iter().any(|path| !path.is_absolute())
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "depfile selections must be absolute",
+        ));
+    }
+    let excluded = excluded_roots
+        .iter()
+        .map(|path| canonicalize_allow_missing(path))
+        .collect::<io::Result<Vec<_>>>()?;
+    Ok(
+        read_record_inputs(current_dir, record, &excluded, maximum_record_bytes)?
+            .into_iter()
+            .collect(),
+    )
+}
+
+fn read_record_inputs(
+    current_dir: &Path,
+    record: &Path,
+    excluded: &[PathBuf],
+    maximum_record_bytes: usize,
+) -> io::Result<BTreeSet<PathBuf>> {
+    let bytes = ic_host_fs::read::read_file_no_follow(record, maximum_record_bytes)
+        .map_err(io::Error::from)?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    let mut inputs = BTreeSet::new();
+    for path in parse_cargo_depfile(text)? {
+        let path = if path.is_absolute() {
+            path
+        } else {
+            current_dir.join(path)
+        };
+        let path = match path.canonicalize() {
+            Ok(path) => path,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => path,
+            Err(error) => return Err(error),
+        };
+        if !path
+            .components()
+            .any(|component| component == std::path::Component::ParentDir)
+            && excluded.iter().any(|root| path.starts_with(root))
+        {
+            continue;
+        }
+        inputs.insert(path);
+    }
+    Ok(inputs)
 }
 
 fn flush_token(
