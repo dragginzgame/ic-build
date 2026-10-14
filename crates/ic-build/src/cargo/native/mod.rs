@@ -66,7 +66,7 @@ pub fn build_native_executable(
     mut cargo: impl FnMut() -> Command,
     mut diagnostics: impl Write,
     mut admit: impl FnMut() -> io::Result<()>,
-) -> Result<NativeExecutable, Box<dyn Error>> {
+) -> Result<NativeExecutable, Box<dyn Error + Send + Sync>> {
     let selector = match spec.target_kind {
         "bin" => "--bin",
         "example" => "--example",
@@ -200,7 +200,7 @@ fn message(
 fn execute(
     command: &mut Command,
     output: impl FnMut(OutputStream, &[u8]) -> io::Result<()>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     command.stdin(Stdio::null()).stdout(Stdio::piped());
     let mut child = OwnedChild::spawn_direct(command)?;
     communicate_child_with_observer(

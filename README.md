@@ -90,7 +90,7 @@ let built = build_native_executable(&spec, || {
     cargo.current_dir("/checkout");
     cargo
 }, std::io::stderr(), || Ok(()))?;
-# Ok::<(), Box<dyn std::error::Error>>(())
+# Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
 ```
 
 ## Development
