@@ -3,7 +3,7 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.2.6]
+## [0.2.6] - 2026-10-14
 
 - Add exact Cargo depfile reads through the existing discovery owner, allowing
   consumers to select their build graph without inspecting unrelated records
