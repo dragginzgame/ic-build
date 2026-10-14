@@ -47,7 +47,7 @@ fn actual_cargo_reports_custom_profile_executable_and_streams_failed_build_diagn
         max_message_bytes: 1024 * 1024,
     };
     let mut diagnostics = Vec::new();
-    let built = build_native_executable(&spec, factory, &mut diagnostics).unwrap();
+    let built = build_native_executable(&spec, factory, &mut diagnostics, || Ok(())).unwrap();
     assert_eq!(calls.get(), 2);
     assert_eq!(built.target_directory, target);
     assert!(built.executable.is_file());
@@ -57,13 +57,29 @@ fn actual_cargo_reports_custom_profile_executable_and_streams_failed_build_diagn
         Command::new(&built.executable).output().unwrap().stdout,
         b"factory-preserved\n"
     );
+    calls.set(0);
+    let admissions = Cell::new(0);
+    let error = build_native_executable(&spec, factory, &mut diagnostics, || {
+        admissions.set(admissions.get() + 1);
+        if admissions.get() == 2 {
+            Err(std::io::ErrorKind::Interrupted.into())
+        } else {
+            Ok(())
+        }
+    })
+    .unwrap_err();
+    assert_eq!(
+        error.downcast_ref::<std::io::Error>().unwrap().kind(),
+        std::io::ErrorKind::Interrupted
+    );
+    assert_eq!(calls.get(), 1);
     fs::write(
         root.join("examples/worker.rs"),
         "fn main() { this_does_not_compile(); }\n",
     )
     .unwrap();
     diagnostics.clear();
-    let error = build_native_executable(&spec, factory, &mut diagnostics).unwrap_err();
+    let error = build_native_executable(&spec, factory, &mut diagnostics, || Ok(())).unwrap_err();
     let execution = error
         .downcast_ref::<ToolError>()
         .expect("original Host failure stays typed");

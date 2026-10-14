@@ -89,7 +89,7 @@ let built = build_native_executable(&spec, || {
     let mut cargo = Command::new("cargo");
     cargo.current_dir("/checkout");
     cargo
-}, std::io::stderr())?;
+}, std::io::stderr(), || Ok(()))?;
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 

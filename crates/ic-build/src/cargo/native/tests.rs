@@ -111,7 +111,8 @@ fn invalid_selection_refuses_before_the_command_factory() {
             build_native_executable(
                 &invalid,
                 || panic!("invalid selection has no command effects"),
-                Vec::new()
+                Vec::new(),
+                || Ok(())
             )
             .is_err()
         );

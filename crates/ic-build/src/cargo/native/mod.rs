@@ -50,6 +50,8 @@ pub struct NativeExecutable {
 /// bounded-per-message protocol; rendered compiler diagnostics and piped stderr
 /// stream to `diagnostics`. Other stderr configurations remain intact. Stdin is
 /// null. This owns direct-child completion, not process-group or signal policy.
+/// `admit` runs before each command factory, so caller interruption can refuse
+/// another dispatch after metadata. In-flight commands still run to completion.
 ///
 /// Callers exclude source/config/tool mutation and retain artifact custody. No
 /// cache, installation, release admission, retry or elapsed-time default is added.
@@ -63,6 +65,7 @@ pub fn build_native_executable(
     spec: &NativeExecutableSpec<'_>,
     mut cargo: impl FnMut() -> Command,
     mut diagnostics: impl Write,
+    mut admit: impl FnMut() -> io::Result<()>,
 ) -> Result<NativeExecutable, Box<dyn Error>> {
     let selector = match spec.target_kind {
         "bin" => "--bin",
@@ -72,6 +75,7 @@ pub fn build_native_executable(
     if spec.package.is_empty() || spec.target_name.is_empty() || spec.max_message_bytes == 0 {
         return Err(protocol("empty native target selection or message allowance").into());
     }
+    admit()?;
     let mut command = cargo();
     command.args(["metadata", "--locked", "--no-deps", "--format-version", "1"]);
     let mut bytes = Vec::new();
@@ -80,6 +84,7 @@ pub fn build_native_executable(
         OutputStream::Stderr => diagnostics.write_all(chunk),
     })?;
     let (package_id, target_directory) = selection(&serde_json::from_slice(&bytes)?, spec)?;
+    admit()?;
     let mut command = cargo();
     command.args([
         "build",
