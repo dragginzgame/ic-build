@@ -175,7 +175,19 @@ output directory; discovered configuration still contributes to input identity.
 
 Keep the existing caller executor: Query owns its 600-second deadline,
 cancellation, TERM grace, bounded reaping and original command/output/cleanup
-errors. Preserve the generated command's arguments and environment. Hold source
+errors. For bounded input probes, use
+`resolve_cargo_build_inputs_with_probe_policy(spec, &mut policy)` and
+`inputs.is_current_with_probe_policy(spec, &mut policy)`. `CargoInputProbePolicy`
+selects one absolute `Instant` deadline, cancellation predicate and Host cleanup
+policy across Cargo identity, compiler identity and metadata. Reuse the policy
+to keep the same deadline during revalidation. Probes retain the existing
+complete-output bounds (64 KiB per identity stream; 16 MiB metadata stdout and
+64 KiB stderr). Original failures, observed output and cleanup errors remain in
+the Host `ToolError` inside `WasmBuildError::Io`; the operation identifies the
+probe and the path identifies its program. Discovery and hashing are outside
+the probe deadline. The original resolver and `is_current` impose no deadline.
+
+Preserve the generated command's arguments and environment. Hold source
 and target custody, capture pre-build `InputEvidence` from resolved inputs and
 exclusions, execute, re-resolve identity and validate before capturing outputs.
 Discover caller-selected example depfiles and validate their expanded inventory;

@@ -3,6 +3,23 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.3.1]
+
+- Adopt Shared Tooling 0.12.7 and delegate release metadata preparation and
+  exact-commit validation to its canonical transaction helper, preserving local
+  source admission, selected-editor custody and interrupted-release recovery.
+- Stream Cargo archive qualification hashes through Host's bounded no-follow
+  reader instead of retaining whole files solely for digesting.
+
+- Qualify coordinated Cargo archives in a fresh retained workspace; admit exact
+  extracted manifests and frozen external selections, then check source/archive
+  integrity after tests. Consumers retain tools, package/version and release policy.
+  ([#25](https://github.com/dragginzgame/ic-build/issues/25)).
+
+- Add opt-in caller deadlines, cancellation and cleanup for Cargo input probes
+  and revalidation. Preserve default execution, complete-output bounds and
+  input identity ([#22 — Caller-bounded Cargo input resolution](https://github.com/dragginzgame/ic-build/issues/22)).
+
 ## [0.3.0] - 2026-10-14
 
 - Adopt Shared Tooling 0.12.4 and published IC Host 0.17.11, retaining the

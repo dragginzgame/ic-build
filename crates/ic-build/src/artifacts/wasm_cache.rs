@@ -1,8 +1,9 @@
 use ic_host_process::{
-    child::OwnedChild,
+    child::{CleanupPolicy, OwnedChild},
     tool::{
-        CompletedExecution, ExecutionFailure, ExecutionOperation, OutputLimit, OutputLimits,
-        OutputStream, SuccessfulExit, ToolError, capture_command, communicate_child_with_observer,
+        CompletedExecution, ExecutionError, ExecutionEvidence, ExecutionFailure,
+        ExecutionOperation, OutputLimit, OutputLimits, OutputStream, SuccessfulExit, ToolError,
+        capture_command, communicate_child, communicate_child_with_observer,
     },
 };
 use serde_json::Value;
@@ -1449,6 +1450,23 @@ impl CargoBuildInput {
     }
 }
 
+/// Caller-owned controls for Cargo identity, compiler identity and metadata probes.
+///
+/// Each probe runs in an owned process group using Host's existing communication
+/// and cleanup machinery. Output limits remain fixed by IC Build. These controls
+/// do not impose a deadline on filesystem discovery or hashing, execute a build,
+/// or alter fingerprints. Existing resolution APIs retain their unbounded defaults.
+pub struct CargoInputProbePolicy<'a> {
+    /// Absolute deadline shared by every probe, including subsequent revalidation.
+    /// Spawning syscalls and cleanup can exceed it; `None` imposes no deadline.
+    pub deadline: Option<Instant>,
+    /// Termination grace and reaping policy, separate from the probe deadline.
+    pub cleanup: CleanupPolicy,
+    /// Cancellation predicate, polled even while a probe is silent.
+    /// It must return promptly; callback panics attempt cleanup before unwinding.
+    pub cancelled: &'a mut (dyn FnMut() -> bool + Send),
+}
+
 impl ResolvedCargoBuildInputs {
     /// Borrow declared output paths after metadata admits the selected targets.
     ///
@@ -1519,6 +1537,22 @@ impl ResolvedCargoBuildInputs {
     /// Returns specification, tool/metadata, filesystem or input-resolution errors.
     pub fn is_current(&self, spec: &WasmBuildSpec) -> Result<bool, WasmBuildError> {
         resolve_cargo_build_inputs(spec).map(|current| current.fingerprint == self.fingerprint)
+    }
+
+    /// Resolve again using the caller's probe deadline, cancellation and cleanup.
+    ///
+    /// Reusing the same policy preserves its absolute deadline across acquisitions.
+    /// Filesystem discovery and hashing are outside the probe deadline.
+    ///
+    /// # Errors
+    /// Returns the same errors as [`resolve_cargo_build_inputs_with_probe_policy`].
+    pub fn is_current_with_probe_policy(
+        &self,
+        spec: &WasmBuildSpec,
+        policy: &mut CargoInputProbePolicy<'_>,
+    ) -> Result<bool, WasmBuildError> {
+        resolve_cargo_build_inputs_with_probe_policy(spec, policy)
+            .map(|current| current.fingerprint == self.fingerprint)
     }
 
     /// Rehash the already discovered Cargo source/configuration set.
@@ -1947,13 +1981,22 @@ fn resolve_tool_identity(
     spec: &WasmBuildSpec,
     progress: &mut ProgressReporter<'_>,
 ) -> Result<(Vec<u8>, Vec<u8>, Duration), WasmBuildError> {
+    resolve_tool_identity_with_policy(spec, progress, &mut None)
+}
+
+fn resolve_tool_identity_with_policy(
+    spec: &WasmBuildSpec,
+    progress: &mut ProgressReporter<'_>,
+    policy: &mut Option<&mut CargoInputProbePolicy<'_>>,
+) -> Result<(Vec<u8>, Vec<u8>, Duration), WasmBuildError> {
     let started = Instant::now();
     let cargo_identity = progress.run_phase(WasmBuildProgressPhase::CargoIdentity, || {
-        command_identity(
+        command_identity_with_policy(
             spec,
             WasmBuildPhase::CargoIdentity,
             &spec.cargo_program,
             &["--version", "--verbose"],
+            policy,
         )
     })?;
     let rustc_program = spec
@@ -1961,7 +2004,13 @@ fn resolve_tool_identity(
         .get(OsStr::new("RUSTC"))
         .unwrap_or(&spec.rustc_program);
     let rustc_identity = progress.run_phase(WasmBuildProgressPhase::RustcIdentity, || {
-        command_identity(spec, WasmBuildPhase::RustcIdentity, rustc_program, &["-vV"])
+        command_identity_with_policy(
+            spec,
+            WasmBuildPhase::RustcIdentity,
+            rustc_program,
+            &["-vV"],
+            policy,
+        )
     })?;
     Ok((cargo_identity, rustc_identity, started.elapsed()))
 }
@@ -2294,6 +2343,25 @@ pub fn resolve_cargo_build_inputs(
 ) -> Result<ResolvedCargoBuildInputs, WasmBuildError> {
     validate_spec(spec)?;
     build_fingerprint(spec)
+}
+
+/// Resolve Cargo inputs with caller-selected probe execution controls.
+///
+/// Uses the same commands, environment, complete-output limits, input discovery,
+/// target admission and fingerprinting as [`resolve_cargo_build_inputs`]. Only
+/// probe execution changes: Host owns each process group and retains original
+/// failure, stdout/stderr and any cleanup failure in its [`ToolError`], stored
+/// inside [`WasmBuildError::Io`]. Spawn errors retain [`WasmBuildError::CommandSpawn`].
+/// Filesystem discovery and hashing are outside the probe deadline.
+///
+/// # Errors
+/// Returns ordinary resolution errors or caller deadline/cancellation failures.
+pub fn resolve_cargo_build_inputs_with_probe_policy(
+    spec: &WasmBuildSpec,
+    policy: &mut CargoInputProbePolicy<'_>,
+) -> Result<ResolvedCargoBuildInputs, WasmBuildError> {
+    validate_spec(spec)?;
+    build_fingerprint_with_policy(spec, &mut ProgressReporter::silent(), &mut Some(policy))
 }
 
 /// Inspect one configured shared Cargo target under its build coordination lock.
@@ -3719,12 +3787,21 @@ fn build_fingerprint_with_progress(
     spec: &WasmBuildSpec,
     progress: &mut ProgressReporter<'_>,
 ) -> Result<ResolvedCargoBuildInputs, WasmBuildError> {
+    build_fingerprint_with_policy(spec, progress, &mut None)
+}
+
+fn build_fingerprint_with_policy(
+    spec: &WasmBuildSpec,
+    progress: &mut ProgressReporter<'_>,
+    policy: &mut Option<&mut CargoInputProbePolicy<'_>>,
+) -> Result<ResolvedCargoBuildInputs, WasmBuildError> {
     let total_started = Instant::now();
-    let (cargo_identity, rustc_identity, tool_identity) = resolve_tool_identity(spec, progress)?;
+    let (cargo_identity, rustc_identity, tool_identity) =
+        resolve_tool_identity_with_policy(spec, progress, policy)?;
 
     let metadata_started = Instant::now();
     let metadata = progress.run_phase(WasmBuildProgressPhase::CargoMetadata, || {
-        cargo_metadata(spec)
+        cargo_metadata_with_policy(spec, policy)
     })?;
     let cargo_metadata = metadata_started.elapsed();
 
@@ -3814,16 +3891,28 @@ fn finish_build_fingerprint(
     hasher.finish()
 }
 
+#[cfg(test)]
 fn command_identity(
     spec: &WasmBuildSpec,
     phase: WasmBuildPhase,
     program: &OsStr,
     arguments: &[&str],
 ) -> Result<Vec<u8>, WasmBuildError> {
+    command_identity_with_policy(spec, phase, program, arguments, &mut None)
+}
+
+fn command_identity_with_policy(
+    spec: &WasmBuildSpec,
+    phase: WasmBuildPhase,
+    program: &OsStr,
+    arguments: &[&str],
+    policy: &mut Option<&mut CargoInputProbePolicy<'_>>,
+) -> Result<Vec<u8>, WasmBuildError> {
     let mut command = Command::new(program);
     command.current_dir(&spec.workspace_root).args(arguments);
     apply_command_environment(&mut command, spec);
-    let output = capture_probe_output(&mut command, phase, TOOL_IDENTITY_BYTES)?;
+    let output =
+        capture_probe_output_with_policy(&mut command, phase, TOOL_IDENTITY_BYTES, policy)?;
     ensure_command_success(phase, output).map(|output| {
         let mut identity = output.stdout;
         identity.extend_from_slice(&output.stderr);
@@ -3832,6 +3921,13 @@ fn command_identity(
 }
 
 fn cargo_metadata(spec: &WasmBuildSpec) -> Result<Value, WasmBuildError> {
+    cargo_metadata_with_policy(spec, &mut None)
+}
+
+fn cargo_metadata_with_policy(
+    spec: &WasmBuildSpec,
+    policy: &mut Option<&mut CargoInputProbePolicy<'_>>,
+) -> Result<Value, WasmBuildError> {
     let mut command = Command::new(&spec.cargo_program);
     command
         .current_dir(&spec.workspace_root)
@@ -3840,10 +3936,11 @@ fn cargo_metadata(spec: &WasmBuildSpec) -> Result<Value, WasmBuildError> {
         command.arg(argument);
     }
     apply_command_environment(&mut command, spec);
-    let output = capture_probe_output(
+    let output = capture_probe_output_with_policy(
         &mut command,
         WasmBuildPhase::CargoMetadata,
         CARGO_METADATA_BYTES,
+        policy,
     )?;
     let output = ensure_command_success(WasmBuildPhase::CargoMetadata, output)?;
     serde_json::from_slice(&output.stdout).map_err(|error| WasmBuildError::InvalidMetadata {
@@ -3851,19 +3948,31 @@ fn cargo_metadata(spec: &WasmBuildSpec) -> Result<Value, WasmBuildError> {
     })
 }
 
+#[cfg(test)]
 fn capture_probe_output(
     command: &mut Command,
     phase: WasmBuildPhase,
     stdout_bytes: usize,
 ) -> Result<CompletedExecution, WasmBuildError> {
-    let result = capture_command(
-        command,
-        OutputLimits {
-            stdout: OutputLimit::Terminate(stdout_bytes),
-            stderr: OutputLimit::Terminate(TOOL_IDENTITY_BYTES),
-            timeout: None,
-        },
-    )
+    capture_probe_output_with_policy(command, phase, stdout_bytes, &mut None)
+}
+
+fn capture_probe_output_with_policy(
+    command: &mut Command,
+    phase: WasmBuildPhase,
+    stdout_bytes: usize,
+    policy: &mut Option<&mut CargoInputProbePolicy<'_>>,
+) -> Result<CompletedExecution, WasmBuildError> {
+    let limits = OutputLimits {
+        stdout: OutputLimit::Terminate(stdout_bytes),
+        stderr: OutputLimit::Terminate(TOOL_IDENTITY_BYTES),
+        timeout: None,
+    };
+    let result = if let Some(policy) = policy {
+        capture_controlled_probe(command, limits, policy)
+    } else {
+        capture_command(command, limits)
+    }
     .and_then(CompletedExecution::require_complete);
     let evidence = match result {
         Ok(evidence) => evidence,
@@ -3887,13 +3996,68 @@ fn capture_probe_output(
         }
         Err(error) => {
             return Err(WasmBuildError::Io {
-                operation: "capture complete Cargo/tool probe output",
+                operation: match phase {
+                    WasmBuildPhase::CargoIdentity => "capture complete Cargo identity probe output",
+                    WasmBuildPhase::RustcIdentity => "capture complete rustc identity probe output",
+                    _ => "capture complete Cargo metadata probe output",
+                },
                 path: PathBuf::from(command.get_program()),
                 source: io::Error::other(error),
             });
         }
     };
     Ok(evidence)
+}
+
+fn capture_controlled_probe(
+    command: &mut Command,
+    mut limits: OutputLimits,
+    policy: &mut CargoInputProbePolicy<'_>,
+) -> Result<CompletedExecution, ToolError> {
+    let failure = if (policy.cancelled)() {
+        Some(ExecutionFailure::Cancelled)
+    } else if policy
+        .deadline
+        .is_some_and(|deadline| deadline <= Instant::now())
+    {
+        Some(ExecutionFailure::TimedOut)
+    } else {
+        None
+    };
+    if let Some(failure) = failure {
+        return Err(ToolError::Execution(Box::new(ExecutionError {
+            failure,
+            evidence: ExecutionEvidence::default(),
+            cleanup: None,
+        })));
+    }
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = OwnedChild::spawn_with_cleanup(command, policy.cleanup).map_err(|source| {
+        ToolError::Execution(Box::new(ExecutionError {
+            failure: ExecutionFailure::Io {
+                operation: ExecutionOperation::Spawn,
+                source,
+            },
+            evidence: ExecutionEvidence::default(),
+            cleanup: None,
+        }))
+    })?;
+    // The deadline is shared across probes, not restarted at each command.
+    limits.timeout = policy.deadline.map(|deadline| {
+        deadline
+            .saturating_duration_since(Instant::now())
+            .max(Duration::from_nanos(1))
+    });
+    communicate_child(
+        &mut child,
+        None,
+        limits,
+        SuccessfulExit::Cleanup,
+        &mut *policy.cancelled,
+    )
 }
 
 fn metadata_arguments(arguments: &[OsString]) -> Vec<OsString> {
