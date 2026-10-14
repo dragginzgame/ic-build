@@ -3,6 +3,13 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.3.2]
+
+- Build selected native binaries/examples using Cargo's reported package and
+  executable identities instead of reconstructing target paths. Diagnostics
+  stream without a default elapsed-time deadline; callers retain tool, profile,
+  source and artifact custody ([#30](https://github.com/dragginzgame/ic-build/issues/30)).
+
 ## [0.3.1] - 2026-10-14
 
 - Adopt Shared Tooling 0.12.7 and delegate release metadata preparation and

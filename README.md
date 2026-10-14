@@ -64,6 +64,35 @@ still tracks consumer acceptance, Canic production convergence and required nati
 macOS qualification. See the artifact guide for source custody and retained-cache
 contracts.
 
+## Native executables
+
+`cargo::native::build_native_executable` (Unix) builds a selected binary or
+example and returns Cargo's actual executable path and target root. The caller
+supplies the Cargo command factory, package/target, extra build arguments and
+per-message JSON allowance. Custom profiles and target directories require no
+output-layout guesses. Compiler diagnostics stream to the selected writer;
+ordinary stderr configuration remains intact. Builds have no default deadline.
+The result does not establish immutable artifact custody or release admission.
+
+```rust,no_run
+use ic_build::cargo::native::{NativeExecutableSpec, build_native_executable};
+use std::process::Command;
+
+let spec = NativeExecutableSpec {
+    package: "my-package",
+    target_name: "worker",
+    target_kind: "example",
+    build_args: &[],
+    max_message_bytes: 16 * 1024 * 1024,
+};
+let built = build_native_executable(&spec, || {
+    let mut cargo = Command::new("cargo");
+    cargo.current_dir("/checkout");
+    cargo
+}, std::io::stderr())?;
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
 ## Development
 
 Shared Tooling 0.11.2 is pinned in

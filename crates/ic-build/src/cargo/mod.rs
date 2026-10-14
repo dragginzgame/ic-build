@@ -7,6 +7,8 @@
 #[cfg(test)]
 mod tests;
 
+#[cfg(unix)]
+pub mod native;
 pub mod packages;
 
 use crate::batch::{BatchLabelError, validate_labels};
