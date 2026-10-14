@@ -3,6 +3,12 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.2.8]
+
+- Use IC Host 0.17.9's opt-in Unix test fixture writer and remove both local
+  executable-script implementations. Keep fixture content and assertions with
+  IC Build ([#18](https://github.com/dragginzgame/ic-build/issues/18)).
+
 ## [0.2.7] - 2026-10-14
 
 - Require IC Host 0.17.8's checked native permission conversion, preventing

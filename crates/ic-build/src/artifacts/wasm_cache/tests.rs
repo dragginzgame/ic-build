@@ -1,3 +1,6 @@
+#[cfg(unix)]
+use ic_host_process::testing::write_executable_script;
+
 use super::{
     IncompleteBuildDirectory, MetadataPackage, ProgressReporter,
     SharedIncrementalTargetMaintenanceConfig, SharedIncrementalTargetMaintenanceFailureMode,
@@ -38,7 +41,7 @@ use std::{
 };
 
 #[cfg(unix)]
-use crate::artifacts::test_support::{fake_wasm_build_spec, write_executable_script};
+use crate::artifacts::test_support::fake_wasm_build_spec;
 #[cfg(unix)]
 use std::{
     fs::FileTimes,
@@ -54,7 +57,8 @@ fn canonical_fixture(path: &Path) -> PathBuf {
 fn shim_compiler_identity_invalidates_exact_cache_and_explicit_rustc_takes_precedence() {
     let (root, spec) = fake_wasm_build_spec("shim-compiler-identity");
     let compiler = root.join("selected-rustc");
-    write_executable_script(&compiler, "#!/bin/sh\nprintf 'selected-compiler-A\\n'\n");
+    write_executable_script(&compiler, "#!/bin/sh\nprintf 'selected-compiler-A\\n'\n")
+        .expect("write executable test script");
     let spec = spec.with_rustc_program(compiler.as_os_str());
     let first = build_wasm_canisters_cached(&spec).unwrap();
     assert!(matches!(first, WasmBuildOutcome::Built { .. }));
@@ -62,7 +66,8 @@ fn shim_compiler_identity_invalidates_exact_cache_and_explicit_rustc_takes_prece
         build_wasm_canisters_cached(&spec).unwrap(),
         WasmBuildOutcome::Reused { .. }
     ));
-    write_executable_script(&compiler, "#!/bin/sh\nprintf 'selected-compiler-B\\n'\n");
+    write_executable_script(&compiler, "#!/bin/sh\nprintf 'selected-compiler-B\\n'\n")
+        .expect("write executable test script");
     let second = build_wasm_canisters_cached(&spec).unwrap();
     assert!(matches!(second, WasmBuildOutcome::Built { .. }));
     assert_ne!(first.record().fingerprint(), second.record().fingerprint());
@@ -807,7 +812,8 @@ fn batch_input_snapshot_reuses_compatible_toolchain_and_metadata_resolution() {
             invocation_log.display(),
             PathBuf::from(cargo).display(),
         ),
-    );
+    )
+    .expect("write executable test script");
     let target = root.join("exact");
     let specs = [
         WasmBuildSpec::new(&root, &target, &["fixture_a"], "debug")

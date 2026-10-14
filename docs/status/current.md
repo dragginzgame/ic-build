@@ -1,5 +1,43 @@
 # Current handoff
 
+## Published Host fixture adoption and isolated Canic PR — 2026-10-14
+
+IC Build HEAD is published 0.2.7 source
+`68d21a913f41927be952acd68ec52bc941a82900`. Its
+[exact CI](https://github.com/dragginzgame/ic-build/actions/runs/38535022329)
+passes Linux, native macOS 15 Intel/Apple Silicon and lint/security. Those
+released results do not qualify the new Host fixture graph described below.
+
+Host 0.17.9 is published from `6fd078d9b914fff530b1efe521dc08ce18b97cc0`.
+For [#18](https://github.com/dragginzgame/ic-build/issues/18), IC Build now imports
+its canonical executable-script writer directly in unit and integration fixtures
+and deletes both local implementations and their module declarations. Fixture
+contents and assertions stay local; fallible writes retain explicit test-call
+failure. Only the Unix dev dependency enables `test-support`; production feature
+inspection shows the process dependency with no enabled features. The process
+catalog minimum and selected lock advance to 0.17.9; other selections stay intact.
+
+Compatible pending notes select 0.2.8; own metadata remains 0.2.7. Full Linux
+`make ci lint check-secrets` passes with 164 units, actual Cargo/Wasm, process,
+handoff and example fixtures, strict Clippy/docs and actual Rust 1.88. Evidence is
+under `/tmp/ic-build-018/`. The first manifest-ordering failure and the successful
+final gate are both retained. Delivery and exact native qualification of this
+new fixture graph remain outstanding; no producer Git or release operation ran.
+
+The maintainer requests a PR for
+[Canic #542](https://github.com/dragginzgame/canic/issues/542), superseding the
+earlier queue decision for that isolated delivery. Remote Canic main remains
+`25b73cd403b20b4e148c6e340f8c760a26d97f6e` (0.111); its local 0.112 source and
+large concurrent batch are preserved. The isolated contribution includes the
+library-only command prerequisite and binds that same selector into complete-build
+identity. It preserves record encoding/namespace and retained artifacts, without
+a second reader or cleanup. [Canic PR #546](https://github.com/dragginzgame/canic/pull/546)
+delivers commit `d616547a1643edac1b2823b581a3bd19ddce6e06` for review against
+main. Its 95 build/reuse cases (three governed cases ignored), 18 bootstrap
+cases, strict Host library/test Clippy and actual Rust 1.91 checking pass.
+PR evidence is under `/tmp/ic-build-canic-542-pr/` and `/tmp/canic-542-*.log`;
+native and complete application acceptance remain distinct from these checks.
+
 ## Published 0.2.6 and registry Canic qualification — 2026-10-14
 
 Registry 0.2.6 names `8afa2d66c4d49a84154f1e1c1904dc033622b585`, checksum

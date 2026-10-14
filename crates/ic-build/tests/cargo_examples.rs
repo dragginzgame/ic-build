@@ -2,6 +2,9 @@
 
 mod support;
 
+#[cfg(unix)]
+use ic_host_process::testing::write_executable_script;
+
 use ic_build::artifacts::{
     CapturedArtifact, InputEvidence, InputEvidenceError, InputEvidenceSpec,
     ResolvedCargoBuildInputs, WasmBuildError, WasmBuildSpec, build_wasm_canisters_cached,
@@ -284,10 +287,11 @@ fn external_command_keeps_caller_failure_deadline_and_cancellation_policy() {
     use std::process::Stdio;
     let root = workspace();
     let program = root.join("cargo-script");
-    support::executable::write_executable_script(
+    write_executable_script(
         &program,
         "#!/bin/sh\nprintf diagnostic >&2\nprintf evidence\nexit 37\n",
-    );
+    )
+    .expect("write executable test script");
     let spec = recipe(&root).with_cargo_program(&program);
     let limits = OutputLimits {
         stdout: OutputLimit::Terminate(1024),
@@ -305,10 +309,11 @@ fn external_command_keeps_caller_failure_deadline_and_cancellation_policy() {
     assert_eq!(error.evidence.status.unwrap().code(), Some(37));
     assert_eq!(error.evidence.stdout, b"evidence");
     assert_eq!(error.evidence.stderr, b"diagnostic");
-    support::executable::write_executable_script(
+    write_executable_script(
         &program,
         "#!/bin/sh\nprintf diagnostic >&2\nexec sleep 30\n",
-    );
+    )
+    .expect("write executable test script");
     let error = capture_command(
         &mut spec.cargo_build_command().unwrap(),
         OutputLimits {

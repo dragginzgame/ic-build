@@ -4,6 +4,9 @@
 
 mod support;
 
+#[cfg(unix)]
+use ic_host_process::testing::write_executable_script;
+
 use ic_build::artifacts::{
     SharedIncrementalTargetMaintenanceOutcome, SharedIncrementalTargetPrunePolicy,
     WasmBuildOutcome, WasmBuildSpec, build_wasm_canisters_cached,
@@ -16,7 +19,6 @@ use std::{
     process::Command,
     time::Duration,
 };
-use support::executable::write_executable_script;
 use support::unique_temp_directory;
 use support::wait::wait_for_path;
 
@@ -196,7 +198,8 @@ if [ \"$1\" = \"build\" ]; then\n\
   : > \"$IC_TESTKIT_OVERLAP_FILE\"\n\
 fi\n\
 exec \"$REAL_CARGO\" \"$@\"\n",
-    );
+    )
+    .expect("write executable test script");
 }
 
 fn spawn_worker(executable: &Path, root: &Path, worker: &str) -> std::process::Child {

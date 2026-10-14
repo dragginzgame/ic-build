@@ -1,3 +1,6 @@
+#[cfg(unix)]
+use ic_host_process::testing::write_executable_script;
+
 use super::{
     BatchMaintenanceTracker, LabeledWasmBuildSpec, WasmBuildBatchConfig,
     WasmBuildBatchContractError, WasmBuildBatchProgressEvent, build_wasm_canisters_cached_batch,
@@ -13,7 +16,7 @@ use std::{path::Path, time::Duration};
 #[cfg(unix)]
 use crate::artifacts::{
     SharedIncrementalTargetMaintenanceOutcome, WasmBuildInputSnapshot, WasmBuildSession,
-    test_support::{fake_wasm_build_spec, unique_temp_directory, write_executable_script},
+    test_support::{fake_wasm_build_spec, unique_temp_directory},
 };
 #[cfg(unix)]
 use std::{fs, os::unix::fs::symlink, sync::Mutex};
@@ -145,7 +148,8 @@ fn batch_failure_retains_partial_metadata_timing() {
     write_executable_script(
         &cargo,
         b"#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 'cargo 1.0.0'; exit 0; fi\nsleep 0.02\necho 'synthetic metadata failure' >&2\nexit 23\n",
-    );
+    )
+    .expect("write executable test script");
     let specs = [LabeledWasmBuildSpec::new(
         "metadata-failure",
         WasmBuildSpec::new(&root, &root.join("target"), &["fixture"], "debug")
@@ -172,7 +176,8 @@ fn malformed_shared_metadata_is_reported_for_every_entry() {
     write_executable_script(
         &cargo,
         b"#!/bin/sh\ncase \"$1\" in\n--version) echo 'cargo 1.0.0' ;;\nmetadata) echo '{}' ;;\n*) exit 97 ;;\nesac\n",
-    );
+    )
+    .expect("write executable test script");
     let specs = [
         LabeledWasmBuildSpec::new("first", spec.clone()),
         LabeledWasmBuildSpec::new("second", spec),

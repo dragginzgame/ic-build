@@ -4,6 +4,9 @@
 
 mod support;
 
+#[cfg(unix)]
+use ic_host_process::testing::write_executable_script;
+
 use ic_build::artifacts::{
     ArtifactCacheOutcome, ArtifactCachePreparation, ArtifactCachePrunePolicy, ArtifactCacheSpec,
     LabeledArtifactCacheSpec, LabeledWasmBuildSpec, SharedIncrementalTargetPrunePolicy,
@@ -31,7 +34,7 @@ fn fixture() -> PathBuf {
     fs::write(root.join("workspace/src/lib.rs"), "pub fn fixture() {}\n").unwrap();
     // Use real Cargo metadata but synthetic variant-specific build bytes. No
     // Wasm toolchain or canister runtime is needed to exercise cache ownership.
-    support::executable::write_executable_script(
+    write_executable_script(
         &root.join("cargo.sh"),
         br#"#!/bin/sh
 if [ "$1" != build ]; then exec "$REAL_CARGO" "$@"; fi
@@ -40,7 +43,8 @@ output="$CARGO_TARGET_DIR"
 mkdir -p "$output/wasm32-unknown-unknown/debug"
 printf '%s' "$VARIANT" > "$output/wasm32-unknown-unknown/debug/fixture.wasm"
 "#,
-    );
+    )
+    .expect("write executable test script");
     root
 }
 

@@ -1,11 +1,11 @@
+#[cfg(unix)]
+use ic_host_process::testing::write_executable_script;
+
 use std::{
     fs,
     path::PathBuf,
     sync::atomic::{AtomicU64, Ordering},
 };
-
-#[cfg(unix)]
-pub(super) use crate::test_executable::write_executable_script;
 
 static TEMP_DIRECTORY_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -57,7 +57,8 @@ fi
 exec {quoted_cargo} "$@"
 "#
         ),
-    );
+    )
+    .expect("write executable test script");
     let spec =
         super::wasm_cache::WasmBuildSpec::new(&root, &root.join("exact"), &["fixture"], "debug")
             .with_isolated_builds()

@@ -2,6 +2,9 @@
 
 mod support;
 
+#[cfg(unix)]
+use ic_host_process::testing::write_executable_script;
+
 use ic_host_fs::read::read_file;
 
 use ic_build::artifacts::{
@@ -28,7 +31,6 @@ use support::unique_temp_directory as unique_temp_dir;
 #[cfg(unix)]
 use std::ffi::OsString;
 #[cfg(unix)]
-use support::executable::write_executable_script;
 #[cfg(unix)]
 use support::wait::wait_for_path;
 
@@ -1272,7 +1274,8 @@ if [ \"$1\" = \"build\" ]; then\n\
   while [ ! -f \"$IC_TESTKIT_RELEASE_BUILD\" ]; do sleep 0.05; done\n\
 fi\n\
 exec \"$REAL_CARGO\" \"$@\"\n",
-    );
+    )
+    .expect("write executable test script");
 }
 
 fn real_wasm_workspace() -> std::path::PathBuf {

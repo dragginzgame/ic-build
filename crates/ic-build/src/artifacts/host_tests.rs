@@ -1,4 +1,7 @@
-use super::test_support::{fake_wasm_build_spec, unique_temp_directory, write_executable_script};
+#[cfg(unix)]
+use ic_host_process::testing::write_executable_script;
+
+use super::test_support::{fake_wasm_build_spec, unique_temp_directory};
 use super::{ArtifactCachePreparation, ArtifactCacheSpec, prepare_artifact_cache};
 use std::{ffi::OsString, fs, path::Path, time::Duration};
 use {
@@ -16,7 +19,7 @@ fn admitted_shared_tool_output_is_published_and_invalidated_by_tool_bytes() {
         .unwrap();
     let script = b"#!/bin/sh\nif [ \"$1\" = --version ]; then printf 'fixture-tool 1.0\\n'; else printf 'compiled output'; fi\n";
     let executable = root.join("producer");
-    write_executable_script(&executable, script);
+    write_executable_script(&executable, script).expect("write executable test script");
     let executable = resolve_executable(Path::new("./producer"), &root, &[]).unwrap();
     let context = ExecutionContext {
         current_dir: &root,
@@ -62,7 +65,8 @@ fn admitted_shared_tool_output_is_published_and_invalidated_by_tool_bytes() {
     let ArtifactCachePreparation::Reused(reused) = prepare_artifact_cache(&spec).unwrap() else {
         panic!("same admitted producer must reuse its output");
     };
-    write_executable_script(&executable, b"#!/bin/sh\nexit 1\n");
+    write_executable_script(&executable, b"#!/bin/sh\nexit 1\n")
+        .expect("write executable test script");
     assert!(matches!(
         tool.run(&[OsString::from("compile")], &context, limits),
         Err(ToolError::Artifact(ArtifactError::DigestMismatch { .. }))
@@ -87,11 +91,12 @@ fn shim_wasm_and_post_link_caches_reuse_and_invalidate_independently() {
     let (root, spec) = fake_wasm_build_spec("post-link-composition");
     let root = root.canonicalize().unwrap();
     let compiler = root.join("selected-rustc");
-    write_executable_script(&compiler, "#!/bin/sh\nprintf 'compiler-A\\n'\n");
+    write_executable_script(&compiler, "#!/bin/sh\nprintf 'compiler-A\\n'\n")
+        .expect("write executable test script");
     let spec = spec.with_rustc_program(compiler.as_os_str());
     let executable = root.join("optimizer");
     let script = b"#!/bin/sh\nif [ \"$1\" = --version ]; then printf 'optimizer 1\\n'; else /bin/cp \"$1\" \"$3\"; printf 'run\\n' >> \"$0.calls\"; fi\n";
-    write_executable_script(&executable, script);
+    write_executable_script(&executable, script).expect("write executable test script");
     let context = ExecutionContext {
         current_dir: &root,
         environment: &[],
@@ -161,10 +166,11 @@ fn shim_wasm_and_post_link_caches_reuse_and_invalidate_independently() {
         fs::read_to_string(root.join("optimizer.calls")).unwrap(),
         "run\n"
     );
-    write_executable_script(&compiler, "#!/bin/sh\nprintf 'compiler-B\\n'\n");
+    write_executable_script(&compiler, "#!/bin/sh\nprintf 'compiler-B\\n'\n")
+        .expect("write executable test script");
     assert_eq!(acquire(&optimizer).unwrap(), (false, false));
     let changed_script = [script.as_slice(), b"# changed optimizer bytes\n"].concat();
-    write_executable_script(&executable, &changed_script);
+    write_executable_script(&executable, &changed_script).expect("write executable test script");
     let optimizer = admit(&changed_script);
     assert_eq!(acquire(&optimizer).unwrap(), (true, false));
     assert_eq!(acquire(&optimizer).unwrap(), (true, true));
@@ -200,7 +206,8 @@ fn failed_admitted_producers_cannot_publish_or_reuse_staged_output() {
         let failing_script = format!(
             "#!/bin/sh\nif [ \"$1\" = --version ]; then printf 'producer 1\\n'; else printf '\\000asm\\001\\000\\000\\000' > \"$1\"; printf 'run\\n' >> \"$0.calls\"; {ending}; fi\n"
         );
-        write_executable_script(&executable, &failing_script);
+        write_executable_script(&executable, &failing_script)
+            .expect("write executable test script");
         let producer = AdmittedTool::admit(
             &ToolSpec {
                 executable: &executable,
