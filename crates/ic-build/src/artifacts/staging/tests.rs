@@ -169,3 +169,75 @@ fn retained_capture_survives_owner_and_source_without_retaining_other_captures()
     assert!(!path.exists());
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn retain_to_finalizes_exact_bytes_and_preserves_replacement_semantics() {
+    let root = unique_temp_directory("retain-final");
+    let source = root.join("producer");
+    let destination = root.join("final");
+    fs::write(&source, b"exact capture").unwrap();
+    fs::write(&destination, b"previous").unwrap();
+    let capture = CapturedArtifact::capture(&source, &root, 100).unwrap();
+    let stage = capture.path().parent().unwrap().to_owned();
+    fs::remove_file(source).unwrap();
+    assert_eq!(capture.retain_to(&destination).unwrap(), destination);
+    assert_eq!(fs::read(destination).unwrap(), b"exact capture");
+    assert!(!stage.exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn retain_to_rename_failure_reports_original_capture_custody() {
+    let root = unique_temp_directory("retain-rename-failure");
+    let source = root.join("producer");
+    let destination = root.join("occupied");
+    fs::write(&source, b"retained failure").unwrap();
+    fs::create_dir(&destination).unwrap();
+    let capture = CapturedArtifact::capture(&source, &root, 100).unwrap();
+    let retained = capture.path().to_owned();
+    let error = capture.retain_to(&destination).unwrap_err();
+    fs::remove_file(source).unwrap();
+    assert_eq!(error.retained_path, retained);
+    assert!(error.staging_directory.is_dir());
+    assert_eq!(fs::read(&error.retained_path).unwrap(), b"retained failure");
+    assert_eq!(fs::read_dir(destination).unwrap().count(), 0);
+    let kind = error.source.kind();
+    let mapped = io::Error::new(kind, error);
+    assert_eq!(mapped.kind(), kind);
+    let retention = mapped
+        .get_ref()
+        .unwrap()
+        .downcast_ref::<super::CaptureRetentionError>()
+        .unwrap();
+    assert_eq!(
+        std::error::Error::source(retention)
+            .unwrap()
+            .downcast_ref::<io::Error>()
+            .unwrap()
+            .kind(),
+        kind
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn retain_to_cleanup_failure_reports_final_bytes_and_leaves_extra_evidence() {
+    let root = unique_temp_directory("retain-cleanup-failure");
+    let source = root.join("producer");
+    let destination = root.join("final");
+    fs::write(&source, b"final exact bytes").unwrap();
+    let capture = CapturedArtifact::capture(&source, &root, 100).unwrap();
+    let stage = capture.path().parent().unwrap().to_owned();
+    fs::write(stage.join("extra"), b"other evidence").unwrap();
+    let error = capture.retain_to(&destination).unwrap_err();
+    fs::remove_file(source).unwrap();
+    assert_eq!(error.retained_path, destination);
+    assert_eq!(error.staging_directory, stage);
+    assert_eq!(
+        fs::read(&error.retained_path).unwrap(),
+        b"final exact bytes"
+    );
+    assert_eq!(fs::read(stage.join("extra")).unwrap(), b"other evidence");
+    assert!(error.to_string().contains("final"));
+    fs::remove_dir_all(root).unwrap();
+}

@@ -4,6 +4,33 @@ These generic APIs are extracted from IC Testkit. Recipes, budgets, tool
 selection, credentials, source custody and lifecycle remain with the caller.
 The existing v1 retained formats and namespaces are unchanged.
 
+## Cargo observations
+
+`cargo::observation::observe_metadata` accepts a `CargoMetadataSpec`, caller-selected
+`Command` and Host `OutputLimits`. The command retains its executable, launcher
+arguments and complete environment. The specification selects the manifest,
+dependency inclusion, optional target filter, lock/offline policy and features.
+No-dependency catalogs and resolved graphs are distinct observations; a catalog
+or union graph does not prove role-specific dependency activation.
+
+`observe_tree` uses the same complete-output capture with caller-selected package
+ID specifications, target, edge kinds, format and features. It returns depth-
+prefixed, non-deduplicated UTF-8 text; consumers own alias/role correlation.
+Feature-safe grouping also uses this observer. Both observations retain typed Host
+spawn, capture and unsuccessful-exit errors, including bounded diagnostic and
+truncation evidence. Successful truncated output is rejected before parsing.
+There is no default elapsed-time deadline; callers select any timeout in the limits.
+
+`cargo::observation::schema` exposes the upstream `cargo_metadata` representation
+and build-message types. Consumers use those types directly rather than retaining
+local metadata mirrors. Metadata is decoded from complete JSON using that schema.
+[Cargo's `build-script-executed` messages](https://doc.rust-lang.org/cargo/reference/external-tools.html#build-script-output)
+identify the exact `package_id` and `out_dir`, including cached build-script
+results. They can bind consumer-owned
+retained export evidence; unlabelled target-directory `output` files cannot prove
+that binding. Package/recipe selection, retained receipts, source custody and
+before/after input validation remain consumer responsibilities.
+
 ## Deployable Wasm LTO
 
 Full LTO is the leading candidate for a shared deployable-Wasm release default.
@@ -150,6 +177,16 @@ releases only its temporary staging directory.
 caller-owned evidence retention. It preserves the bytes after the record is
 consumed; the caller owns later cleanup and custody. It creates no cache or
 release admission. Normal close/Drop behavior remains unchanged.
+
+`retain_to(destination)` transfers custody before moving the exact capture with
+`std::fs::rename` and removes only its empty staging child on success. The caller
+admits the destination and owns replacement policy, subsequent custody and
+cleanup. `CaptureRetentionError` preserves the native I/O cause, the actual
+retained file path and the staging directory: rename refusal leaves the original
+capture, while cleanup refusal leaves the final file and any extra evidence.
+Neither failure retries or deletes retained bytes. The API is additive pending
+0.3.3; Jobs adoption follows publication at
+[#26 — Capture finalization](https://github.com/dragginzgame/ic-build/issues/26).
 
 These temporary owners create no cache entry, cache hit or release admission.
 They do not prune retained artifacts, run transforms, install tools or select
