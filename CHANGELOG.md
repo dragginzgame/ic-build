@@ -3,7 +3,7 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.3.1]
+## [0.3.1] - 2026-10-14
 
 - Adopt Shared Tooling 0.12.7 and delegate release metadata preparation and
   exact-commit validation to its canonical transaction helper, preserving local
