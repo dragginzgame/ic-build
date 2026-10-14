@@ -3,6 +3,12 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.2.7]
+
+- Require IC Host 0.17.8's checked native permission conversion, preventing
+  selection of the earlier retained-staging macOS compilation defect
+  ([Host #84](https://github.com/dragginzgame/ic-host-tooling/issues/84)).
+
 ## [0.2.6] - 2026-10-14
 
 - Add exact Cargo depfile reads through the existing discovery owner, allowing

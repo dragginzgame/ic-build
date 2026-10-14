@@ -1,5 +1,44 @@
 # Current handoff
 
+## Published 0.2.6 and registry Canic qualification — 2026-10-14
+
+Registry 0.2.6 names `8afa2d66c4d49a84154f1e1c1904dc033622b585`, checksum
+`226c5e59d1226d272d5940155f8ed58abf4630fbd4cbd6bed83ca5143608e5a9`.
+Its [exact CI](https://github.com/dragginzgame/ic-build/actions/runs/38530184826)
+passes Linux x86-64, native macOS 15 Intel/Apple Silicon and lint/security.
+[#15](https://github.com/dragginzgame/ic-build/issues/15) and
+[#16](https://github.com/dragginzgame/ic-build/issues/16) close on those native
+results. The selected-record API at #17 is published and natively qualified.
+
+The local workspace now requires compatible Host 0.17.8 for artifacts/fs/process,
+preserving features and the already-selected lock byte-for-byte. This prevents
+older retained-staging source from satisfying the advertised minimum. Compatible
+pending notes select 0.2.7; own metadata remains 0.2.6. Full Linux
+`make ci lint check-secrets` passes with 164 units and actual Rust 1.88.
+
+The concurrent Canic owner has applied the registry 0.2.6 requirement and exact
+record adapter to its existing dirty 0.112 batch. This task preserves those
+incoming files and qualifies a frozen current source with actual registry Build
+0.2.6/Host 0.17.8, with no producer override or lock change. All 91 build-family
+cases pass (three governed cases ignored), plus strict Host library/test Clippy
+and actual Rust 1.91 all-feature library compilation.
+
+Both dedicated and embedded managed Blob build-only workers complete four-artifact
+builds, then verify exact release-ID reuse under matched launcher environments.
+A new malformed foreign depfile was added to the shared output target during
+the dedicated cold build and retained through both compositions. It does not
+contaminate their selected input graphs. The first embedded repeat is retained
+in the evidence: the harness changed launcher environment, and the cache
+correctly rebuilt. Matched repetition then reused all four verified artifacts.
+No PocketIC server or deployment ran. Evidence is under `/tmp/ic-build-canic-026/`.
+
+The bounded producer #17 closes; Canic #544 retains current-source delivery and
+complete application/native acceptance. Larger #1/#9/#12 and Canic #528/#529/#530
+remain open. The explicit #542 release hold remains; Canic 0.112 is not delivered.
+Host 0.17.8's unrelated Darwin FIFO-test compilation defect is reported on
+[Host #85](https://github.com/dragginzgame/ic-host-tooling/issues/85); its full
+fixture acceptance is distinct from the successful IC Build native gates.
+
 ## Selected-record input boundary and Canic handoff — 2026-10-14
 
 Pending compatible 0.2.6 adds `read_cargo_depfile_inputs` at the existing input

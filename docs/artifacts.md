@@ -755,7 +755,8 @@ resolution, execution and Git provenance belong to `ic_host_process`; Candid
 extraction and response decoding belong to `ic_host_tools`. Its pure Candid text
 APIs are portable; extraction, execution, resolution and provenance are Unix-only.
 Structural Wasm inspection does not replace PocketIC's runtime validation.
-The IC Build 0.2 family selects IC Host 0.17. Align direct Host dependencies
+The workspace requires compatible IC Host 0.17.8 releases, including checked
+native permission conversion for retained staging on macOS. Align direct Host dependencies
 when passing `OutputLimits` or matching typed Host failures across the engine
 boundary. This crate identity changed at IC Build 0.2.0; an `ic-build = "0.1"`
 requirement does not select it. Process execution returns completed
