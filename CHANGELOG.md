@@ -3,7 +3,7 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.6.0]
+## [0.6.0] - 2026-10-15
 
 - **Breaking:** move `artifacts::workspace_root_for` to
   `cargo::observation::workspace_root_for` and require the caller's Cargo command
