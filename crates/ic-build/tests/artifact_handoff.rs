@@ -24,14 +24,12 @@ use std::{
 
 fn fixture() -> PathBuf {
     let root = support::unique_temp_directory("handoff");
-    fs::create_dir_all(root.join("workspace/src")).unwrap();
-    fs::write(
-        root.join("workspace/Cargo.toml"),
-        "[package]\nname = \"fixture\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n\
-         [lib]\ncrate-type = [\"cdylib\"]\n",
+    support::cargo::write_fixture_package(
+        &root.join("workspace"),
+        "[workspace]\n[lib]\ncrate-type = [\"cdylib\"]\n",
+        "pub fn fixture() {}\n",
     )
     .unwrap();
-    fs::write(root.join("workspace/src/lib.rs"), "pub fn fixture() {}\n").unwrap();
     // Use real Cargo metadata but synthetic variant-specific build bytes. No
     // Wasm toolchain or canister runtime is needed to exercise cache ownership.
     write_executable_script(

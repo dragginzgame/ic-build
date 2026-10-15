@@ -1,31 +1,157 @@
 # Current handoff
 
-## Cargo inherited Rust flags — pending 0.5.1
+## Inherited Cargo Rust flags — pending 0.6.2
 
-PR #37 is reconciled with released 0.5.0 (`4feef85`), preserving published
-metadata and the Host 0.18.6 graph. The real-Cargo harness passes its five child
-scenarios on actual Rust 1.91; strict library/test Clippy, warning-denied Rustdoc
-and formatting pass. Hosted checks must qualify the new head. Evidence is retained
-in `/tmp/canic-upstream-prs-20261015/`; consumer registry adoption still awaits
-publication. No integration merge, release or sibling edit ran.
+PR #37 now includes released 0.6.1 `f5ee4be` through a normal topic merge. The
+existing helper and child-process Cargo harness are unchanged; the published
+metadata, Host 0.19 graph, configuration observations and internal selection/cache
+cleanup are preserved. Compatible notes select 0.6.2 without changing versions
+or dependency selection. The command's remap choices, target/configuration policy
+and source custody remain consumer-owned.
 
-[Build #36 — Cargo Rust flags](https://github.com/dragginzgame/ic-build/issues/36)
-extracts inherited-variable composition and its real-Cargo child-process controls
-from IcyDB. Consumers retain remap choices, target/configuration selection and
-command environment policy. No dependency, cache, persisted format or build mode
-is added. No-addition calls leave inheritance alone; encoded values, including
-empty values, precede whitespace-split ordinary flags.
+The five real-Cargo child scenarios pass on actual Rust 1.91 after the refresh.
+Strict all-target Clippy, actual MSRV all-target checking, warning-denied Rustdoc,
+formatting and documentation links pass on Linux. Fresh evidence is retained at
+`/tmp/ic-build-pr37-refresh-20261015/`. Required hosted checks must qualify this
+updated head separately. Earlier IcyDB deletion receipts remain bound to their
+original Build 0.4 / Host 0.18.5 graph; no current consumer adoption is claimed.
 
-The five real-Cargo child cases, strict library/test Clippy, warnings-denied
-Rustdoc and actual Rust 1.91 tests pass after merging released 0.4.0 main.
-The refreshed isolated IcyDB consumer uses the incoming Build 0.4 / Host 0.18.5
-graph; strict build all-target lint and all 21 build-library cases pass, including
-real Wasm-cache flag identity. Only the unpublished Build API uses a temporary
-source override. Normal IcyDB already qualifies published Build 0.4.0 with 22
-build-library and 14 report cases; flag deletion still awaits publication.
-Native macOS and full release gates are unrun. Released main's metadata/lock
-are retained without a manual version bump or release. Active sibling work is
-untouched; evidence is retained at `/home/adam/projects/icydb/.cache/build-refresh-02742`.
+[#36](https://github.com/dragginzgame/ic-build/issues/36) owns producer acceptance;
+[IcyDB #307](https://github.com/dragginzgame/icydb/issues/307) owns that consumer's
+registry adoption. Canic is being handled by the maintainer. No integration-branch
+merge, release, publication or sibling-checkout change ran.
+
+## Cargo selection, exact-entry preparation and fixtures — pending 0.6.1
+
+Cargo arguments are interpreted once when the specification is constructed or
+its argument builder is replaced. Validation, metadata commands and batch grouping
+consume those retained facts; batching borrows the metadata argument slice.
+Original OS-native arguments still feed command execution and fingerprinting.
+The public builder and conservative malformed-argument refusal behavior remain.
+Cold Wasm builds and exact-entry reconstruction share retention-safe preparation
+and cleanup ownership. Private unit/integration fixture scaffolding has one source
+owner; scenario-specific producers and process controls remain with their tests.
+
+All three selection, 65 Wasm-cache, 12 Wasm-batch and four handoff cases pass on
+actual Rust 1.91 on Linux; the handoff worker remains intentionally ignored by
+the test harness and is selected by its parent process case. Strict all-target
+Clippy, actual MSRV checking, Rustdoc, formatting and local links pass.
+A temporary comparator using saved original validators/projection agrees on
+287934 validation combinations and metadata for every sampled argument sequence,
+including native invalid UTF-8. Five real Cargo recipes preserve exact digests
+against registry Build 0.6.0. Equivalent release flag spellings still have
+distinct identities, as required by the existing raw-argument fingerprint.
+
+[#46](https://github.com/dragginzgame/ic-build/issues/46) records implementation
+and qualification. Compatible cleanup extends pending 0.6.1 without changing
+package versions, manifests, lock selection or the real index. Incoming source
+and the earlier unpublished Host adoptions remain intact. Before-images and
+logs are retained at `/tmp/ic-build-internal6-20261015/`; local full-suite,
+native macOS and release execution remain separate.
+
+## Streaming capture and shared Host mechanics — pending 0.6.1
+
+Captured outputs now stream through published Host 0.19's bounded copy and
+durable writer, removing the complete in-memory buffer. Regular-file/initial
+size admission precedes staging; stream limits, original input errors, durable
+cleanup evidence and capture lifetime remain. Twelve staging, 30 transaction and
+six transaction-batch cases pass on actual Rust 1.91. Strict Clippy, actual MSRV,
+Rustdoc, formatting and documentation links pass on Linux. This compatible work
+extends 0.6.1 notes without changing the package version or dependency selection.
+
+[Host PR #135](https://github.com/dragginzgame/ic-host-tooling/pull/135) delivers
+the bounded visitor and production directory allocator from isolated source
+`b1d7c71` on released Host 0.19.0. Host fixture allocation uses that sole engine;
+Build cleanup/lifetime, framing and exact-size admission remain here. Host's
+actual Rust 1.88 selected tests, strict affected lint/docs, MSRV, formatting,
+links and snapshot checks pass. Normal sibling checkouts remain untouched.
+
+The two Build caller deletions are implemented in an isolated consumer. All 125
+selected digest/staging/transaction/batch/Wasm-cache cases, strict Clippy and
+actual Rust 1.91 checking pass against the coherent Host candidate family. Four
+dual-source Cargo recipes preserve exact fingerprints against registry Build
+0.6.0. The normal checkout retains published dependencies and its existing loops
+until a reviewed Host release supplies the new APIs. The checked replay patch,
+before-images, exact graph and logs are retained under
+`/tmp/ic-build-cuts6-20261015/`; [#45](https://github.com/dragginzgame/ic-build/issues/45)
+tracks publication and activation. Incoming configuration work and the real
+index/manifests/lock are preserved. Native macOS and release execution remain
+separate.
+
+## Published 0.6.0, Canic acceptance and shared configuration — pending 0.6.1
+
+Published 0.6.0 is `d0eaf2d95fc4191eab1b59a80d19c43816580f08`. The cached
+registry archive and sparse-index checksum agree on SHA-256
+`40afef44b47e796ce55c412e20cf96a27ab2f7d04b6bef6c9eb1c66e42528fde`;
+its provenance identifies that commit and its normalized manifest selects Host
+0.19 and Rust 1.91. The redundant Host-alignment PR #44 is closed as implemented
+by this release, without another merge or branch deletion.
+
+Canic's owner has adopted registry Build 0.6 and consolidated workspace discovery
+under explicit fixture command/limits policy. Its default/governed compilation,
+strict fixture lint and selected installed checkpoint case pass on Build 0.6,
+Host 0.19 and Testkit 0.45. Recorded root/private graph digests still match the
+normal checkout at inspection. These are the owner's retained receipts under
+`/tmp/canic-build06-adoption/`, not a fresh full Canic validation or live Backup
+acceptance claim. Its active source and staging are untouched.
+
+The exact implementation from PR #38 `aaff82542b899b4781d4cd22e863101107a707e9`
+is applied locally on released 0.6. Cargo configuration discovery/include traversal
+now has one owner at `cargo::environment`; the Wasm engine consumes its facts.
+The three public cases and all 65 Wasm-cache cases pass on actual Rust 1.91.
+A dual-source consumer comparing registry 0.6 with this source preserves exact
+fingerprints for direct, string/array include and precedence recipes. Cargo 1.91
+itself rejects optional-table include syntax before either resolver; the public
+observation case separately covers optional missing includes. Original failed
+probe evidence remains retained rather than being relabelled as acceptance.
+
+Strict all-target Clippy, actual MSRV, Rustdoc, formatting, links, workspace
+metadata, pins and snapshot verification pass on Linux. README/guide requirements
+now describe published Build 0.6 with Host 0.19. Notes select compatible 0.6.1;
+own package version, lock selection and staging remain unchanged. Canic's
+configuration caller deletion still needs producer publication and consumer
+qualification under #35; the guide records its absence/input-authority boundary.
+Host PR #99 remains open and unpublished, so #43's controlled-capture deletion
+is still gated. Native qualification and release execution remain separate.
+Before-images, source patch and logs are at `/tmp/ic-build-061-issues-20261015/`.
+
+## Directory cleanup, workspace observation and controlled capture — pending 0.6.0
+
+Released source is 0.5.0 `4feef850010ed725edb9b9e9adeaed140baf5106`.
+Owned-directory fields now perform Drop cleanup directly; transaction staging
+still drops before both locks, while explicit close/abort recovery is preserved.
+Workspace discovery moves to `cargo::observation::workspace_root_for` with the
+caller's Command and OutputLimits. The old artifact export is gone. Offline
+membership, auto-install refusal and complete-output admission remain; failed
+commands retain typed Host status, diagnostics and cleanup evidence. In-repository
+callers and the guide use the new contract. This selects 0.6.0 notes without
+changing package metadata.
+
+All 47 affected observation/staging/transaction units, real Cargo membership
+cases and the cross-process artifact-lock parent case pass on actual Rust 1.91.
+Strict all-target Clippy, MSRV compilation, Rustdoc, formatting, links, workspace
+metadata, pins and snapshot checks pass on Linux.
+
+Host candidate `a9fe39d6eed16b302e2f929b331c101da818c69a` extends existing
+PR #99 through normal merges of released 0.18.6 and then 0.19.0 main.
+The unpublished cancellation API accepts explicit cleanup and a shared absolute
+deadline through the existing capture engine. All 68 selected tool/resolution/
+internal process cases, strict affected lint/docs and actual Rust 1.88 checks pass.
+The temporary Build caller deletion passes all 65 Wasm-cache cases, strict Clippy
+and actual Rust 1.91 all-target checking against that coherent Host family, with
+external selections unchanged. Normal Build retains its published implementation
+until a reviewed Host release permits a real minimum and the prepared caller
+deletion.
+
+[#43](https://github.com/dragginzgame/ic-build/issues/43) tracks delivery and
+consumer adoption; native macOS qualification remains separate. Normal sibling
+checkouts, Root staging, package version and lock selection are preserved.
+After an initial approval-review rejection, the maintainer explicitly delegated
+the upstream delivery. Candidate `a9fe39d6` is pushed to existing Host PR #99;
+its description records the updated API and fresh validation. No merge or
+release ran.
+Before-images, candidate source, the adoption patch and raw logs are retained
+under `/tmp/ic-build-cleanup5-20261015/`.
 
 ## Shared Tooling 0.15.0 and registry Host 0.18.6 — 2026-10-15
 

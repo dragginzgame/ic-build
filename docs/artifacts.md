@@ -174,6 +174,10 @@ record through every use of `path()`, including later Cargo commands that may
 overwrite or delete the original output. Multiple captures remain independent,
 including captures of identical source bytes. Closing or dropping a capture
 releases only its temporary staging directory.
+Capture streams through Host's bounded copy and durable writer with constant
+scratch memory. Regular-file and initial size admission happen before staging;
+the stream independently enforces the budget. Keep the source stable throughout
+capture. An open descriptor retains its inode rather than freezing its contents.
 `retain()` explicitly transfers the captured path and its staging child to
 caller-owned evidence retention. It preserves the bytes after the record is
 consumed; the caller owns later cleanup and custody. It creates no cache or
@@ -241,15 +245,35 @@ Query also retains DID selection, public metadata, smoke/deployment lifecycle an
 publication. Host owns generic custom-section framing. This capability does not
 establish Query adoption or native smoke qualification.
 
+## Cargo configuration observations
+
+Pending 0.6.1 exposes the engine's configuration walker through
+`cargo::environment`. `configuration_directories` enumerates invocation ancestors
+and the explicitly supplied Cargo home without reading ambient environment.
+`preferred_configuration` selects `config` before `config.toml`;
+`observe_configurations` follows selected include trees and returns lookup paths,
+stable locations, raw SHA-256 bytes and compiler-override field names.
+
+For Canic adoption, retain its source-custody and release recipe. Keep absent
+candidate paths in pre-build `InputEvidence`; observing existing configuration
+files does not establish authority for a newly discovered include. Choose
+effective versus conservative roots explicitly and validate the expanded input
+set after execution. Preserve typed refusal and retained evidence; no retry or
+cache/release admission comes from observation. Configuration contents are
+excluded from returned facts and malformed-TOML diagnostics. Cargo itself still
+owns which configuration syntax its selected version accepts.
+
 ## Wasm artifact helpers
 
-The host-only `artifacts` module provides workspace-relative paths, dedicated
-test target directories, content-addressed build coordination, Wasm loading,
-and exact generated-artifact freshness checks:
+The host-only `artifacts` module provides content-addressed build coordination,
+retained outputs and exact generated-artifact freshness checks. Consumers select
+their own test target directories.
 
-`workspace_root_for` asks prepared Cargo for actual workspace membership and
-returns `io::Result<PathBuf>`. It supports App layouts, exclusions and independent
-workspaces without guessing from directory names or resolving dependencies.
+`cargo::observation::workspace_root_for` asks caller-selected prepared Cargo for
+actual workspace membership and returns `io::Result<PathBuf>`. Supply a command
+and output limits as with other Cargo observations. It supports App layouts,
+exclusions and independent workspaces without guessing from directory names or
+resolving dependencies, and always selects offline discovery.
 `WasmBuildSpec::new` shares `<workspace>/target/ic-testkit-incremental` compiler
 state across fingerprints by default. Exact final artifacts remain independently
 cached. Select `with_isolated_builds()` only when separate compiler state is
@@ -260,11 +284,21 @@ preserved and need explicit maintenance if no longer wanted.
 ```rust,no_run
 use ic_build::artifacts::{
     ArtifactCachePrunePolicy, WasmBuildOutcome, WasmBuildSpec,
-    build_wasm_canisters_cached, workspace_root_for,
+    build_wasm_canisters_cached,
 };
-use std::time::Duration;
+use ic_build::cargo::observation::workspace_root_for;
+use ic_host_process::tool::{OutputLimit, OutputLimits};
+use std::{process::Command, time::Duration};
 
-let workspace = workspace_root_for(env!("CARGO_MANIFEST_DIR"))
+let workspace = workspace_root_for(
+    env!("CARGO_MANIFEST_DIR"),
+    OutputLimits {
+        stdout: OutputLimit::Terminate(64 * 1024),
+        stderr: OutputLimit::Terminate(64 * 1024),
+        timeout: None,
+    },
+    Command::new("cargo"),
+)
     .expect("resolve the crate's Cargo workspace");
 let target = workspace.join("target").join("pic-wasm");
 let spec = WasmBuildSpec::new(
@@ -811,10 +845,10 @@ resolution, execution and Git provenance belong to `ic_host_process`; Candid
 extraction and response decoding belong to `ic_host_tools`. Its pure Candid text
 APIs are portable; extraction, execution, resolution and provenance are Unix-only.
 Structural Wasm inspection does not replace PocketIC's runtime validation.
-IC Build 0.3.1 requires compatible IC Host 0.18 releases, including checked
-native permission conversion for retained staging on macOS. Align direct Host dependencies
+IC Build 0.6 requires compatible IC Host 0.19 releases. Retained staging still
+uses checked native permission conversion on macOS. Align direct Host dependencies
 when passing `OutputLimits` or matching typed Host failures across the engine
-boundary. Host 0.17 and 0.18 values have different Rust crate identities even
+boundary. Host 0.18 and 0.19 values have different Rust crate identities even
 when their fields match. The earlier IC Build 0.2.0 boundary also means an
 `ic-build = "0.1"` requirement does not select this engine. Process execution returns completed
 results even for nonzero exits: call `require_success()` before admitting or

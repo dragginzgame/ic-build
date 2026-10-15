@@ -7,9 +7,11 @@
 #[cfg(test)]
 mod tests;
 
+pub mod environment;
 pub mod flags;
 pub mod observation;
 pub mod packages;
+pub(crate) mod selection;
 
 use crate::batch::{BatchLabelError, validate_labels};
 use ic_host_process::tool::OutputLimits;

@@ -12,11 +12,10 @@ use super::{
     inspect_shared_incremental_target, integrated_shared_maintenance_result, lock_wasm_build_cache,
     lock_wasm_build_cache_with_progress, locked_package_identities,
     maintain_shared_incremental_target, maintain_shared_incremental_target_at_most_every,
-    materialize_artifacts, metadata_arguments,
-    perform_configured_shared_incremental_target_maintenance, prune_wasm_build_cache,
-    prune_wasm_build_cache_locked, publish_artifact_stamps, reconstruct_exact_cache_entry,
-    resolve_cargo_build_inputs, run_cargo_build, semantic_package_identity, validate_spec,
-    validated_artifact_set,
+    materialize_artifacts, perform_configured_shared_incremental_target_maintenance,
+    prune_wasm_build_cache, prune_wasm_build_cache_locked, publish_artifact_stamps,
+    reconstruct_exact_cache_entry, resolve_cargo_build_inputs, run_cargo_build,
+    semantic_package_identity, validate_spec, validated_artifact_set,
 };
 use crate::artifacts::cache_fs::{
     ArtifactCachePrunePolicy, CACHE_DIRECTORY_TAG_SIGNATURE, directory_logical_size,
@@ -250,7 +249,7 @@ fn metadata_receives_only_resolution_arguments() {
         OsString::from("--features=alpha,beta"),
     ];
     assert_eq!(
-        metadata_arguments(&arguments),
+        crate::cargo::selection::CargoSelection::parse(arguments.to_vec()).metadata_arguments,
         [
             OsString::from("--locked"),
             OsString::from("--features=alpha,beta"),
@@ -394,7 +393,7 @@ fn builders_preserve_os_native_values() {
         .with_inherited_env([OsString::from("RUSTFLAGS")])
         .with_additional_inputs([PathBuf::from("schema")]);
 
-    assert_eq!(spec.cargo_profile_args, [OsString::from("--locked")]);
+    assert_eq!(spec.cargo_selection.arguments, [OsString::from("--locked")]);
     assert_eq!(
         spec.extra_env.get(&OsString::from("MODE")),
         Some(&OsString::from("exact"))
@@ -599,19 +598,10 @@ fn relative_exact_target_is_shared_by_cargo_and_cache_operations() {
 fn public_cargo_input_snapshot_detects_local_source_changes() {
     let root = unique_temp_directory("resolved-cargo-inputs");
     let package = root.join("fixture");
-    fs::create_dir_all(package.join("src")).expect("create Cargo input fixture");
-    fs::write(
-        root.join("Cargo.toml"),
-        "[workspace]\nmembers = [\"fixture\"]\nresolver = \"2\"\n",
-    )
-    .expect("write fixture workspace manifest");
-    fs::write(
-        package.join("Cargo.toml"),
-        "[package]\nname = \"fixture\"\nversion = \"0.0.0\"\nedition = \"2024\"\n",
-    )
-    .expect("write fixture package manifest");
-    fs::write(package.join("src/lib.rs"), "pub fn value() -> u8 { 1 }\n")
-        .expect("write fixture source");
+    crate::cargo_fixture::write_workspace(&root, &["fixture"])
+        .expect("write fixture workspace manifest");
+    crate::cargo_fixture::write_fixture_package(&package, "", "pub fn value() -> u8 { 1 }\n")
+        .expect("write fixture package");
     let spec = WasmBuildSpec::new(&root, &root.join("target"), &["fixture"], "debug");
 
     let snapshot = resolve_cargo_build_inputs(&spec).expect("resolve Cargo input snapshot");

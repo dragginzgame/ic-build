@@ -2,7 +2,7 @@
 
 IC Build provides common Cargo/Wasm builds and retained artifact caches, moved
 from IC Testkit, and feature-safe Cargo grouping from Canic.
-The [published 0.4 family is available on crates.io](https://crates.io/crates/ic-build/0.4.0).
+The [published 0.6 family is available on crates.io](https://crates.io/crates/ic-build/0.6.0).
 The owning
 [extraction issue](https://github.com/dragginzgame/ic-build/issues/1) tracks
 producer and consumer acceptance.
@@ -32,7 +32,7 @@ Add the registry dependency to your host-side package:
 
 ```toml
 [dependencies]
-ic-build = "0.4"
+ic-build = "0.6"
 ```
 
 Rust 1.91.0 or newer is required. Import the engine directly and keep the returned
@@ -54,7 +54,14 @@ fn build(workspace: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
 ```
 
 Consumers select packages, profiles, environment and maintenance policy.
-Select IC Host 0.18 when passing `OutputLimits` or typed Host failures across
+Pending 0.6.1 adds `ic_build::cargo::environment` for read-only configuration
+discovery, include traversal, raw-byte digests and compiler-override facts. Consumers select
+effective or conservative input paths and retain compiler admission, receipt
+framing and source custody. Configuration contents are excluded from returned
+facts and failure diagnostics. Observation executes no Cargo commands and does
+not establish build or release validity.
+
+Select IC Host 0.19 when passing `OutputLimits` or typed Host failures across
 IC Build's public grouping/capture boundary.
 The [deployable-Wasm LTO guidance](docs/artifacts.md#deployable-wasm-lto) records
 whole-canister measurements and shows how a common adapter can apply full LTO
