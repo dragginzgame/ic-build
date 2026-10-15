@@ -3,6 +3,12 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.3.4]
+
+- Compose inherited Cargo Rust flags with caller-selected arguments, preserving
+  encoded-variable precedence, explicitly empty values and argument boundaries
+  ([#36 — Cargo Rust flags](https://github.com/dragginzgame/ic-build/issues/36)).
+
 ## [0.3.3] - 2026-10-14
 
 - Observe Cargo catalogs, resolved graphs and selected dependency trees through

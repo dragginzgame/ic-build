@@ -1,5 +1,22 @@
 # Current handoff
 
+## Cargo inherited Rust flags — pending 0.3.4
+
+[Build #36 — Cargo Rust flags](https://github.com/dragginzgame/ic-build/issues/36)
+extracts inherited-variable composition and its real-Cargo child-process controls
+from IcyDB. Consumers retain remap choices, target/configuration selection and
+command environment policy. No dependency, cache, persisted format or build mode
+is added. No-addition calls leave inheritance alone; encoded values, including
+empty values, precede whitespace-split ordinary flags.
+
+The five real-Cargo child cases, strict library/test Clippy, warnings-denied
+Rustdoc and actual Rust 1.88 tests pass on the released 0.3.3 graph. The isolated
+consumer removes the duplicate helper/harness and retains its Wasm-cache flag
+identity regression. Its source override is qualification-only; normal IcyDB
+adoption awaits publication. Native macOS and full release gates are unrun.
+Own package versions and lock selection remain unchanged. Evidence is retained
+at `/tmp/icydb-owners.0Tjz5E/`; active sibling work is untouched.
+
 ## Bounded Cargo observation and Canic removal rehearsal — pending 0.3.3
 
 Build #33 now has catalog/resolved-graph and selected-tree observations with
