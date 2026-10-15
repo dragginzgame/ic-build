@@ -4704,50 +4704,46 @@ fn append_cargo_configuration_inputs(
                 source,
             })?;
 
-    let mut roots = invocation_root
-        .ancestors()
-        .filter_map(|directory| effective_cargo_config(&directory.join(".cargo")))
-        .collect::<Vec<_>>();
-    if let Some(cargo_home) = effective_cargo_home(spec, &invocation_root)
-        && let Some(config) = effective_cargo_config(&cargo_home)
-    {
-        roots.push(config);
-    }
-
-    let mut active = BTreeSet::new();
-    for config in roots {
-        append_cargo_configuration_tree(inputs, &config, &canonical_workspace, &mut active, false)?;
+    let cargo_home = command_environment_value(spec, "CARGO_HOME");
+    let default_home = default_home_directory(spec);
+    let directories = crate::cargo::environment::configuration_directories(
+        &invocation_root,
+        cargo_home.as_deref(),
+        default_home.as_deref().map(Path::as_os_str),
+    )
+    .map_err(|source| WasmBuildError::Io {
+        operation: "resolve Cargo configuration directories",
+        path: invocation_root.clone(),
+        source,
+    })?;
+    let roots: Vec<_> = directories
+        .iter()
+        .filter_map(|directory| crate::cargo::environment::preferred_configuration(directory))
+        .collect();
+    let observed =
+        crate::cargo::environment::observe_configurations(&roots).map_err(|error| match error {
+            crate::cargo::environment::ConfigurationError::Io {
+                operation,
+                path,
+                source,
+            } => WasmBuildError::Io {
+                operation,
+                path,
+                source,
+            },
+            crate::cargo::environment::ConfigurationError::Invalid { path, message } => {
+                WasmBuildError::InvalidCargoConfiguration { path, message }
+            }
+        })?;
+    for config in observed {
+        if !inputs.iter().any(|(_, path)| path == &config.path) {
+            inputs.push((
+                cargo_configuration_label(&config.location, &canonical_workspace),
+                config.path,
+            ));
+        }
     }
     Ok(())
-}
-
-fn effective_cargo_config(directory: &Path) -> Option<PathBuf> {
-    let extensionless = directory.join("config");
-    if extensionless.exists() {
-        return Some(extensionless);
-    }
-    let toml = directory.join("config.toml");
-    toml.exists().then_some(toml)
-}
-
-fn effective_cargo_home(spec: &WasmBuildSpec, invocation_root: &Path) -> Option<PathBuf> {
-    if let Some(cargo_home) = command_environment_value(spec, "CARGO_HOME") {
-        let cargo_home = PathBuf::from(cargo_home);
-        return Some(if cargo_home.is_absolute() {
-            cargo_home
-        } else {
-            invocation_root.join(cargo_home)
-        });
-    }
-
-    default_home_directory(spec).map(|home| {
-        let home = if home.is_absolute() {
-            home
-        } else {
-            invocation_root.join(home)
-        };
-        home.join(".cargo")
-    })
 }
 
 #[cfg(windows)]
@@ -4769,132 +4765,12 @@ fn command_environment_value(spec: &WasmBuildSpec, name: &str) -> Option<OsStrin
         .or_else(|| std::env::var_os(name))
 }
 
-fn append_cargo_configuration_tree(
-    inputs: &mut Vec<(PathBuf, PathBuf)>,
-    config: &Path,
-    workspace_root: &Path,
-    active: &mut BTreeSet<PathBuf>,
-    optional: bool,
-) -> Result<(), WasmBuildError> {
-    let contents = match fs::read_to_string(config) {
-        Ok(contents) => contents,
-        Err(error) if optional && error.kind() == io::ErrorKind::NotFound => return Ok(()),
-        Err(source) => {
-            return Err(WasmBuildError::Io {
-                operation: "read Cargo configuration",
-                path: config.to_owned(),
-                source,
-            });
-        }
-    };
-    let parent = config
-        .parent()
-        .ok_or_else(|| WasmBuildError::InvalidCargoConfiguration {
-            path: config.to_owned(),
-            message: "configuration path has no parent directory".to_owned(),
-        })?;
-    // Normalize the containing directory, preserving the configured file
-    // entry. Cargo resolves includes beside that entry, not its referent.
-    let location = parent
-        .canonicalize()
-        .map_err(|source| WasmBuildError::Io {
-            operation: "resolve Cargo configuration directory",
-            path: parent.to_owned(),
-            source,
-        })?
-        .join(config.file_name().ok_or_else(|| {
-            invalid_cargo_configuration(config, "configuration path has no file name")
-        })?);
-    // Only active recursion is suppressed. Separate directory aliases must
-    // each retain their nested lookup paths even when they currently agree.
-    if !active.insert(location.clone()) {
-        return Ok(());
-    }
-    let configuration = toml::from_str::<TomlValue>(&contents).map_err(|error| {
-        WasmBuildError::InvalidCargoConfiguration {
-            path: config.to_owned(),
-            message: error.to_string(),
-        }
-    })?;
-    // Keep the lookup path so rehashing observes replaced file or directory
-    // symlinks. A shared referent can have different includes at each location.
-    if !inputs.iter().any(|(_, path)| path == config) {
-        inputs.push((
-            cargo_configuration_label(&location, workspace_root),
-            config.to_owned(),
-        ));
-    }
-    if let Some(include) = configuration.get("include") {
-        for (included, optional) in cargo_configuration_includes(include, config)? {
-            let included = if included.is_absolute() {
-                included
-            } else {
-                parent.join(included)
-            };
-            append_cargo_configuration_tree(inputs, &included, workspace_root, active, optional)?;
-        }
-    }
-    active.remove(&location);
-    Ok(())
-}
-
-fn cargo_configuration_includes(
-    include: &TomlValue,
-    config: &Path,
-) -> Result<Vec<(PathBuf, bool)>, WasmBuildError> {
-    let values = match include {
-        TomlValue::Array(values) => values.as_slice(),
-        value => std::slice::from_ref(value),
-    };
-    values
-        .iter()
-        .map(|value| match value {
-            TomlValue::String(path) => Ok((PathBuf::from(path), false)),
-            TomlValue::Table(table) => {
-                let path = table
-                    .get("path")
-                    .and_then(TomlValue::as_str)
-                    .ok_or_else(|| {
-                        invalid_cargo_configuration(
-                            config,
-                            "Cargo configuration include table requires a string `path`",
-                        )
-                    })?;
-                let optional = table
-                    .get("optional")
-                    .map(|value| {
-                        value.as_bool().ok_or_else(|| {
-                            invalid_cargo_configuration(
-                                config,
-                                "Cargo configuration include `optional` must be a boolean",
-                            )
-                        })
-                    })
-                    .transpose()?
-                    .unwrap_or(false);
-                Ok((PathBuf::from(path), optional))
-            }
-            _ => Err(invalid_cargo_configuration(
-                config,
-                "Cargo configuration `include` must contain paths or include tables",
-            )),
-        })
-        .collect()
-}
-
 fn cargo_configuration_label(config: &Path, workspace_root: &Path) -> PathBuf {
     if let Ok(relative) = config.strip_prefix(workspace_root) {
         return PathBuf::from("cargo-config/workspace").join(relative);
     }
     let location = digest_bytes("cargo-config-location-v1", &os_bytes(config.as_os_str()));
     PathBuf::from("cargo-config/external").join(location.to_hex())
-}
-
-fn invalid_cargo_configuration(path: &Path, message: &str) -> WasmBuildError {
-    WasmBuildError::InvalidCargoConfiguration {
-        path: path.to_owned(),
-        message: message.to_owned(),
-    }
 }
 
 fn append_package_inputs(

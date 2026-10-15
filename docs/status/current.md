@@ -1,5 +1,21 @@
 # Current handoff
 
+## Cargo configuration observation — pending 0.3.4
+
+The isolated producer under [#35](https://github.com/dragginzgame/ic-build/issues/35)
+extracts the existing configuration/include walker into `cargo::environment`.
+The build engine consumes the same owner and retains effective root selection,
+input labels and cache validity. Release callers can retain both root names,
+observe raw digests and compiler-override facts, then apply their own admission.
+No configuration values are included in returned records or errors.
+
+Three public-observation cases and the four existing configuration/include/alias
+mutation cases pass on Linux. Strict all-target/all-feature Clippy, Rustdoc and
+actual Rust 1.88 observation tests pass on the unchanged committed Host 0.18.2
+graph. Native macOS checks, producer integration/publication and Memory's registry
+adoption under [Memory #110](https://github.com/dragginzgame/ic-memory/issues/110)
+remain separate. No sibling working checkout or own package version was changed.
+
 ## Bounded Cargo observation and Canic removal rehearsal — pending 0.3.3
 
 Build #33 now has catalog/resolved-graph and selected-tree observations with

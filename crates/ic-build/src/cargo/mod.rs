@@ -7,6 +7,7 @@
 #[cfg(test)]
 mod tests;
 
+pub mod environment;
 pub mod observation;
 pub mod packages;
 

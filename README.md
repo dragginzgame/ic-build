@@ -53,6 +53,13 @@ fn build(workspace: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
 ```
 
 Consumers select packages, profiles, environment and maintenance policy.
+`ic_build::cargo::environment` supplies read-only Cargo configuration discovery,
+include traversal, raw-byte digests and compiler-override facts. Consumers select
+effective or conservative input paths and retain compiler admission, receipt
+framing and source custody. Configuration contents are excluded from returned
+facts and failure diagnostics. Observation executes no Cargo commands and does
+not establish build or release validity.
+
 Select IC Host 0.18 when passing `OutputLimits` or typed Host failures across
 IC Build's public grouping/capture boundary.
 The [deployable-Wasm LTO guidance](docs/artifacts.md#deployable-wasm-lto) records
