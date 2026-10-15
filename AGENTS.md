@@ -3,8 +3,8 @@
 Read [docs/status/current.md](docs/status/current.md), then
 [DRAGGINZGAME.md](DRAGGINZGAME.md) and the
 [ownership design](docs/design/build-ownership.md).
-The baseline is Shared Tooling 0.14.0 revision
-`5f70392ccc15085cdba9e6c7c596fc29b0dce341`, recorded with exact digests in
+The baseline is Shared Tooling 0.15.0 revision
+`3bef3f2daec7f64f875397ed4d53d5b9e2e68a08`, recorded with exact digests in
 [.shared-tooling.snapshot](.shared-tooling.snapshot).
 
 - Mutate only this repository unless the maintainer expressly authorizes another

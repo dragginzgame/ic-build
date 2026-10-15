@@ -2,7 +2,7 @@
 
 IC Build provides common Cargo/Wasm builds and retained artifact caches, moved
 from IC Testkit, and feature-safe Cargo grouping from Canic.
-The [published 0.2 family is available on crates.io](https://crates.io/crates/ic-build).
+The [published 0.4 family is available on crates.io](https://crates.io/crates/ic-build/0.4.0).
 The owning
 [extraction issue](https://github.com/dragginzgame/ic-build/issues/1) tracks
 producer and consumer acceptance.
@@ -32,11 +32,12 @@ Add the registry dependency to your host-side package:
 
 ```toml
 [dependencies]
-ic-build = "0.2"
+ic-build = "0.4"
 ```
 
-Import the engine directly and keep the returned record alive while using its
-artifacts. With a prepared Cargo/Wasm toolchain and a caller-held source lease:
+Rust 1.91.0 or newer is required. Import the engine directly and keep the returned
+record alive while using its artifacts. With a prepared Cargo/Wasm toolchain and a
+caller-held source lease:
 
 ```rust,no_run
 use ic_build::artifacts::{WasmBuildSpec, build_wasm_canisters_cached};
@@ -66,7 +67,7 @@ contracts.
 
 ## Development
 
-Shared Tooling 0.11.2 is pinned in
+Shared Tooling 0.15.0 is pinned in
 [.shared-tooling.snapshot](.shared-tooling.snapshot); commands use this reviewed
 local snapshot. The [Make interface](docs/make-interface.md) owns common setup,
 formatting, hook installation and release entrypoints.

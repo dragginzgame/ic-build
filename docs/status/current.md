@@ -1,5 +1,106 @@
 # Current handoff
 
+## Shared Tooling 0.15.0 and registry Host 0.18.6 — 2026-10-15
+
+The canonical refresh selects Shared Tooling's verified current main revision
+`3bef3f2daec7f64f875397ed4d53d5b9e2e68a08` (0.15.0). All 96 payloads verify,
+including the newly required exact version/Gregorian-date admission helper for
+the shared release runner. Local agent and README baseline references agree.
+Host's latest published tag is 0.18.6 at
+`7f291760ac1184e5235d08f75e3c1aee0fa60cc3`. All three registry Host packages
+were already selected at 0.18.6 in the incoming lock; a scoped online update
+confirms that selection without changing other packages or API minimums.
+The unpublished filesystem extraction remains separate.
+
+All 84 affected filesystem, batching, host-composition and Wasm-cache cases pass
+on actual Rust 1.91. Strict all-target Clippy, MSRV compilation, Rustdoc,
+formatting, links, workspace metadata, pins, tools and snapshot checks pass on
+Linux. Exact release-input fixtures, shared runner command-stub cases and isolated
+local release adapters pass.
+Host/IC/release executable pins, incoming source, lock selection, package version
+and staging are preserved. Native qualification and release delivery remain
+separate; no commit, release or publication ran. Before-images and validation
+logs are retained in `/tmp/ic-build-latest-20261015/`.
+
+## Environment composition and compiler identity — pending 0.5.0
+
+`WasmBuildSpec::with_extra_env` now merges overrides across calls: later values
+win for duplicate names, and an empty call preserves prior configuration.
+The compiler probe setter is now `with_rustc_identity_program`, with no old-name
+alias. It remains identity-only; explicit `RUSTC` still selects Cargo's compiler
+and takes precedence for its identity probe. Callers and guidance use the new
+name. Historical replacement-map receipts below describe the earlier contract.
+
+All 65 Wasm-cache cases and three host-composition cases pass on actual Rust
+1.91, including child delivery, chained/combined cache parity, changed-input
+identity and explicit compiler precedence after another environment call.
+Strict all-target Clippy, MSRV compilation, Rustdoc, formatting, links, workspace
+metadata, pins and snapshot checks pass on Linux. Native qualification remains
+separate. Own metadata, incoming lock selection and staging are unchanged;
+no commit or release ran. Before-images are retained in
+`/tmp/ic-build-env-hardcut-20261015/`.
+
+## Batch phases, filesystem accounting and fixture paths — pending 0.5.0
+
+[#42](https://github.com/dragginzgame/ic-build/issues/42) owns the three approved
+cleanups. A private per-entry batch phase function replaces nested result/timing
+construction. All six cases pass, including simultaneous callback/abort failure
+with original causes, exact failure/report timing and later-entry completion.
+The public test-directory helper and its mirrored assertion are removed; guides
+select explicit paths. This removal selects 0.5.0 notes without changing 0.4.0
+package metadata. Strict all-target Clippy, actual Rust 1.91, Rustdoc, formatting,
+workspace metadata, pins, snapshot and documentation links pass on Linux.
+
+Host's isolated `feat/logical-tree-size` candidate `5f2fbd7` moves the metadata
+accounting primitive and two existing filesystem cases into `ic-host-fs::read`.
+Rust 1.88 cases/all-target checks, strict Clippy and Rustdoc pass. Build's prepared
+caller deletion passes Rust 1.91, strict lint and cache/pruning/maintenance cases
+against that coherent candidate family. Normal Build keeps the existing owner
+until reviewed Host publication permits a real dependency minimum; the prepared
+patch introduces no production override or prospective dependency.
+
+Canic's isolated `test/own-artifact-target-paths` topic switches all upstream
+path-helper imports to unpublished fixture support. Default/governed caller
+compilation, strict all-target lint, actual Rust 1.91 and formatting/links pass
+on unchanged pushed-main dependencies. A separate patch applies cleanly to its
+active unpublished source without importing that dirty work into the topic.
+
+Automatic approval review rejected topic-branch publication and PR creation for
+lack of explicit push/PR delegation. Both contributions and PR descriptions are
+ready locally; no branch push, merge or release ran. Native and live PocketIC
+acceptance remain separate. Normal sibling checkouts, Root staging and incoming
+lock selections are preserved. Before-images, patches and logs are retained in
+`/tmp/ic-build-cleanup4-20261015/`.
+
+## Published 0.4.0 and delivered consumer acceptance — 2026-10-15
+
+Published 0.4.0 identifies `d223747a003c35954d02e43ed110dd23707affa1`;
+the registry archive matches sparse-index SHA-256
+`17bc5e5c137a0055ce069d2d244017aafcddcfe47fd92bf2141bf7e7154c1010`.
+Its normalized manifest and index declare Rust 1.91.0. A fresh registry consumer
+selecting exact 0.4.0, cargo-platform 0.3.3 and Host 0.18.5 passes a locked/offline
+check on actual Rust/Cargo 1.91; no source override or producer lock is used.
+This closes [#34](https://github.com/dragginzgame/ic-build/issues/34).
+
+Delivered Jobs 0.11.0 `7e6c643c50dfe3f67252e51537f44391d92db2c7` delegates
+capture/finalization to registry Build 0.3.3. Its five capture-tool cases and
+complete Linux/Intel/Apple Silicon [CI](https://github.com/dragginzgame/ic-jobs/actions/runs/38702118931)
+pass, closing Build [#14](https://github.com/dragginzgame/ic-build/issues/14) and
+[#26](https://github.com/dragginzgame/ic-build/issues/26). No live recovery claim
+is made. Jobs' incoming Build 0.4 selection still needs host-harness Rust 1.91
+admission; the delivered receipt does not qualify that graph.
+
+The README now selects registry 0.4 and the actual Shared Tooling 0.14 snapshot.
+Compatible notes select 0.4.1; own metadata remains 0.4.0. The incoming Host 0.18.5
+lock update is preserved. Open producer implementations remain in their PRs;
+the configuration PR's Intel failure is a pre-compilation Rust-download DNS
+failure, while its reconciliation with released main is separately required.
+Release 0.4.0 [CI](https://github.com/dragginzgame/ic-build/actions/runs/38704810434)
+passes Linux, Apple Silicon and lint/security; Intel is still running at this
+inspection. Evidence and original source snapshots are retained under
+`/tmp/ic-build-issues040-20261015/`. No staging, branch update or release ran.
+The pending sections below retain their original source-bound historical receipts.
+
 ## Rust 1.91 MSRV — pending 0.4.0
 
 The maintainer selected Rust 1.91.0 to admit `cargo-platform` 0.3.3. The workspace

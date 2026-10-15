@@ -53,12 +53,62 @@ fn canonical_fixture(path: &Path) -> PathBuf {
 
 #[cfg(unix)]
 #[test]
+fn chained_environment_overrides_reach_build_and_preserve_cache_identity() {
+    let (root, spec) = fake_wasm_build_spec("merged-environment");
+    let wrapper = root.join("cargo.sh");
+    let producer = root.join("producer.sh");
+    fs::rename(&wrapper, &producer).unwrap();
+    let quoted_producer = format!("'{}'", producer.to_string_lossy().replace('\'', "'\"'\"'"));
+    write_executable_script(
+        &wrapper,
+        format!(
+            r#"#!/bin/sh
+set -eu
+if [ "$1" = build ]; then
+    [ "$LEFT" = 'left value' ]
+    [ "$RIGHT" = 'right value' ]
+    [ "$DUP" = 'last value' ]
+    printf '%s\n' "$LEFT" "$RIGHT" "$DUP" > merged-environment
+fi
+exec {quoted_producer} "$@"
+"#
+        ),
+    )
+    .expect("write environment-checking Cargo wrapper");
+    let chained = spec
+        .clone()
+        .with_extra_env([("LEFT", "left value"), ("DUP", "first value")])
+        .with_extra_env([("RIGHT", "right value"), ("DUP", "last value")])
+        .with_extra_env(std::iter::empty::<(&str, &str)>());
+    let first = build_wasm_canisters_cached(&chained).unwrap();
+    assert!(matches!(first, WasmBuildOutcome::Built { .. }));
+    assert_eq!(
+        fs::read_to_string(root.join("merged-environment")).unwrap(),
+        "left value\nright value\nlast value\n"
+    );
+    let combined = spec.with_extra_env([
+        ("LEFT", "left value"),
+        ("RIGHT", "right value"),
+        ("DUP", "last value"),
+    ]);
+    let reused = build_wasm_canisters_cached(&combined).unwrap();
+    assert!(matches!(reused, WasmBuildOutcome::Reused { .. }));
+    assert_eq!(first.record().fingerprint(), reused.record().fingerprint());
+    let changed = resolve_cargo_build_inputs(&chained.with_extra_env([("LEFT", "changed")]))
+        .expect("resolve changed environment identity");
+    assert_ne!(first.record().fingerprint(), changed.fingerprint());
+    drop((first, reused));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
 fn shim_compiler_identity_invalidates_exact_cache_and_explicit_rustc_takes_precedence() {
     let (root, spec) = fake_wasm_build_spec("shim-compiler-identity");
     let compiler = root.join("selected-rustc");
     write_executable_script(&compiler, "#!/bin/sh\nprintf 'selected-compiler-A\\n'\n")
         .expect("write executable test script");
-    let spec = spec.with_rustc_program(compiler.as_os_str());
+    let spec = spec.with_rustc_identity_program(compiler.as_os_str());
     let first = build_wasm_canisters_cached(&spec).unwrap();
     assert!(matches!(first, WasmBuildOutcome::Built { .. }));
     assert!(matches!(
@@ -72,8 +122,9 @@ fn shim_compiler_identity_invalidates_exact_cache_and_explicit_rustc_takes_prece
     assert_ne!(first.record().fingerprint(), second.record().fingerprint());
     let selected_rustc = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
     let override_spec = spec
-        .with_rustc_program("/missing/identity-probe")
-        .with_extra_env([(OsString::from("RUSTC"), selected_rustc)]);
+        .with_rustc_identity_program("/missing/identity-probe")
+        .with_extra_env([(OsString::from("RUSTC"), selected_rustc)])
+        .with_extra_env([("UNRELATED_OVERRIDE", "retained compiler selection")]);
     build_wasm_canisters_cached(&override_spec)
         .expect("explicit RUSTC selects metadata/build environment and identity probe");
     drop((first, second));
@@ -1860,7 +1911,7 @@ exec {cargo} "$@"
             )
             .unwrap();
             let spec = if phase == "-vV" {
-                original.clone().with_rustc_program(&program)
+                original.clone().with_rustc_identity_program(&program)
             } else {
                 original.clone().with_cargo_program(&program)
             };
