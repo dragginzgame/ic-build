@@ -1,5 +1,106 @@
 # Current handoff
 
+## Canic producer handoff — pending 0.6.2
+
+The inherited-flag implementation from [PR #37](https://github.com/dragginzgame/ic-build/pull/37)
+is applied to the normal working tree on released 0.6.1. Its helper and harness
+match the reviewed topic source. `cargo::flags::combined_encoded_rustflags`
+preserves encoded precedence, explicit emptiness and argument boundaries;
+consumers retain remap selection and the command's effective environment.
+The guide records adoption, including Canic's three caller-selected remaps.
+Compatible notes select 0.6.2; package versions and lock selection stay 0.6.1.
+
+The batch also applies [PR #29](https://github.com/dragginzgame/ic-build/pull/29)'s
+strict workspace lockfile projection under [#28](https://github.com/dragginzgame/ic-build/issues/28).
+`cargo::lock_projection::verify_workspace_version_projection` projects only
+explicit unsourced package versions and compares complete parsed lockfiles.
+Dependencies, sources, checksums and unrelated values cannot drift; version
+selection, rendering, byte limits, saved inputs and receipts remain caller-owned.
+It performs no I/O or release effects. Memory's published adoption remains
+[#96](https://github.com/dragginzgame/ic-memory/issues/96); Canic's broader fixture
+normalization may rewrite dependency references and is not this strict contract.
+
+Five projection cases pass on actual Rust 1.91, including a self-contained real
+Cargo workspace update with two members and a nonmember path dependency. The
+fixture confirms permitted version changes and rejects an unselected dependency
+change without fetching a new registry graph. Strict all-target Clippy, actual
+MSRV all-target checking, Rustdoc, formatting and links pass on the combined
+source. The older PR's native results remain bound to its own head; this local
+addition has no hosted/native result or publication. Own metadata, selected lock
+and the real index are unchanged. Evidence and before-images are retained at
+`/tmp/ic-build-projection062-20261015/`.
+
+The same batch applies [PR #41](https://github.com/dragginzgame/ic-build/pull/41)'s
+relative input projection under [#40](https://github.com/dragginzgame/ic-build/issues/40).
+`InputEvidence::digest_relative_to(root)` hashes captured facts with relative
+UTF-8 labels and the shared framed encoder, without rereading the filesystem.
+It leaves the absolute digest and cache formats unchanged. Blob retains complete
+source selection, rebuild directives and descriptive-provenance adoption; this
+API does not attest an executable or admit Canic's release.
+
+All 18 input cases and 12 digest cases pass on actual Rust 1.91. The relative
+regressions independently restore each content/name/membership/absence mutation,
+cover Unicode and Linux invalid-UTF-8 names, and project after source removal.
+A dual-source consumer preserves exact absolute digest bytes against registry
+0.6.1 across 30 inventories/identities, including framing boundaries, excluded
+trees, missing inputs, renames and native string ordering. Strict all-target
+Clippy, actual MSRV, Rustdoc, formatting and links pass on the current graph.
+These are focused Linux checks; the local combined batch has no hosted/native
+result or publication. Evidence is at `/tmp/ic-build-relative062-20261015/`.
+
+All five flag child scenarios, 16 input/depfile cases and five Cargo observation
+cases pass on actual Rust 1.91 on Linux. A separate real-Cargo probe composes
+Canic's source/Cargo-home/sysroot remaps in four inherited-environment cases;
+all three tokens survive, source paths remap, and caller cfg flags retain their
+precedence. Strict all-target Clippy, actual MSRV checking, Rustdoc, formatting
+and local links pass. The topic's exact `cff0603406000c4ae020afce34e55d49b6295f14`
+also passes its complete [hosted matrix](https://github.com/dragginzgame/ic-build/actions/runs/38756845888),
+including native macOS 15 Intel/Apple Silicon. These hosted results qualify that
+topic source, not the dirty working tree's documentation changes or a publication.
+
+Producer issues [#12](https://github.com/dragginzgame/ic-build/issues/12) and
+[#33](https://github.com/dragginzgame/ic-build/issues/33) close against published
+0.6.1 and its complete release matrix; their maintained implementation/tests
+remain unchanged. Canic #530/#544/#553 retain consumer release, input/recipe and
+application acceptance. Its current handoff names active Auth 0.6 integration
+as the release blocker; that work remains with its owner. No Canic checkout,
+Root index, version or release ref changed. Flag delivery remains #36; unpublished
+Host prerequisites remain #43/#45. Before-images, probes and logs are retained at
+`/tmp/ic-build-canic-unblock062-20261015/`.
+
+The additional copy-adapter deletion under #24 still needs Host PR #93: exact
+registry Host 0.19.0 has the bounded reader and durable writer, but no
+`durable::copy_from`. The current adapter remains unchanged; no prospective
+dependency or source override is adopted. Canic's active Auth 0.6.1 transaction
+and Root enrollment work remains with its owner.
+
+## Published 0.6.1 acceptance and inherited-flag PR refresh
+
+Published 0.6.1 is `f5ee4bed73d8a93c5bfc5c3d0d31712f597a8bad`, also GitHub main.
+The registry index and archive agree on SHA-256
+`dc5d2d07e331000117fc7a4d9cff6e825bc4070e7bf0b39d471dac196ca2e50c`;
+archive VCS provenance identifies that source and the index records Rust 1.91
+without a yank. The complete [release-source CI matrix](https://github.com/dragginzgame/ic-build/actions/runs/38751375358)
+passes Linux, macOS 15 Intel/Apple Silicon and lint/security. Issues #35/#46 close
+against this delivered evidence. PR #38 is closed as already implemented, without
+another merge or branch deletion; its configuration module/tests and Wasm caller
+match the release. Memory's adoption remains at
+[Memory #110](https://github.com/dragginzgame/ic-memory/issues/110).
+
+[PR #37](https://github.com/dragginzgame/ic-build/pull/37) is refreshed at
+`cff0603406000c4ae020afce34e55d49b6295f14` by a normal topic merge of 0.6.1.
+Its helper and real-Cargo harness are unchanged. All five child scenarios,
+strict all-target Clippy, actual Rust 1.91 checking, strict Rustdoc, formatting
+and links pass on Linux. New hosted checks must qualify that exact head.
+The PR selects compatible 0.6.2 notes while preserving 0.6.1 package metadata
+and the Host 0.19 graph. It is not integrated or published.
+
+Host PRs #135 and #99 pass their complete native/MSRV matrices and are mergeable,
+but remain open. Build's prepared deletions still require a reviewed Host
+publication under #45/#43. Canic changes are maintainer-owned for this pass;
+no sibling checkout is changed. Root's index, version and lock selection remain
+untouched. Evidence is retained at `/tmp/ic-build-pr37-refresh-20261015/`.
+
 ## Cargo selection, exact-entry preparation and fixtures — pending 0.6.1
 
 Cargo arguments are interpreted once when the specification is constructed or

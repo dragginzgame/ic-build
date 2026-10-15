@@ -8,6 +8,8 @@
 mod tests;
 
 pub mod environment;
+pub mod flags;
+pub mod lock_projection;
 pub mod observation;
 pub mod packages;
 pub(crate) mod selection;

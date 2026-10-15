@@ -3,6 +3,20 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.6.2]
+
+- Verify exact workspace-version projections in Cargo lockfiles without allowing
+  dependency, source, checksum or unrelated metadata changes. Version selection
+  and release receipts remain caller-owned
+  ([#28 — Strict workspace lock projections](https://github.com/dragginzgame/ic-build/issues/28)).
+- Hash captured input evidence relative to an explicit root for relocatable
+  source fingerprints, preserving absolute-path digests and caller-owned
+  inventories and provenance policy
+  ([#40 — Relative source evidence](https://github.com/dragginzgame/ic-build/issues/40)).
+- Compose inherited Cargo Rust flags with caller-selected arguments, preserving
+  encoded-variable precedence, explicitly empty values and argument boundaries
+  ([#36 — Cargo Rust flags](https://github.com/dragginzgame/ic-build/issues/36)).
+
 ## [0.6.1] - 2026-10-15
 
 - Consolidate Cargo argument interpretation, exact-cache preparation and private

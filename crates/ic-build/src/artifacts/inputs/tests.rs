@@ -10,6 +10,100 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[test]
+fn relative_digest_is_relocatable_and_tracks_names_bytes_identity_and_membership() {
+    let left = unique_temp_directory("relative-inputs-left");
+    let right = unique_temp_directory("relative-inputs-right");
+    for root in [&left, &right] {
+        fs::create_dir(root.join("src")).unwrap();
+        fs::write(root.join("src/main.rs"), "fn main() {}\n").unwrap();
+        fs::write(root.join("src/path with λ.rs"), "// Unicode source\n").unwrap();
+    }
+    let before = capture(b"consumer-source", &[left.join("src"), left.join("absent")]);
+    let relocated = capture(
+        b"consumer-source",
+        &[right.join("absent"), right.join("src")],
+    );
+    let expected = before.digest_relative_to(&left).unwrap();
+    assert_eq!(expected, relocated.digest_relative_to(&right).unwrap());
+    assert_ne!(before.digest().unwrap(), relocated.digest().unwrap());
+    for mutation in 0..4 {
+        match mutation {
+            0 => fs::write(right.join("src/main.rs"), "fn main() { todo!() }\n").unwrap(),
+            1 => fs::rename(right.join("src/main.rs"), right.join("src/renamed.rs")).unwrap(),
+            2 => fs::write(right.join("src/new.rs"), "// new source\n").unwrap(),
+            _ => fs::write(right.join("absent"), "created").unwrap(),
+        }
+        let after = capture(
+            b"consumer-source",
+            &[right.join("src"), right.join("absent")],
+        );
+        assert_ne!(expected, after.digest_relative_to(&right).unwrap());
+        match mutation {
+            0 => fs::write(right.join("src/main.rs"), "fn main() {}\n").unwrap(),
+            1 => fs::rename(right.join("src/renamed.rs"), right.join("src/main.rs")).unwrap(),
+            2 => fs::remove_file(right.join("src/new.rs")).unwrap(),
+            _ => fs::remove_file(right.join("absent")).unwrap(),
+        }
+        assert_eq!(
+            expected,
+            capture(
+                b"consumer-source",
+                &[right.join("src"), right.join("absent")]
+            )
+            .digest_relative_to(&right)
+            .unwrap(),
+            "each mutation is tested independently"
+        );
+    }
+    assert_ne!(
+        expected,
+        capture(
+            b"different identity",
+            &[left.join("src"), left.join("absent")]
+        )
+        .digest_relative_to(&left)
+        .unwrap()
+    );
+    fs::remove_dir_all(&left).unwrap();
+    fs::remove_dir_all(right).unwrap();
+    assert_eq!(
+        expected,
+        before.digest_relative_to(&left).unwrap(),
+        "digest uses captured evidence without rereading source"
+    );
+}
+
+#[test]
+fn relative_digest_refuses_outside_inputs_and_invalid_roots() {
+    let root = unique_temp_directory("relative-inputs-refusal");
+    fs::write(root.join("input"), "evidence").unwrap();
+    let evidence = capture(b"identity", &[root.join("input")]);
+    assert_eq!(
+        evidence.digest_relative_to(&root).unwrap(),
+        evidence.digest_relative_to(&root.join(".")).unwrap()
+    );
+    for invalid in [
+        PathBuf::from("relative"),
+        root.join("child"),
+        root.join("../elsewhere"),
+    ] {
+        assert!(evidence.digest_relative_to(&invalid).is_err());
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _};
+        let native = root.join(OsStr::from_bytes(b"non-UTF8-\xff"));
+        fs::write(&native, "native bytes").unwrap();
+        assert!(matches!(
+            capture(b"identity", &[native]).digest_relative_to(&root),
+            Err(InputEvidenceError::Io { source, .. })
+                if source.kind() == io::ErrorKind::InvalidData
+        ));
+    }
+    fs::remove_dir_all(root).unwrap();
+}
+
 fn capture(identity: &[u8], paths: &[PathBuf]) -> InputEvidence {
     let spec = paths
         .iter()

@@ -124,6 +124,16 @@ or lowercase file SHA-256. Capture preserves native paths; this particular diges
 encoding refuses non-UTF-8 paths. Existing cache domains and field encoding remain
 unchanged. Consumers keep their record formats and namespaces.
 
+Pending 0.6.2 adds `digest_relative_to(root)` for descriptive source fingerprints
+that survive checkout relocation. It projects the same captured facts using
+sorted UTF-8 relative labels with `/` separators and the existing field framing.
+The root must be absolute; parent traversal, outside inputs and non-UTF-8 relative
+names refuse. Standard path-component normalization applies. Projection reads no
+filesystem, so it can run after the captured sources have been removed. Consumers
+select complete inventories, source custody and rebuild directives; a descriptive
+fingerprint does not attest that an executable was built from those sources.
+The original `digest()` and cache formats remain unchanged.
+
 `before.validate_after(&after)` permits replacement or expansion of the declared
 inventory while requiring the same identity and exclusion policy. It rechecks
 every original root, even if a later depfile no longer names it, and rejects
@@ -245,9 +255,42 @@ Query also retains DID selection, public metadata, smoke/deployment lifecycle an
 publication. Host owns generic custom-section framing. This capability does not
 establish Query adoption or native smoke qualification.
 
+## Strict Cargo lockfile version projections
+
+Pending 0.6.2 provides `cargo::lock_projection::verify_workspace_version_projection`.
+Pass saved before/after TOML and explicit `WorkspaceVersionProjection` entries
+containing each unsourced package name, expected prior version and permitted next
+version. The verifier compares the complete parsed lockfiles after projecting only
+those package versions. Comments and table-field ordering may differ; dependencies,
+source/checksum fields, array order and all unrelated values must remain identical.
+Invalid/duplicate selections, missing or ambiguous packages and unexpected prior
+versions return typed `LockProjectionError` evidence.
+
+Callers retain input byte limits, saved-file custody, version policy, rendering,
+receipts and release ordering. This pure verifier reads and writes no files.
+Memory's adoption is tracked by [#96](https://github.com/dragginzgame/ic-memory/issues/96).
+Canic's fixture normalization also rewrites version-qualified dependency references;
+that broader transformation is deliberately refused by this strict contract.
+
+## Inherited Cargo Rust flags
+
+Pending 0.6.2 provides `cargo::flags::combined_encoded_rustflags(&extra_flags)`.
+Pass each additional argument as a separate `String`; when it returns `Some`,
+set that value as `CARGO_ENCODED_RUSTFLAGS` on the Cargo command. An empty slice
+returns `None`, so leave the command's inherited flags unchanged.
+
+The helper reads the current process environment. Encoded flags take precedence
+over ordinary `RUSTFLAGS`, including an explicitly empty encoded value. It splits
+ordinary flags on whitespace and preserves each addition's argument boundaries.
+For a command with explicit flag overrides, compose in that selected environment;
+do not treat ambient flags as the command's effective overrides. Callers retain
+target/configuration precedence, remap roots and destinations, and build policy.
+Canic can pass its source, Cargo-home and sysroot remaps as three additions rather
+than replacing inherited flags with their encoded concatenation.
+
 ## Cargo configuration observations
 
-Pending 0.6.1 exposes the engine's configuration walker through
+Published 0.6.1 exposes the engine's configuration walker through
 `cargo::environment`. `configuration_directories` enumerates invocation ancestors
 and the explicitly supplied Cargo home without reading ambient environment.
 `preferred_configuration` selects `config` before `config.toml`;
