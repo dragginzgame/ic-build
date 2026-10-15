@@ -3,7 +3,7 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.6.1]
+## [0.6.1] - 2026-10-15
 
 - Consolidate Cargo argument interpretation, exact-cache preparation and private
   Cargo fixture scaffolding while preserving public builders, fingerprint bytes
