@@ -16,7 +16,7 @@ use ic_build::artifacts::{
     WasmBuildOutcome, WasmBuildPhase, WasmBuildProgressConfig, WasmBuildProgressEvent,
     WasmBuildSession, WasmBuildSpec, build_wasm_canisters_cached,
     build_wasm_canisters_cached_with_progress, inspect_shared_incremental_target,
-    prepare_artifact_cache, prune_wasm_build_cache, resolve_cargo_build_inputs, wasm_path,
+    prepare_artifact_cache, prune_wasm_build_cache, resolve_cargo_build_inputs,
 };
 use std::{
     fs,
@@ -27,6 +27,7 @@ use std::{
 };
 
 use support::unique_temp_directory as unique_temp_dir;
+use support::wasm_path;
 
 #[cfg(unix)]
 use std::ffi::OsString;

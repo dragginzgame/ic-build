@@ -28,9 +28,9 @@ dependencies = [
 
 [[package]]
 name = "cargo-platform"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87a0c0e6148f11f01f32650a2ea02d532b2ad4e81d8bd41e6e565b5adc5e6082"
+checksum = "dd0061da739915fae12ea00e16397555ed4371a6bb285431aab930f61b0aa4ba"
 dependencies = [
  "serde",
  "serde_core",
@@ -126,6 +126,8 @@ dependencies = [
  "ic-host-fs",
  "ic-host-process",
  "libc",
+ "rustix",
+ "serde",
  "serde_json",
  "sha2",
  "toml",
@@ -133,9 +135,9 @@ dependencies = [
 
 [[package]]
 name = "ic-host-artifacts"
-version = "0.18.2"
+version = "0.18.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31b28d7e2d78a59977320625394e533850516e3f1c2b671a5909d833d73d6cdf"
+checksum = "5d9ca6143657b00488bb386faf1a5f5e3afdbc85cf202d317a5473fdcf7fc315"
 dependencies = [
  "leb128",
  "sha2",
@@ -144,9 +146,9 @@ dependencies = [
 
 [[package]]
 name = "ic-host-fs"
-version = "0.18.2"
+version = "0.18.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a5c93188fbfb88e22dd1d7938b84a6f68d8ace2e3881935d13d73c3055fa0ce"
+checksum = "02ecbf11c7f207bc41b654fd6fe46f749eff2ab965be2fe046629a8655cc21d9"
 dependencies = [
  "ic-host-artifacts",
  "rustix",
@@ -154,9 +156,9 @@ dependencies = [
 
 [[package]]
 name = "ic-host-process"
-version = "0.18.2"
+version = "0.18.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "277e18f76a599425c828995d5c13a118fabc93344663e6c206d32a6081a451fc"
+checksum = "c3b23fb2df923b7bdaea9f8d69c8fd292f2e25ec46a803a83d5125b2a657e660"
 dependencies = [
  "ic-host-artifacts",
  "ic-host-fs",

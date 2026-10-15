@@ -64,7 +64,6 @@ mod inputs;
 mod staging;
 mod transaction;
 mod transaction_batch;
-mod wasm;
 mod wasm_batch;
 mod wasm_cache;
 mod workspace;
@@ -93,7 +92,6 @@ pub use transaction_batch::{
     ArtifactCacheBatchMetrics, ArtifactCacheBatchOutcomeEntry, ArtifactCacheBatchReport,
     LabeledArtifactCacheSpec, build_artifact_caches_batch,
 };
-pub use wasm::{wasm_artifacts_ready, wasm_path};
 pub use wasm_batch::{
     LabeledWasmBuildSpec, WasmBuildBatchConfig, WasmBuildBatchContractError, WasmBuildBatchEntry,
     WasmBuildBatchFailure, WasmBuildBatchMaintenanceEntry, WasmBuildBatchMetrics,

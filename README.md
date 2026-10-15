@@ -72,7 +72,7 @@ local snapshot. The [Make interface](docs/make-interface.md) owns common setup,
 formatting, hook installation and release entrypoints.
 
 The virtual root [Cargo manifest](Cargo.toml) owns the workspace version, edition 2024,
-MSRV 1.88.0, common metadata and lints. The
+MSRV 1.91.0, common metadata and lints. The
 [ic-build package](crates/ic-build/Cargo.toml) inherits them and permits registry
 publication through the explicit tagged-release command. The [library root](crates/ic-build/src/lib.rs)
 exports the generic engine. The root [lockfile](Cargo.lock) records its selected
