@@ -3,6 +3,13 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.3.4]
+
+- Hash captured input evidence relative to an explicit root for relocatable
+  source fingerprints, preserving absolute-path digests, input refusal and
+  caller ownership of source selection and descriptive provenance
+  ([#40](https://github.com/dragginzgame/ic-build/issues/40)).
+
 ## [0.3.3] - 2026-10-14
 
 - Observe Cargo catalogs, resolved graphs and selected dependency trees through

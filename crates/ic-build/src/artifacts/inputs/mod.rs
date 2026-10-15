@@ -226,20 +226,69 @@ impl InputEvidence {
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
-        ordered.sort_unstable_by_key(|(path, _)| *path);
-        let mut digest = Sha256::new();
-        framed_field(&mut digest, &self.spec.identity);
-        for (path, value) in ordered {
-            framed_field(&mut digest, path.as_bytes());
-            match value {
-                InputEvidenceValue::Missing => framed_field(&mut digest, b"absent"),
-                InputEvidenceValue::Directory => framed_field(&mut digest, b"directory"),
-                InputEvidenceValue::File { sha256 } => {
-                    framed_field(&mut digest, sha256.to_hex().as_bytes());
-                }
-            }
+        Ok(digest_values(&self.spec.identity, &mut ordered))
+    }
+
+    /// Hash the captured inventory using UTF-8 paths relative to an explicit root.
+    ///
+    /// Path components are separated with `/`, so an identical inventory and
+    /// caller identity produce the same digest after checkout relocation. No
+    /// filesystem is read here. Directory membership, missing paths and file
+    /// bytes retain the ordinary evidence encoding; the absolute-path [`Self::digest`]
+    /// remains unchanged. This is descriptive input evidence, not a build or
+    /// executable attestation. Callers own the inventory and its source custody.
+    /// # Errors
+    /// Rejects a relative/non-normal root, paths outside it, non-normal relative
+    /// components and non-UTF-8 names instead of dropping or rewriting inputs.
+    pub fn digest_relative_to(&self, root: &Path) -> Result<InputDigest, InputEvidenceError> {
+        if !root.is_absolute()
+            || root
+                .components()
+                .any(|part| matches!(part, Component::ParentDir | Component::CurDir))
+        {
+            return Err(input_io(
+                root,
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "digest root must be absolute and normal",
+                ),
+            ));
         }
-        Ok(InputDigest::from_bytes(digest.finalize().into()))
+        let mut ordered = self
+            .entries
+            .iter()
+            .map(|(path, value)| {
+                let relative = path.strip_prefix(root).map_err(|_| {
+                    input_io(
+                        path,
+                        io::Error::new(io::ErrorKind::InvalidInput, "input is outside digest root"),
+                    )
+                })?;
+                let parts = relative
+                    .components()
+                    .map(|part| match part {
+                        Component::Normal(name) => name.to_str().ok_or_else(|| {
+                            input_io(
+                                path,
+                                io::Error::new(
+                                    io::ErrorKind::InvalidData,
+                                    "input digest requires UTF-8 paths",
+                                ),
+                            )
+                        }),
+                        _ => Err(input_io(
+                            path,
+                            io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                "input digest requires normal relative paths",
+                            ),
+                        )),
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok((parts.join("/"), value))
+            })
+            .collect::<Result<Vec<_>, InputEvidenceError>>()?;
+        Ok(digest_values(&self.spec.identity, &mut ordered))
     }
 
     /// Validate an expanded/replaced inventory against pre-work authority.
@@ -316,6 +365,26 @@ impl InputEvidence {
                 .any(|root| first.starts_with(root))
             && !self.entries.contains_key(&first)
     }
+}
+
+fn digest_values<K: AsRef<str>>(
+    identity: &[u8],
+    ordered: &mut [(K, &InputEvidenceValue)],
+) -> InputDigest {
+    ordered.sort_unstable_by(|(left, _), (right, _)| left.as_ref().cmp(right.as_ref()));
+    let mut digest = Sha256::new();
+    framed_field(&mut digest, identity);
+    for (path, value) in ordered.iter() {
+        framed_field(&mut digest, path.as_ref().as_bytes());
+        match value {
+            InputEvidenceValue::Missing => framed_field(&mut digest, b"absent"),
+            InputEvidenceValue::Directory => framed_field(&mut digest, b"directory"),
+            InputEvidenceValue::File { sha256 } => {
+                framed_field(&mut digest, sha256.to_hex().as_bytes());
+            }
+        }
+    }
+    InputDigest::from_bytes(digest.finalize().into())
 }
 
 fn framed_field(digest: &mut Sha256, bytes: &[u8]) {

@@ -1,5 +1,23 @@
 # Current handoff
 
+## Relocatable source evidence — pending 0.3.4 against published main
+
+From released 0.3.3 `f6f2259`, `InputEvidence::digest_relative_to` projects the
+existing capture through explicit UTF-8 relative labels and the shared framed
+encoder. It reads no filesystem and selects no source policy. Absolute digest
+bytes remain unchanged. [#40](https://github.com/dragginzgame/ic-build/issues/40)
+owns producer acceptance and publication; Blob owns its build-script recipe and
+adoption. This isolated branch excludes the normal checkout's unpublished 0.4
+and Rust 1.91 work, whose eventual release needs independent consumer admission.
+
+All 18 input-evidence cases, strict library/test lint, warnings-denied Rustdoc and
+actual Rust 1.88 pass with committed cargo-platform 0.3.2 and Host 0.18.2. Blob's
+separate candidate uses its Host 0.18.4 sources and passes 123 CLI/probe cases,
+strict CLI lint and actual Rust 1.88. Real Cargo rebuilds detect added/renamed
+source files and return to the original fingerprint after their removal. These
+are descriptive source observations, not executable attestations. Full release
+and native macOS qualification remain separate; no merge or publication ran.
+
 ## Bounded Cargo observation and Canic removal rehearsal — pending 0.3.3
 
 Build #33 now has catalog/resolved-graph and selected-tree observations with
