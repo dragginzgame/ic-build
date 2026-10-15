@@ -3,7 +3,7 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.4.0]
+## [0.4.0] - 2026-10-15
 
 - **Breaking:** require Rust 1.91.0 or newer and select `cargo-platform` 0.3.3.
   Consumers adopting this release must prepare that compiler or newer; published
