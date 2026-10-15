@@ -3,7 +3,7 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.5.0]
+## [0.5.0] - 2026-10-15
 
 - Adopt Shared Tooling 0.15.0's committed snapshot and strict release-input
   admission; qualify registry IC Host 0.18.6 with unchanged API minimums and
