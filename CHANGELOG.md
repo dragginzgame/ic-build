@@ -9,6 +9,8 @@ archive also includes the extracted artifact engine and Cargo grouping API.
   Consumers adopting this release must prepare that compiler or newer; published
   0.3.3's Rust 1.88 declaration is unchanged
   ([#34 — Dependency graph MSRV](https://github.com/dragginzgame/ic-build/issues/34)).
+- Use equivalent Rust 1.91 duration constructors in tests and the cache example
+  to satisfy strict Clippy after the MSRV increase.
 - **Breaking:** remove the public `wasm_path` and `wasm_artifacts_ready` helpers.
   Obtain verified output paths from retained artifact records; fixture-only path
   construction belongs in consumer tests.

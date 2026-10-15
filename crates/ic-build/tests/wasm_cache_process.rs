@@ -167,7 +167,7 @@ fn scheduled_shared_target_maintenance_process_worker() {
     let outcome = maintain_shared_incremental_target_at_most_every(
         &spec,
         SharedIncrementalTargetPrunePolicy::new().with_max_size_bytes(u64::MAX),
-        Duration::from_secs(60 * 60),
+        Duration::from_hours(1),
     )
     .expect("run scheduled shared-target maintenance worker");
     let label = match outcome {

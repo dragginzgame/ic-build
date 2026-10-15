@@ -815,7 +815,7 @@ fn scheduled_shared_target_maintenance_participates_in_wasm_acquisition() {
         .with_shared_incremental_target(&shared_target)
         .with_shared_incremental_target_maintenance_at_most_every(
             SharedIncrementalTargetPrunePolicy::new().with_max_size_bytes(u64::MAX),
-            Duration::from_secs(60 * 60),
+            Duration::from_hours(1),
         );
 
     let mut first_events = Vec::new();

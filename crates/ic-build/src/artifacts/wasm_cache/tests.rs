@@ -1236,7 +1236,7 @@ fn scheduled_shared_target_maintenance_skips_expensive_work_inside_interval() {
     let spec = WasmBuildSpec::new(&root, &root.join("exact"), &["fixture"], "debug")
         .with_shared_incremental_target(&target);
     let policy = SharedIncrementalTargetPrunePolicy::new().with_max_size_bytes(0);
-    let interval = Duration::from_secs(60 * 60);
+    let interval = Duration::from_hours(1);
 
     let first = maintain_shared_incremental_target_at_most_every(&spec, policy, interval)
         .expect("perform scheduled shared-target maintenance");
@@ -1317,11 +1317,11 @@ fn zero_progress_heartbeat_is_rejected_for_a_valid_build() {
 #[test]
 fn maintenance_configuration_is_readable_and_strict_by_default() {
     let shared_policy = SharedIncrementalTargetPrunePolicy::new().with_max_size_bytes(1024 * 1024);
-    let shared_interval = Duration::from_secs(60 * 60);
+    let shared_interval = Duration::from_hours(1);
     let shared_config =
         SharedIncrementalTargetMaintenanceConfig::new(shared_policy, shared_interval);
     let exact_policy = ArtifactCachePrunePolicy::new().with_max_size_bytes(2 * 1024 * 1024);
-    let exact_interval = Duration::from_secs(30 * 60);
+    let exact_interval = Duration::from_mins(30);
     let spec = WasmBuildSpec::new(Path::new("."), Path::new("target"), &["fixture"], "debug")
         .with_shared_incremental_target("target/shared")
         .with_shared_incremental_target_maintenance(shared_config)

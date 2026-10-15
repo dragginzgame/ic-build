@@ -61,7 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .with_output("result", &output)
     .with_prune_policy(
         ArtifactCachePrunePolicy::new()
-            .with_max_age(Duration::from_secs(7 * 24 * 60 * 60))
+            .with_max_age(Duration::from_hours(7 * 24))
             .with_max_size_bytes(2 * 1024 * 1024 * 1024),
     );
 

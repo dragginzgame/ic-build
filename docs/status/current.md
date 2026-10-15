@@ -16,6 +16,11 @@ platform package/checksum changed in the producer lock, now SHA-256
 `9a77c5dc69bd356fe3c5cf71d86a5d0cf0e7a8877d1ca99f9c4d727de4a5f431`.
 Formatting, snapshot, pins, workspace metadata and documentation links pass.
 
+The release gate exposed eight MSRV-dependent duration-unit lint failures. Tests
+and the cache example now use equivalent hour/minute constructors; strict
+all-target/all-feature Clippy and actual Rust 1.91 MSRV checking pass. Formatting
+and documentation links pass; logs are in `/tmp/ic-build-duration-clippy-20261015/`.
+
 Published 0.3.3 still advertises Rust 1.88; this change does not rewrite that
 release. [#34 — Dependency graph MSRV](https://github.com/dragginzgame/ic-build/issues/34)
 retains release delivery. Native macOS qualification remains a hosted gate.
