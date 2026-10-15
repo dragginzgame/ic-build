@@ -1,6 +1,6 @@
-//! Feature-safe Cargo package grouping extracted from Canic.
+//! Bounded Cargo observations and feature-safe package grouping.
 //!
-//! Responsibility: batch packages only when Cargo preserves each resolved dependency tree.
+//! Responsibility: observe complete Cargo evidence and preserve isolated dependency trees.
 //! Does not own: feature selection, role contracts, or runtime compilation.
 //! Boundary: shared dependency feature unification must not change a role's isolated build.
 
@@ -9,10 +9,11 @@ mod tests;
 
 #[cfg(unix)]
 pub mod native;
+pub mod observation;
 pub mod packages;
 
 use crate::batch::{BatchLabelError, validate_labels};
-use ic_host_process::tool::{CompletedExecution, OutputLimits, capture_command};
+use ic_host_process::tool::OutputLimits;
 use std::{collections::BTreeMap, path::Path, process::Command};
 
 /// Partition packages without changing their resolved normal/build dependency trees.
@@ -86,29 +87,24 @@ fn resolved_trees(
     limits: OutputLimits,
     cargo_command: &mut impl FnMut() -> Command,
 ) -> Result<BTreeMap<String, String>, Box<dyn std::error::Error>> {
-    let mut command = cargo_command();
-    command.current_dir(workspace).args([
-        "tree",
-        "--color",
-        "never",
-        "--locked",
-        "--target",
-        target,
-        "--edges",
-        "normal,build",
-        "--prefix",
-        "depth",
-        "--no-dedupe",
-        "--format",
-        "{p}\t{f}",
-    ]);
-    for package in packages {
-        command.arg("--package").arg(package);
-    }
-    let output = capture_command(&mut command, limits)
-        .and_then(CompletedExecution::require_success)
-        .and_then(CompletedExecution::require_complete)?;
-    parse_trees(&String::from_utf8(output.stdout)?)
+    let manifest = workspace.join("Cargo.toml");
+    let packages = packages.iter().map(String::as_str).collect::<Vec<_>>();
+    let features = observation::CargoFeatureSelection::default();
+    let tree = observation::observe_tree(
+        &observation::CargoTreeSpec {
+            manifest_path: &manifest,
+            packages: &packages,
+            target,
+            edges: "normal,build",
+            format: "{p}\t{f}",
+            locked: true,
+            offline: false,
+            features: &features,
+        },
+        limits,
+        cargo_command(),
+    )?;
+    parse_trees(&tree)
 }
 
 fn parse_trees(text: &str) -> Result<BTreeMap<String, String>, Box<dyn std::error::Error>> {

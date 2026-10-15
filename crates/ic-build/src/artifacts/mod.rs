@@ -81,7 +81,7 @@ pub use inputs::{
     InputEvidence, InputEvidenceError, InputEvidenceSpec, InputEvidenceValue,
     discover_cargo_depfile_inputs, parse_cargo_depfile, read_cargo_depfile_inputs,
 };
-pub use staging::{ArtifactStagingDirectory, CapturedArtifact};
+pub use staging::{ArtifactStagingDirectory, CaptureRetentionError, CapturedArtifact};
 pub use transaction::{
     ArtifactBuildTransaction, ArtifactCacheArtifact, ArtifactCacheError, ArtifactCacheOutcome,
     ArtifactCachePreparation, ArtifactCacheRecord, ArtifactCacheSpec, ArtifactCacheTimings,
