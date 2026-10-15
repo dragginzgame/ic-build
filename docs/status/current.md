@@ -1,5 +1,14 @@
 # Current handoff
 
+## Host 0.19 public boundary — pending
+
+The three Host requirements and lock selections now use published 0.19.0.
+Canic already selects this family; Build 0.5.0 exposed distinct Host 0.18
+output-limit types and prevented its consumers from compiling. Pending 0.6 notes
+classify the public dependency identity change; package versions stay unchanged.
+Five Cargo observation cases and six real Cargo example cases pass on Rust 1.91.
+Native macOS and release qualification remain separate.
+
 ## Shared Tooling 0.15.0 and registry Host 0.18.6 — 2026-10-15
 
 The canonical refresh selects Shared Tooling's verified current main revision

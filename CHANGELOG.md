@@ -3,6 +3,13 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.6.0]
+
+- **Breaking:** expose IC Host 0.19 types in Cargo observation and artifact APIs.
+  Consumers passing Host output limits or matching Host errors must align their
+  direct Host dependencies to 0.19 and rebuild. This resolves mixed Host type
+  identities in Canic ([#9](https://github.com/dragginzgame/ic-build/issues/9)).
+
 ## [0.5.0] - 2026-10-15
 
 - Adopt Shared Tooling 0.15.0's committed snapshot and strict release-input
