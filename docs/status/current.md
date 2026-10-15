@@ -1,5 +1,99 @@
 # Current handoff
 
+## Cargo selection, exact-entry preparation and fixtures — pending 0.6.1
+
+Cargo arguments are interpreted once when the specification is constructed or
+its argument builder is replaced. Validation, metadata commands and batch grouping
+consume those retained facts; batching borrows the metadata argument slice.
+Original OS-native arguments still feed command execution and fingerprinting.
+The public builder and conservative malformed-argument refusal behavior remain.
+Cold Wasm builds and exact-entry reconstruction share retention-safe preparation
+and cleanup ownership. Private unit/integration fixture scaffolding has one source
+owner; scenario-specific producers and process controls remain with their tests.
+
+All three selection, 65 Wasm-cache, 12 Wasm-batch and four handoff cases pass on
+actual Rust 1.91 on Linux; the handoff worker remains intentionally ignored by
+the test harness and is selected by its parent process case. Strict all-target
+Clippy, actual MSRV checking, Rustdoc, formatting and local links pass.
+A temporary comparator using saved original validators/projection agrees on
+287934 validation combinations and metadata for every sampled argument sequence,
+including native invalid UTF-8. Five real Cargo recipes preserve exact digests
+against registry Build 0.6.0. Equivalent release flag spellings still have
+distinct identities, as required by the existing raw-argument fingerprint.
+
+[#46](https://github.com/dragginzgame/ic-build/issues/46) records implementation
+and qualification. Compatible cleanup extends pending 0.6.1 without changing
+package versions, manifests, lock selection or the real index. Incoming source
+and the earlier unpublished Host adoptions remain intact. Before-images and
+logs are retained at `/tmp/ic-build-internal6-20261015/`; local full-suite,
+native macOS and release execution remain separate.
+
+## Streaming capture and shared Host mechanics — pending 0.6.1
+
+Captured outputs now stream through published Host 0.19's bounded copy and
+durable writer, removing the complete in-memory buffer. Regular-file/initial
+size admission precedes staging; stream limits, original input errors, durable
+cleanup evidence and capture lifetime remain. Twelve staging, 30 transaction and
+six transaction-batch cases pass on actual Rust 1.91. Strict Clippy, actual MSRV,
+Rustdoc, formatting and documentation links pass on Linux. This compatible work
+extends 0.6.1 notes without changing the package version or dependency selection.
+
+[Host PR #135](https://github.com/dragginzgame/ic-host-tooling/pull/135) delivers
+the bounded visitor and production directory allocator from isolated source
+`b1d7c71` on released Host 0.19.0. Host fixture allocation uses that sole engine;
+Build cleanup/lifetime, framing and exact-size admission remain here. Host's
+actual Rust 1.88 selected tests, strict affected lint/docs, MSRV, formatting,
+links and snapshot checks pass. Normal sibling checkouts remain untouched.
+
+The two Build caller deletions are implemented in an isolated consumer. All 125
+selected digest/staging/transaction/batch/Wasm-cache cases, strict Clippy and
+actual Rust 1.91 checking pass against the coherent Host candidate family. Four
+dual-source Cargo recipes preserve exact fingerprints against registry Build
+0.6.0. The normal checkout retains published dependencies and its existing loops
+until a reviewed Host release supplies the new APIs. The checked replay patch,
+before-images, exact graph and logs are retained under
+`/tmp/ic-build-cuts6-20261015/`; [#45](https://github.com/dragginzgame/ic-build/issues/45)
+tracks publication and activation. Incoming configuration work and the real
+index/manifests/lock are preserved. Native macOS and release execution remain
+separate.
+
+## Published 0.6.0, Canic acceptance and shared configuration — pending 0.6.1
+
+Published 0.6.0 is `d0eaf2d95fc4191eab1b59a80d19c43816580f08`. The cached
+registry archive and sparse-index checksum agree on SHA-256
+`40afef44b47e796ce55c412e20cf96a27ab2f7d04b6bef6c9eb1c66e42528fde`;
+its provenance identifies that commit and its normalized manifest selects Host
+0.19 and Rust 1.91. The redundant Host-alignment PR #44 is closed as implemented
+by this release, without another merge or branch deletion.
+
+Canic's owner has adopted registry Build 0.6 and consolidated workspace discovery
+under explicit fixture command/limits policy. Its default/governed compilation,
+strict fixture lint and selected installed checkpoint case pass on Build 0.6,
+Host 0.19 and Testkit 0.45. Recorded root/private graph digests still match the
+normal checkout at inspection. These are the owner's retained receipts under
+`/tmp/canic-build06-adoption/`, not a fresh full Canic validation or live Backup
+acceptance claim. Its active source and staging are untouched.
+
+The exact implementation from PR #38 `aaff82542b899b4781d4cd22e863101107a707e9`
+is applied locally on released 0.6. Cargo configuration discovery/include traversal
+now has one owner at `cargo::environment`; the Wasm engine consumes its facts.
+The three public cases and all 65 Wasm-cache cases pass on actual Rust 1.91.
+A dual-source consumer comparing registry 0.6 with this source preserves exact
+fingerprints for direct, string/array include and precedence recipes. Cargo 1.91
+itself rejects optional-table include syntax before either resolver; the public
+observation case separately covers optional missing includes. Original failed
+probe evidence remains retained rather than being relabelled as acceptance.
+
+Strict all-target Clippy, actual MSRV, Rustdoc, formatting, links, workspace
+metadata, pins and snapshot verification pass on Linux. README/guide requirements
+now describe published Build 0.6 with Host 0.19. Notes select compatible 0.6.1;
+own package version, lock selection and staging remain unchanged. Canic's
+configuration caller deletion still needs producer publication and consumer
+qualification under #35; the guide records its absence/input-authority boundary.
+Host PR #99 remains open and unpublished, so #43's controlled-capture deletion
+is still gated. Native qualification and release execution remain separate.
+Before-images, source patch and logs are at `/tmp/ic-build-061-issues-20261015/`.
+
 ## Directory cleanup, workspace observation and controlled capture — pending 0.6.0
 
 Released source is 0.5.0 `4feef850010ed725edb9b9e9adeaed140baf5106`.

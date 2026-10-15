@@ -1,7 +1,7 @@
 #[cfg(unix)]
 use ic_host_process::testing::write_executable_script;
 
-use std::{fs, path::PathBuf};
+use std::path::PathBuf;
 
 pub fn unique_temp_directory(label: &str) -> PathBuf {
     ic_host_fs::testing::create_fixture_directory(
@@ -15,20 +15,13 @@ pub fn unique_temp_directory(label: &str) -> PathBuf {
 #[cfg(unix)]
 pub(super) fn fake_wasm_build_spec(label: &str) -> (PathBuf, super::wasm_cache::WasmBuildSpec) {
     let root = unique_temp_directory(label);
-    fs::create_dir_all(root.join("fixture/src")).expect("create fixture sources");
-    fs::write(
-        root.join("Cargo.toml"),
-        "[workspace]\nmembers = [\"fixture\"]\nresolver = \"2\"\n",
-    )
-    .expect("write workspace manifest");
-    fs::write(root.join("fixture/Cargo.toml"),
-        "[package]\nname = \"fixture\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[lib]\ncrate-type = [\"cdylib\"]\n")
-        .expect("write fixture manifest");
-    fs::write(
-        root.join("fixture/src/lib.rs"),
+    crate::cargo_fixture::write_workspace(&root, &["fixture"]).expect("write workspace manifest");
+    crate::cargo_fixture::write_fixture_package(
+        &root.join("fixture"),
+        "[lib]\ncrate-type = [\"cdylib\"]\n",
         "pub fn value() -> u8 { 1 }\n",
     )
-    .expect("write fixture source");
+    .expect("write fixture package");
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let quoted_cargo = format!("'{}'", cargo.to_string_lossy().replace('\'', "'\"'\"'"));
     let wrapper = root.join("cargo.sh");

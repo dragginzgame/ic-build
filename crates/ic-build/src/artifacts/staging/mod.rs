@@ -11,7 +11,11 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use ic_host_fs::{durable::write_bytes, read::read_file};
+use ic_host_artifacts::artifact::{ArtifactError, CopyError, copy_reader};
+use ic_host_fs::{
+    durable::{NamedWriteError, PublicationMode, WriteOptions, write_with},
+    read::open_regular_file,
+};
 
 use super::cache_fs::remove_path_if_present;
 
@@ -178,15 +182,34 @@ impl CapturedArtifact {
     /// The caller keeps the source stable during capture and selects the maximum
     /// readable byte count. Read/publication failures retain their typed causes
     /// inside the returned I/O error. Existing public destinations are untouched.
+    /// Bytes stream through bounded scratch rather than a complete in-memory copy.
     ///
     /// # Errors
     /// Returns the source read/byte-limit, staging allocation or durable-write
     /// error. An unsuccessful capture performs best-effort staging cleanup.
     pub fn capture(source: &Path, parent: &Path, maximum_bytes: usize) -> io::Result<Self> {
-        let bytes = read_file(source, maximum_bytes).map_err(io::Error::from)?;
+        let source = open_regular_file(source).map_err(io::Error::from)?;
+        let limit = maximum_bytes as u64;
+        if source.metadata()?.len() > limit {
+            return Err(ArtifactError::LimitExceeded { limit }.into());
+        }
         let staging = ArtifactStagingDirectory::new(parent)?;
         let path = staging.path().join("input.artifact");
-        write_bytes(&path, &bytes).map_err(io::Error::other)?;
+        write_with(
+            &path,
+            WriteOptions {
+                mode: PublicationMode::Replace,
+                permissions: 0o666,
+            },
+            |file| copy_reader(source, file, limit).map(|_| ()),
+        )
+        .map_err(|error| match error {
+            NamedWriteError::Producer {
+                source: CopyError::Input(source),
+                cleanup_error: None,
+            } => io::Error::from(source),
+            other => io::Error::other(other),
+        })?;
         Ok(Self { staging, path })
     }
 

@@ -3,6 +3,9 @@
 
 pub mod wait;
 
+#[path = "../../test-support/cargo/mod.rs"]
+pub mod cargo;
+
 use std::path::{Path, PathBuf};
 
 pub fn discover_workspace(manifest_dir: impl AsRef<Path>) -> std::io::Result<PathBuf> {

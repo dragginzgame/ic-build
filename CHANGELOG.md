@@ -3,6 +3,23 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.6.1]
+
+- Consolidate Cargo argument interpretation, exact-cache preparation and private
+  Cargo fixture scaffolding while preserving public builders, fingerprint bytes
+  and retained cache formats
+  ([#46 — Internal cleanup](https://github.com/dragginzgame/ic-build/issues/46)).
+- Stream captured artifacts through Host's bounded copy and durable writer,
+  avoiding a complete in-memory copy while retaining source admission, typed
+  failures and staging lifetime
+  ([#45 — Capture and Host mechanics](https://github.com/dragginzgame/ic-build/issues/45)).
+- Share read-only Cargo configuration and include observations through
+  `cargo::environment`; reuse that owner in the Wasm engine while preserving
+  cache identities, lookup aliases and caller-owned admission
+  ([#35 — Cargo configuration observations](https://github.com/dragginzgame/ic-build/issues/35)).
+- Correct registry and Host dependency guidance for published 0.6.0 and record
+  Canic's delivered workspace-discovery and Host-boundary adoption.
+
 ## [0.6.0] - 2026-10-15
 
 - **Breaking:** move `artifacts::workspace_root_for` to

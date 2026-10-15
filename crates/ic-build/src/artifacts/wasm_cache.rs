@@ -1,3 +1,4 @@
+use crate::cargo::selection::{CargoSelection, SelectionFlag};
 use ic_host_process::{
     child::{CleanupPolicy, OwnedChild},
     tool::{
@@ -24,6 +25,9 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 use toml::Value as TomlValue;
+
+mod acquisition;
+use acquisition::prepare_exact_cache_entry;
 
 use super::{
     cache_fs::{
@@ -74,7 +78,7 @@ pub struct WasmBuildSpec {
     packages: Vec<String>,
     example: Option<String>,
     profile_target_dir: String,
-    cargo_profile_args: Vec<OsString>,
+    cargo_selection: CargoSelection,
     extra_env: BTreeMap<OsString, OsString>,
     inherited_env: BTreeSet<OsString>,
     additional_inputs: Vec<PathBuf>,
@@ -294,7 +298,7 @@ struct BatchResolutionKey<'a> {
     workspace_root: &'a Path,
     cargo_program: &'a OsStr,
     rustc_program: &'a OsStr,
-    metadata_arguments: Vec<OsString>,
+    metadata_arguments: &'a [OsString],
     environment: BTreeMap<OsString, Option<OsString>>,
 }
 
@@ -899,7 +903,7 @@ impl WasmBuildSpec {
             packages,
             example: None,
             profile_target_dir: profile_target_dir.to_owned(),
-            cargo_profile_args: Vec::new(),
+            cargo_selection: CargoSelection::parse(Vec::new()),
             extra_env: BTreeMap::new(),
             inherited_env: BTreeSet::new(),
             additional_inputs: Vec::new(),
@@ -967,10 +971,12 @@ impl WasmBuildSpec {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        self.cargo_profile_args = arguments
-            .into_iter()
-            .map(|argument| argument.as_ref().to_owned())
-            .collect();
+        self.cargo_selection = CargoSelection::parse(
+            arguments
+                .into_iter()
+                .map(|argument| argument.as_ref().to_owned())
+                .collect(),
+        );
         self
     }
 
@@ -2033,7 +2039,7 @@ impl<'a> BatchResolutionKey<'a> {
                 .extra_env
                 .get(OsStr::new("RUSTC"))
                 .unwrap_or(&spec.rustc_program),
-            metadata_arguments: metadata_arguments(&spec.cargo_profile_args),
+            metadata_arguments: &spec.cargo_selection.metadata_arguments,
             environment: effective_environment(spec),
         }
     }
@@ -3217,14 +3223,9 @@ fn reconstruct_exact_cache_entry(
     progress: &mut ProgressReporter<'_>,
 ) -> Result<Vec<FileDigest>, WasmBuildError> {
     let cached_artifacts = expected_artifacts(spec, cache_entry);
-    progress.run_phase(WasmBuildProgressPhase::ArtifactPublication, || {
-        remove_unretained_entry(cache_entry).map_err(wasm_cache_fs_error)?;
-        create_dir_all(
-            cache_entry,
-            "create content-addressed Cargo target directory",
-        )
+    let incomplete = progress.run_phase(WasmBuildProgressPhase::ArtifactPublication, || {
+        prepare_exact_cache_entry(cache_entry)
     })?;
-    let incomplete = OwnedDirectory::new(cache_entry.to_owned());
     let result = progress.run_phase(WasmBuildProgressPhase::ArtifactPublication, || {
         copy_wasm_artifacts(artifacts, &cached_artifacts)?;
         let missing = missing_artifacts(&cached_artifacts);
@@ -3253,19 +3254,12 @@ fn build_wasm_cache_miss(
     let cache_entry = cache_entry_directory(spec, fingerprint);
     let preparation_started = Instant::now();
     progress.begin_phase(WasmBuildFailurePhase::ArtifactPublication);
-    let preparation_result = (|| {
-        remove_unretained_entry(&cache_entry).map_err(wasm_cache_fs_error)?;
-        create_dir_all(
-            &cache_entry,
-            "create content-addressed Cargo target directory",
-        )
-    })();
+    let preparation_result = prepare_exact_cache_entry(&cache_entry);
     progress.record_phase(
         WasmBuildFailurePhase::ArtifactPublication,
         preparation_started.elapsed(),
     );
-    preparation_result?;
-    let incomplete_directory = OwnedDirectory::new(cache_entry.clone());
+    let incomplete_directory = preparation_result?;
     let build_result = (|| {
         if matches!(
             spec.cache_mode,
@@ -3581,10 +3575,11 @@ fn validate_spec(spec: &WasmBuildSpec) -> Result<(), WasmBuildError> {
             message: "Cargo compilation target must not be empty".to_owned(),
         });
     }
-    if spec.cargo_profile_args.iter().any(|argument| {
-        matches!(argument.to_str(), Some("--help" | "--unit-graph"))
-            || matches!(short_cargo_option(argument), Some((b'h', _)))
-    }) {
+    if spec
+        .cargo_selection
+        .flags
+        .contains(&SelectionFlag::NonBuilding)
+    {
         return Err(WasmBuildError::InvalidSpec {
             message:
                 "Cargo help and build-graph flags exit without building and cannot be used for Wasm acquisition"
@@ -3592,33 +3587,21 @@ fn validate_spec(spec: &WasmBuildSpec) -> Result<(), WasmBuildError> {
         });
     }
     if spec.extra_env.contains_key(OsStr::new("CARGO_TARGET_DIR"))
-        || spec.cargo_profile_args.iter().any(|argument| {
-            argument == OsStr::new("--target-dir")
-                || argument.as_encoded_bytes().starts_with(b"--target-dir=")
-        })
+        || spec
+            .cargo_selection
+            .flags
+            .contains(&SelectionFlag::TargetDirectory)
     {
         return Err(WasmBuildError::InvalidSpec {
             message: "Cargo target directories are owned by the build specification; use target_dir or with_shared_incremental_target instead of command overrides".to_owned(),
         });
     }
     validate_cargo_target_selection(spec)?;
-    if spec.cargo_profile_args.iter().any(|argument| {
-        let option = argument
-            .as_encoded_bytes()
-            .split(|byte| *byte == b'=')
-            .next()
-            .unwrap_or_default();
-        matches!(
-            option,
-            b"--manifest-path"
-                | b"--target"
-                | b"--package"
-                | b"--workspace"
-                | b"--all"
-                | b"--exclude"
-                | b"--config"
-        ) || matches!(short_cargo_option(argument), Some((b'm' | b'p' | b'C', _)))
-    }) {
+    if spec
+        .cargo_selection
+        .flags
+        .contains(&SelectionFlag::InputSelection)
+    {
         return Err(WasmBuildError::InvalidSpec {
             message: "Cargo workspace, package, target, and configuration inputs are owned by the build specification; use workspace_root, packages, with_target, and discovered Cargo configuration files or with_extra_env instead of command overrides".to_owned(),
         });
@@ -3655,10 +3638,7 @@ fn validate_cargo_target_selection(spec: &WasmBuildSpec) -> Result<(), WasmBuild
                 (components.next(), components.next()),
                 (Some(Component::Normal(_)), None)
             )
-            || spec
-                .cargo_profile_args
-                .iter()
-                .any(|argument| argument == "--lib")
+            || spec.cargo_selection.flags.contains(&SelectionFlag::Library)
         {
             return Err(WasmBuildError::InvalidSpec {
                 message: "a named Cargo example requires one package, a normal target name and no --lib override".to_owned(),
@@ -3676,25 +3656,11 @@ fn validate_cargo_target_selection(spec: &WasmBuildSpec) -> Result<(), WasmBuild
             message: "Cargo package names must be normal path components".to_owned(),
         });
     }
-    if spec.cargo_profile_args.iter().any(|argument| {
-        let option = argument
-            .as_encoded_bytes()
-            .split(|byte| *byte == b'=')
-            .next()
-            .unwrap_or_default();
-        matches!(
-            option,
-            b"--bin"
-                | b"--bins"
-                | b"--example"
-                | b"--examples"
-                | b"--test"
-                | b"--tests"
-                | b"--bench"
-                | b"--benches"
-                | b"--all-targets"
-        )
-    }) {
+    if spec
+        .cargo_selection
+        .flags
+        .contains(&SelectionFlag::TargetSelection)
+    {
         return Err(WasmBuildError::InvalidSpec {
             message: "Cargo target selection is owned by the build specification; use with_example for a named cdylib example".to_owned(),
         });
@@ -3703,44 +3669,13 @@ fn validate_cargo_target_selection(spec: &WasmBuildSpec) -> Result<(), WasmBuild
 }
 
 fn validate_cargo_profile(spec: &WasmBuildSpec) -> Result<(), WasmBuildError> {
-    let mut selected = None;
-    let mut arguments = spec.cargo_profile_args.iter();
-    while let Some(argument) = arguments.next() {
-        let profile = if argument == "--profile" {
-            Some(
-                arguments
-                    .next()
-                    .and_then(|value| value.to_str())
-                    .ok_or_else(|| WasmBuildError::InvalidSpec {
-                        message: "Cargo --profile requires a UTF-8 profile name".to_owned(),
-                    })?,
-            )
-        } else if let Some(profile) = argument.to_str().and_then(|s| s.strip_prefix("--profile=")) {
-            Some(profile)
-        } else {
-            let bytes = argument.as_encoded_bytes();
-            // Only switches before the first value-taking short option count:
-            // -qrFextra selects release, while -Fextra and -j4 do not.
-            let short_option = short_cargo_option(argument);
-            let flags_end = short_option.map_or(bytes.len(), |(_, index)| index);
-            let release = argument == "--release"
-                || (bytes.starts_with(b"-")
-                    && !bytes.starts_with(b"--")
-                    && bytes[..flags_end].contains(&b'r'));
-            if matches!(short_option, Some((_, index)) if index + 1 == bytes.len()) {
-                arguments.next();
-            }
-            release.then_some("release")
-        };
-        if let Some(profile) = profile
-            && (profile.is_empty() || selected.replace(profile).is_some())
-        {
-            return Err(WasmBuildError::InvalidSpec {
-                message: "select one nonempty Cargo profile".to_owned(),
-            });
-        }
-    }
-    let profile = selected.unwrap_or("dev");
+    let profile =
+        spec.cargo_selection
+            .profile
+            .as_deref()
+            .map_err(|message| WasmBuildError::InvalidSpec {
+                message: (*message).to_owned(),
+            })?;
     let expected = match profile {
         "dev" | "test" => "debug",
         "bench" => "release",
@@ -3854,7 +3789,7 @@ fn finish_build_fingerprint(
         hasher.field("cargo-target-selection", b"lib");
     }
     hasher.field("profile-target-dir", spec.profile_target_dir.as_bytes());
-    for argument in &spec.cargo_profile_args {
+    for argument in &spec.cargo_selection.arguments {
         hasher.field("cargo-argument", &os_bytes(argument));
     }
     for (key, value) in effective_environment(spec) {
@@ -3912,7 +3847,7 @@ fn cargo_metadata_with_policy(
     command
         .current_dir(&spec.workspace_root)
         .args(["metadata", "--format-version", "1"]);
-    for argument in metadata_arguments(&spec.cargo_profile_args) {
+    for argument in &spec.cargo_selection.metadata_arguments {
         command.arg(argument);
     }
     apply_command_environment(&mut command, spec);
@@ -4038,66 +3973,6 @@ fn capture_controlled_probe(
         SuccessfulExit::Cleanup,
         &mut *policy.cancelled,
     )
-}
-
-fn metadata_arguments(arguments: &[OsString]) -> Vec<OsString> {
-    let mut selected = Vec::new();
-    let mut arguments = arguments.iter();
-    while let Some(argument) = arguments.next() {
-        if let Some((b'F', index)) = short_cargo_option(argument) {
-            // Cargo accepts clusters such as -qFextra and -rF=extra. Profile
-            // and output flags do not belong in metadata's resolution context.
-            // Valid feature names are UTF-8; preserve malformed arguments for
-            // Cargo to diagnose instead of replacing their bytes.
-            selected.push(argument.to_str().map_or_else(
-                || argument.clone(),
-                |text| OsString::from(format!("-F{}", &text[index + 1..])),
-            ));
-            if index + 1 == argument.as_encoded_bytes().len()
-                && let Some(value) = arguments.next()
-            {
-                selected.push(value.clone());
-            }
-            continue;
-        }
-        let argument_text = argument.to_string_lossy();
-        match argument_text.as_ref() {
-            "--all-features" | "--no-default-features" | "--locked" | "--offline" | "--frozen" => {
-                selected.push(argument.clone());
-            }
-            "--features" | "--filter-platform" => {
-                selected.push(argument.clone());
-                if let Some(value) = arguments.next() {
-                    selected.push(value.clone());
-                }
-            }
-            _ if argument_text.starts_with("--features=")
-                || argument_text.starts_with("--filter-platform=") =>
-            {
-                selected.push(argument.clone());
-            }
-            _ => {}
-        }
-    }
-    selected
-}
-
-// Return the first help or value-taking short option and its byte position.
-// Bytes after a value-taking option are its value, not more switches.
-// Unknown options remain Cargo's responsibility to reject.
-fn short_cargo_option(argument: &OsStr) -> Option<(u8, usize)> {
-    let bytes = argument.as_encoded_bytes();
-    if !bytes.starts_with(b"-") || bytes.starts_with(b"--") {
-        return None;
-    }
-    for (index, byte) in bytes.iter().copied().enumerate().skip(1) {
-        match byte {
-            b'v' | b'q' | b'r' => {}
-            b'h' | b'F' | b'j' | b'Z' | b'm' | b'p' | b'C' => return Some((byte, index)),
-            _ => return None,
-        }
-    }
-    None
 }
 
 // Cargo owns the schema. Raw values below are retained only for the unchanged
@@ -4675,50 +4550,46 @@ fn append_cargo_configuration_inputs(
                 source,
             })?;
 
-    let mut roots = invocation_root
-        .ancestors()
-        .filter_map(|directory| effective_cargo_config(&directory.join(".cargo")))
-        .collect::<Vec<_>>();
-    if let Some(cargo_home) = effective_cargo_home(spec, &invocation_root)
-        && let Some(config) = effective_cargo_config(&cargo_home)
-    {
-        roots.push(config);
-    }
-
-    let mut active = BTreeSet::new();
-    for config in roots {
-        append_cargo_configuration_tree(inputs, &config, &canonical_workspace, &mut active, false)?;
+    let cargo_home = command_environment_value(spec, "CARGO_HOME");
+    let default_home = default_home_directory(spec);
+    let directories = crate::cargo::environment::configuration_directories(
+        &invocation_root,
+        cargo_home.as_deref(),
+        default_home.as_deref().map(Path::as_os_str),
+    )
+    .map_err(|source| WasmBuildError::Io {
+        operation: "resolve Cargo configuration directories",
+        path: invocation_root.clone(),
+        source,
+    })?;
+    let roots: Vec<_> = directories
+        .iter()
+        .filter_map(|directory| crate::cargo::environment::preferred_configuration(directory))
+        .collect();
+    let observed =
+        crate::cargo::environment::observe_configurations(&roots).map_err(|error| match error {
+            crate::cargo::environment::ConfigurationError::Io {
+                operation,
+                path,
+                source,
+            } => WasmBuildError::Io {
+                operation,
+                path,
+                source,
+            },
+            crate::cargo::environment::ConfigurationError::Invalid { path, message } => {
+                WasmBuildError::InvalidCargoConfiguration { path, message }
+            }
+        })?;
+    for config in observed {
+        if !inputs.iter().any(|(_, path)| path == &config.path) {
+            inputs.push((
+                cargo_configuration_label(&config.location, &canonical_workspace),
+                config.path,
+            ));
+        }
     }
     Ok(())
-}
-
-fn effective_cargo_config(directory: &Path) -> Option<PathBuf> {
-    let extensionless = directory.join("config");
-    if extensionless.exists() {
-        return Some(extensionless);
-    }
-    let toml = directory.join("config.toml");
-    toml.exists().then_some(toml)
-}
-
-fn effective_cargo_home(spec: &WasmBuildSpec, invocation_root: &Path) -> Option<PathBuf> {
-    if let Some(cargo_home) = command_environment_value(spec, "CARGO_HOME") {
-        let cargo_home = PathBuf::from(cargo_home);
-        return Some(if cargo_home.is_absolute() {
-            cargo_home
-        } else {
-            invocation_root.join(cargo_home)
-        });
-    }
-
-    default_home_directory(spec).map(|home| {
-        let home = if home.is_absolute() {
-            home
-        } else {
-            invocation_root.join(home)
-        };
-        home.join(".cargo")
-    })
 }
 
 #[cfg(windows)]
@@ -4740,132 +4611,12 @@ fn command_environment_value(spec: &WasmBuildSpec, name: &str) -> Option<OsStrin
         .or_else(|| std::env::var_os(name))
 }
 
-fn append_cargo_configuration_tree(
-    inputs: &mut Vec<(PathBuf, PathBuf)>,
-    config: &Path,
-    workspace_root: &Path,
-    active: &mut BTreeSet<PathBuf>,
-    optional: bool,
-) -> Result<(), WasmBuildError> {
-    let contents = match fs::read_to_string(config) {
-        Ok(contents) => contents,
-        Err(error) if optional && error.kind() == io::ErrorKind::NotFound => return Ok(()),
-        Err(source) => {
-            return Err(WasmBuildError::Io {
-                operation: "read Cargo configuration",
-                path: config.to_owned(),
-                source,
-            });
-        }
-    };
-    let parent = config
-        .parent()
-        .ok_or_else(|| WasmBuildError::InvalidCargoConfiguration {
-            path: config.to_owned(),
-            message: "configuration path has no parent directory".to_owned(),
-        })?;
-    // Normalize the containing directory, preserving the configured file
-    // entry. Cargo resolves includes beside that entry, not its referent.
-    let location = parent
-        .canonicalize()
-        .map_err(|source| WasmBuildError::Io {
-            operation: "resolve Cargo configuration directory",
-            path: parent.to_owned(),
-            source,
-        })?
-        .join(config.file_name().ok_or_else(|| {
-            invalid_cargo_configuration(config, "configuration path has no file name")
-        })?);
-    // Only active recursion is suppressed. Separate directory aliases must
-    // each retain their nested lookup paths even when they currently agree.
-    if !active.insert(location.clone()) {
-        return Ok(());
-    }
-    let configuration = toml::from_str::<TomlValue>(&contents).map_err(|error| {
-        WasmBuildError::InvalidCargoConfiguration {
-            path: config.to_owned(),
-            message: error.to_string(),
-        }
-    })?;
-    // Keep the lookup path so rehashing observes replaced file or directory
-    // symlinks. A shared referent can have different includes at each location.
-    if !inputs.iter().any(|(_, path)| path == config) {
-        inputs.push((
-            cargo_configuration_label(&location, workspace_root),
-            config.to_owned(),
-        ));
-    }
-    if let Some(include) = configuration.get("include") {
-        for (included, optional) in cargo_configuration_includes(include, config)? {
-            let included = if included.is_absolute() {
-                included
-            } else {
-                parent.join(included)
-            };
-            append_cargo_configuration_tree(inputs, &included, workspace_root, active, optional)?;
-        }
-    }
-    active.remove(&location);
-    Ok(())
-}
-
-fn cargo_configuration_includes(
-    include: &TomlValue,
-    config: &Path,
-) -> Result<Vec<(PathBuf, bool)>, WasmBuildError> {
-    let values = match include {
-        TomlValue::Array(values) => values.as_slice(),
-        value => std::slice::from_ref(value),
-    };
-    values
-        .iter()
-        .map(|value| match value {
-            TomlValue::String(path) => Ok((PathBuf::from(path), false)),
-            TomlValue::Table(table) => {
-                let path = table
-                    .get("path")
-                    .and_then(TomlValue::as_str)
-                    .ok_or_else(|| {
-                        invalid_cargo_configuration(
-                            config,
-                            "Cargo configuration include table requires a string `path`",
-                        )
-                    })?;
-                let optional = table
-                    .get("optional")
-                    .map(|value| {
-                        value.as_bool().ok_or_else(|| {
-                            invalid_cargo_configuration(
-                                config,
-                                "Cargo configuration include `optional` must be a boolean",
-                            )
-                        })
-                    })
-                    .transpose()?
-                    .unwrap_or(false);
-                Ok((PathBuf::from(path), optional))
-            }
-            _ => Err(invalid_cargo_configuration(
-                config,
-                "Cargo configuration `include` must contain paths or include tables",
-            )),
-        })
-        .collect()
-}
-
 fn cargo_configuration_label(config: &Path, workspace_root: &Path) -> PathBuf {
     if let Ok(relative) = config.strip_prefix(workspace_root) {
         return PathBuf::from("cargo-config/workspace").join(relative);
     }
     let location = digest_bytes("cargo-config-location-v1", &os_bytes(config.as_os_str()));
     PathBuf::from("cargo-config/external").join(location.to_hex())
-}
-
-fn invalid_cargo_configuration(path: &Path, message: &str) -> WasmBuildError {
-    WasmBuildError::InvalidCargoConfiguration {
-        path: path.to_owned(),
-        message: message.to_owned(),
-    }
 }
 
 fn append_package_inputs(
@@ -5108,7 +4859,8 @@ fn cargo_build_command(
         command.arg("--lib");
     }
     command.args(["--target", &spec.target]).args(
-        spec.cargo_profile_args
+        spec.cargo_selection
+            .arguments
             .iter()
             .filter(|argument| argument.as_os_str() != OsStr::new("--lib")),
     );

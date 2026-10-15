@@ -9,3 +9,7 @@ pub mod artifacts;
 pub mod cargo;
 
 mod batch;
+
+#[cfg(test)]
+#[path = "../test-support/cargo/mod.rs"]
+pub(crate) mod cargo_fixture;
