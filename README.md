@@ -54,15 +54,16 @@ fn build(workspace: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
 ```
 
 Consumers select packages, profiles, environment and maintenance policy.
-Pending 0.6.1 adds `ic_build::cargo::environment` for read-only configuration
+Published 0.6.1 adds `ic_build::cargo::environment` for read-only configuration
 discovery, include traversal, raw-byte digests and compiler-override facts. Consumers select
 effective or conservative input paths and retain compiler admission, receipt
 framing and source custody. Configuration contents are excluded from returned
 facts and failure diagnostics. Observation executes no Cargo commands and does
 not establish build or release validity.
 
-Select IC Host 0.19 when passing `OutputLimits` or typed Host failures across
-IC Build's public grouping/capture boundary.
+Published IC Build 0.6 uses IC Host 0.19 at its public grouping/capture boundary.
+Pending 0.7 requires IC Host 0.20; align direct Host dependencies before passing
+`OutputLimits` or typed Host failures across that boundary.
 The [deployable-Wasm LTO guidance](docs/artifacts.md#deployable-wasm-lto) records
 whole-canister measurements and shows how a common adapter can apply full LTO
 through the existing API, with complete-application qualification before adopting

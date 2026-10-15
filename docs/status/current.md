@@ -1,5 +1,33 @@
 # Current handoff
 
+## Host 0.20 admission repair — pending 0.7.0
+
+The maintainer's `8eb59e1d256677b6c1d2fba741258a7ae70a041b` selects registry
+Host 0.20 while own package metadata remains 0.6.1. The attempted patch release
+stopped at all-target compilation before version preparation: the example and
+Host integration tests still used removed `ToolSpec` admission. They now pass
+`VersionSpec` and the separate trusted digest to `AdmittedTool::admit`.
+The example still consumes caller-supplied authority rather than trusting a hash
+of the selected executable. Execution limits, failure evidence and cache
+admission remain unchanged.
+
+All-target compilation, strict all-target Clippy and actual Rust 1.91 checking
+pass. All three Host integration cases pass on Rust 1.91, retaining changed-tool
+invalidation, independent Wasm/post-link caching and failed-producer refusal.
+The real example rejects a wrong digest before creating a cache or output, then
+builds and reuses the exact same artifact key with matching output bytes under
+the supplied correct digest. Rustdoc, formatting and local links pass. These are
+focused Linux checks, not a resumed release or native macOS qualification.
+
+Host 0.20 changes the Rust identities exposed through public limits and errors.
+The complete pending batch therefore selects minor 0.7.0 instead of patch 0.6.2;
+the changelog and current guide requirements agree. Consumers crossing that
+boundary must align direct Host dependencies and rebuild. Own versions, lock
+selection, the real index and release state remain untouched. Earlier 0.6.2
+candidate evidence below retains its original graph and source identity.
+Before-images, original failure references and repair logs are retained under
+`/tmp/ic-build-host020-fix-20261015/`.
+
 ## Canic producer handoff — pending 0.6.2
 
 The inherited-flag implementation from [PR #37](https://github.com/dragginzgame/ic-build/pull/37)

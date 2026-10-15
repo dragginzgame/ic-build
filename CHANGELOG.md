@@ -3,7 +3,13 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.6.2]
+## [0.7.0]
+
+- **Breaking:** align exposed Host types with IC Host 0.20. Consumers passing
+  Host limits or typed errors across this boundary must align their
+  direct Host dependencies and rebuild. Keep trusted digest admission in the
+  example and integration tests through Host's new `VersionSpec` API
+  ([#9 — Exposed Host boundary](https://github.com/dragginzgame/ic-build/issues/9)).
 
 - Verify exact workspace-version projections in Cargo lockfiles without allowing
   dependency, source, checksum or unrelated metadata changes. Version selection

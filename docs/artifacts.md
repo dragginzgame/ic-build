@@ -124,7 +124,7 @@ or lowercase file SHA-256. Capture preserves native paths; this particular diges
 encoding refuses non-UTF-8 paths. Existing cache domains and field encoding remain
 unchanged. Consumers keep their record formats and namespaces.
 
-Pending 0.6.2 adds `digest_relative_to(root)` for descriptive source fingerprints
+Pending 0.7.0 adds `digest_relative_to(root)` for descriptive source fingerprints
 that survive checkout relocation. It projects the same captured facts using
 sorted UTF-8 relative labels with `/` separators and the existing field framing.
 The root must be absolute; parent traversal, outside inputs and non-UTF-8 relative
@@ -257,7 +257,7 @@ establish Query adoption or native smoke qualification.
 
 ## Strict Cargo lockfile version projections
 
-Pending 0.6.2 provides `cargo::lock_projection::verify_workspace_version_projection`.
+Pending 0.7.0 provides `cargo::lock_projection::verify_workspace_version_projection`.
 Pass saved before/after TOML and explicit `WorkspaceVersionProjection` entries
 containing each unsourced package name, expected prior version and permitted next
 version. The verifier compares the complete parsed lockfiles after projecting only
@@ -274,7 +274,7 @@ that broader transformation is deliberately refused by this strict contract.
 
 ## Inherited Cargo Rust flags
 
-Pending 0.6.2 provides `cargo::flags::combined_encoded_rustflags(&extra_flags)`.
+Pending 0.7.0 provides `cargo::flags::combined_encoded_rustflags(&extra_flags)`.
 Pass each additional argument as a separate `String`; when it returns `Some`,
 set that value as `CARGO_ENCODED_RUSTFLAGS` on the Cargo command. An empty slice
 returns `None`, so leave the command's inherited flags unchanged.
@@ -888,10 +888,11 @@ resolution, execution and Git provenance belong to `ic_host_process`; Candid
 extraction and response decoding belong to `ic_host_tools`. Its pure Candid text
 APIs are portable; extraction, execution, resolution and provenance are Unix-only.
 Structural Wasm inspection does not replace PocketIC's runtime validation.
-IC Build 0.6 requires compatible IC Host 0.19 releases. Retained staging still
+Published IC Build 0.6 requires compatible IC Host 0.19 releases. Pending 0.7
+requires IC Host 0.20 at the public dependency boundary. Retained staging still
 uses checked native permission conversion on macOS. Align direct Host dependencies
 when passing `OutputLimits` or matching typed Host failures across the engine
-boundary. Host 0.18 and 0.19 values have different Rust crate identities even
+boundary. Host 0.19 and 0.20 values have different Rust crate identities even
 when their fields match. The earlier IC Build 0.2.0 boundary also means an
 `ic-build = "0.1"` requirement does not select this engine. Process execution returns completed
 results even for nonzero exits: call `require_success()` before admitting or
