@@ -72,8 +72,11 @@ fn graph_requires_exact_extracted_identity_and_unique_members() {
         version: "1.0.0",
         patch_registry: false,
     }];
-    let metadata = json!({"packages": [{"name": "sample", "version": "1.0.0", "source": null, "manifest_path": directory.join("Cargo.toml"), "id": "selected"}], "workspace_members": ["selected"]});
-    admit_graph(&metadata, &root, &specs).unwrap();
+    let metadata = json!({"packages": [{"name": "sample", "version": "1.0.0", "source": null, "manifest_path": directory.join("Cargo.toml"), "id": "selected", "dependencies": [], "targets": [], "features": {}, "metadata": null}], "workspace_members": ["selected"], "workspace_root": root, "target_directory": root.join("target"), "version": 1});
+    let admit = |metadata: &Value| -> Result<(), Cause> {
+        admit_graph(&decode_metadata(metadata)?, &root, &specs)
+    };
+    admit(&metadata).unwrap();
     for (field, value) in [
         ("source", json!("registry+wrong")),
         ("version", json!("0.9.0")),
@@ -82,11 +85,11 @@ fn graph_requires_exact_extracted_identity_and_unique_members() {
     ] {
         let mut altered = metadata.clone();
         altered["packages"][0][field] = value;
-        assert!(admit_graph(&altered, &root, &specs).is_err());
+        assert!(admit(&altered).is_err());
     }
     let mut altered = metadata;
     altered["workspace_members"] = json!(["selected", "selected"]);
-    assert!(admit_graph(&altered, &root, &specs).is_err());
+    assert!(admit(&altered).is_err());
 }
 
 #[test]
@@ -211,4 +214,31 @@ fn directory_depth_and_entry_counts_bound_empty_tree_traversal() {
         )
         .is_err()
     );
+    fs::create_dir(root.join("other-1.0.0")).unwrap();
+    let all_specs = [
+        PackageArchiveSpec {
+            name: "sample",
+            version: "1.0.0",
+            patch_registry: false,
+        },
+        PackageArchiveSpec {
+            name: "other",
+            version: "1.0.0",
+            patch_registry: false,
+        },
+    ];
+    for (source_entries, succeeds) in [(3, false), (4, true)] {
+        assert_eq!(
+            sources(
+                &root,
+                &all_specs,
+                PackageQualificationLimits {
+                    source_entries,
+                    ..limits()
+                }
+            )
+            .is_ok(),
+            succeeds
+        );
+    }
 }

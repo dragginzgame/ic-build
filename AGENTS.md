@@ -3,8 +3,8 @@
 Read [docs/status/current.md](docs/status/current.md), then
 [DRAGGINZGAME.md](DRAGGINZGAME.md) and the
 [ownership design](docs/design/build-ownership.md).
-The baseline is Shared Tooling 0.12.7 revision
-`9364ffe3f770a6d5d94809f0bf82c33202054bf8`, recorded with exact digests in
+The baseline is Shared Tooling 0.15.0 revision
+`3bef3f2daec7f64f875397ed4d53d5b9e2e68a08`, recorded with exact digests in
 [.shared-tooling.snapshot](.shared-tooling.snapshot).
 
 - Mutate only this repository unless the maintainer expressly authorizes another
@@ -21,9 +21,9 @@ The baseline is Shared Tooling 0.12.7 revision
 - Preserve retained artifacts, errors, cancellation, input-change rejection,
   feature-safe batching and artifact lifetime. Builds have no finite default
   elapsed-time deadline. Maintenance and cleanup require explicit policy.
-- For Rust implementation, use edition 2024 and initially target the existing
-  Host/Testkit MSRV of 1.88.0, qualifying the extracted dependency graph before
-  advertising support. Use a virtual root workspace and `crates/ic-build/`.
+- For Rust implementation, use edition 2024 and MSRV 1.91.0, qualifying the
+  selected dependency graph before advertising support. Use a virtual root
+  workspace and `crates/ic-build/`.
   Do not add Python tooling.
 - Linux x86-64 and native macOS 15 Intel/Apple Silicon are the initial required
   hosts. Linux or substitute checks do not establish native macOS qualification.

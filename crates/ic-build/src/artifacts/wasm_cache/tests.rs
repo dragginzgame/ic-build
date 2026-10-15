@@ -53,12 +53,62 @@ fn canonical_fixture(path: &Path) -> PathBuf {
 
 #[cfg(unix)]
 #[test]
+fn chained_environment_overrides_reach_build_and_preserve_cache_identity() {
+    let (root, spec) = fake_wasm_build_spec("merged-environment");
+    let wrapper = root.join("cargo.sh");
+    let producer = root.join("producer.sh");
+    fs::rename(&wrapper, &producer).unwrap();
+    let quoted_producer = format!("'{}'", producer.to_string_lossy().replace('\'', "'\"'\"'"));
+    write_executable_script(
+        &wrapper,
+        format!(
+            r#"#!/bin/sh
+set -eu
+if [ "$1" = build ]; then
+    [ "$LEFT" = 'left value' ]
+    [ "$RIGHT" = 'right value' ]
+    [ "$DUP" = 'last value' ]
+    printf '%s\n' "$LEFT" "$RIGHT" "$DUP" > merged-environment
+fi
+exec {quoted_producer} "$@"
+"#
+        ),
+    )
+    .expect("write environment-checking Cargo wrapper");
+    let chained = spec
+        .clone()
+        .with_extra_env([("LEFT", "left value"), ("DUP", "first value")])
+        .with_extra_env([("RIGHT", "right value"), ("DUP", "last value")])
+        .with_extra_env(std::iter::empty::<(&str, &str)>());
+    let first = build_wasm_canisters_cached(&chained).unwrap();
+    assert!(matches!(first, WasmBuildOutcome::Built { .. }));
+    assert_eq!(
+        fs::read_to_string(root.join("merged-environment")).unwrap(),
+        "left value\nright value\nlast value\n"
+    );
+    let combined = spec.with_extra_env([
+        ("LEFT", "left value"),
+        ("RIGHT", "right value"),
+        ("DUP", "last value"),
+    ]);
+    let reused = build_wasm_canisters_cached(&combined).unwrap();
+    assert!(matches!(reused, WasmBuildOutcome::Reused { .. }));
+    assert_eq!(first.record().fingerprint(), reused.record().fingerprint());
+    let changed = resolve_cargo_build_inputs(&chained.with_extra_env([("LEFT", "changed")]))
+        .expect("resolve changed environment identity");
+    assert_ne!(first.record().fingerprint(), changed.fingerprint());
+    drop((first, reused));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
 fn shim_compiler_identity_invalidates_exact_cache_and_explicit_rustc_takes_precedence() {
     let (root, spec) = fake_wasm_build_spec("shim-compiler-identity");
     let compiler = root.join("selected-rustc");
     write_executable_script(&compiler, "#!/bin/sh\nprintf 'selected-compiler-A\\n'\n")
         .expect("write executable test script");
-    let spec = spec.with_rustc_program(compiler.as_os_str());
+    let spec = spec.with_rustc_identity_program(compiler.as_os_str());
     let first = build_wasm_canisters_cached(&spec).unwrap();
     assert!(matches!(first, WasmBuildOutcome::Built { .. }));
     assert!(matches!(
@@ -72,8 +122,9 @@ fn shim_compiler_identity_invalidates_exact_cache_and_explicit_rustc_takes_prece
     assert_ne!(first.record().fingerprint(), second.record().fingerprint());
     let selected_rustc = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
     let override_spec = spec
-        .with_rustc_program("/missing/identity-probe")
-        .with_extra_env([(OsString::from("RUSTC"), selected_rustc)]);
+        .with_rustc_identity_program("/missing/identity-probe")
+        .with_extra_env([(OsString::from("RUSTC"), selected_rustc)])
+        .with_extra_env([("UNRELATED_OVERRIDE", "retained compiler selection")]);
     build_wasm_canisters_cached(&override_spec)
         .expect("explicit RUSTC selects metadata/build environment and identity probe");
     drop((first, second));
@@ -712,20 +763,64 @@ fn semantic_workspace_projection_tracks_selected_dependencies_and_profiles() {
 }
 
 #[test]
+fn semantic_projection_preserves_v1_raw_metadata_fields() {
+    let id = "path+file:///workspace/member#member@1.2.3";
+    let original = serde_json::json!({
+        "id": id, "name": "member", "version": "1.2.3",
+        "manifest_path": "/workspace/member/Cargo.toml", "source": null,
+        "dependencies": [], "targets": [], "features": {},
+        "metadata": {"z": 7, "a": true}, "description": null,
+        "authors": [], "edition": "2024", "rust_version": "1.88",
+    });
+    let canonical = serde_json::from_value(original.clone()).unwrap();
+    let package = MetadataPackage {
+        package: &canonical,
+        original: &original,
+    };
+    let identity = semantic_package_identity(&package, Path::new("/workspace"), &[]).unwrap();
+    let value = serde_json::json!({
+        "id": id, "features": ["z", "a"], "dependencies": [],
+        "deps": [{"name": "self", "pkg": id,
+            "dep_kinds": [{"kind": null, "target": null, "future_field": "preserve"}]}],
+    });
+    let canonical_node = serde_json::from_value(value.clone()).unwrap();
+    let node = super::MetadataNode {
+        node: &canonical_node,
+        value: &value,
+    };
+    let projection = super::semantic_package_projection(
+        &package,
+        &node,
+        &std::collections::HashMap::from([(id, identity)]),
+    )
+    .unwrap();
+
+    // Captured independently from the original v1 implementation. Missing/null
+    // package fields and unknown dependency-kind fields remain hash-significant.
+    assert_eq!(
+        identity.to_hex(),
+        "ba511839396518effb69ed5d2aaf730822eb6c49bba88c264799b97b76059adb"
+    );
+    assert_eq!(
+        projection.to_hex(),
+        "aa1361a94b31abb1e0c59b6b7c90e6e9946d137e357612f80cff3189e0d48b3a"
+    );
+}
+
+#[test]
 fn semantic_package_identity_uses_selected_registry_lock_checksum() {
     let root = unique_temp_directory("semantic-registry-lock-identity");
     let source = "registry+https://example.invalid/index";
     let package_id = format!("{source}#dependency@1.2.3");
+    let original = serde_json::json!({
+        "id": package_id, "name": "dependency", "version": "1.2.3",
+        "manifest_path": root.join("registry/dependency/Cargo.toml"),
+        "source": source, "dependencies": [], "targets": [], "features": {}, "metadata": null,
+    });
+    let canonical = serde_json::from_value(original.clone()).unwrap();
     let package = MetadataPackage {
-        id: &package_id,
-        name: "dependency",
-        version: "1.2.3",
-        manifest_path: root.join("registry/dependency/Cargo.toml"),
-        is_local: false,
-        source: Some(source),
-        semantic_fields: Vec::new(),
-        cdylib_name: None,
-        cdylib_examples: Vec::new(),
+        package: &canonical,
+        original: &original,
     };
     let write_lock = |checksum: Option<&str>| {
         let checksum = checksum.map_or_else(String::new, |checksum| {
@@ -1192,7 +1287,7 @@ fn scheduled_shared_target_maintenance_skips_expensive_work_inside_interval() {
     let spec = WasmBuildSpec::new(&root, &root.join("exact"), &["fixture"], "debug")
         .with_shared_incremental_target(&target);
     let policy = SharedIncrementalTargetPrunePolicy::new().with_max_size_bytes(0);
-    let interval = Duration::from_secs(60 * 60);
+    let interval = Duration::from_hours(1);
 
     let first = maintain_shared_incremental_target_at_most_every(&spec, policy, interval)
         .expect("perform scheduled shared-target maintenance");
@@ -1273,11 +1368,11 @@ fn zero_progress_heartbeat_is_rejected_for_a_valid_build() {
 #[test]
 fn maintenance_configuration_is_readable_and_strict_by_default() {
     let shared_policy = SharedIncrementalTargetPrunePolicy::new().with_max_size_bytes(1024 * 1024);
-    let shared_interval = Duration::from_secs(60 * 60);
+    let shared_interval = Duration::from_hours(1);
     let shared_config =
         SharedIncrementalTargetMaintenanceConfig::new(shared_policy, shared_interval);
     let exact_policy = ArtifactCachePrunePolicy::new().with_max_size_bytes(2 * 1024 * 1024);
-    let exact_interval = Duration::from_secs(30 * 60);
+    let exact_interval = Duration::from_mins(30);
     let spec = WasmBuildSpec::new(Path::new("."), Path::new("target"), &["fixture"], "debug")
         .with_shared_incremental_target("target/shared")
         .with_shared_incremental_target_maintenance(shared_config)
@@ -1816,7 +1911,7 @@ exec {cargo} "$@"
             )
             .unwrap();
             let spec = if phase == "-vV" {
-                original.clone().with_rustc_program(&program)
+                original.clone().with_rustc_identity_program(&program)
             } else {
                 original.clone().with_cargo_program(&program)
             };

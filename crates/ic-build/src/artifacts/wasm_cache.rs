@@ -974,7 +974,10 @@ impl WasmBuildSpec {
         self
     }
 
-    /// Set deterministic OS-native child-process environment overrides.
+    /// Merge deterministic OS-native child-process environment overrides.
+    ///
+    /// Later values replace earlier values for the same name, including across
+    /// calls. An empty iterator preserves previously configured overrides.
     ///
     /// `CARGO_TARGET_DIR` is owned by the cache configuration and cannot be
     /// overridden here. Conflicting specifications fail before acquisition.
@@ -985,10 +988,11 @@ impl WasmBuildSpec {
         K: Into<OsString>,
         V: Into<OsString>,
     {
-        self.extra_env = environment
-            .into_iter()
-            .map(|(key, value)| (key.into(), value.into()))
-            .collect();
+        self.extra_env.extend(
+            environment
+                .into_iter()
+                .map(|(key, value)| (key.into(), value.into())),
+        );
         self
     }
 
@@ -1043,7 +1047,7 @@ impl WasmBuildSpec {
     /// together, use `with_extra_env([("RUSTC", program)])`; that explicit environment
     /// selection takes precedence over this identity-only setting.
     #[must_use]
-    pub fn with_rustc_program(mut self, program: impl Into<OsString>) -> Self {
+    pub fn with_rustc_identity_program(mut self, program: impl Into<OsString>) -> Self {
         self.rustc_program = program.into();
         self
     }
@@ -1950,7 +1954,11 @@ impl<'a, 'session> WasmBuildBatchInputResolver<'a, 'session> {
             self.resolved[*index].is_none() && validate_spec(self.specs[*index]).is_ok()
         });
         let results = progress.run_phase(WasmBuildProgressPhase::InputDiscovery, || {
-            let parsed = ParsedCargoMetadata::parse(metadata);
+            let canonical = crate::cargo::observation::decode_metadata(metadata);
+            let parsed = canonical
+                .as_ref()
+                .map_err(ToString::to_string)
+                .and_then(|canonical| ParsedCargoMetadata::parse(canonical, metadata));
             pending
                 .map(|index| {
                     let spec = self.specs[index];
@@ -3778,7 +3786,9 @@ fn build_fingerprint_with_policy(
     let discovery_started = Instant::now();
     let (inputs, exclusions) =
         progress.run_phase(WasmBuildProgressPhase::InputDiscovery, || {
-            let parsed = ParsedCargoMetadata::parse(&metadata)
+            let canonical = crate::cargo::observation::decode_metadata(&metadata)
+                .map_err(|error| invalid_metadata(&error.to_string()))?;
+            let parsed = ParsedCargoMetadata::parse(&canonical, &metadata)
                 .map_err(|message| invalid_metadata(&message))?;
             resolve_local_inputs(spec, &parsed)
         })?;
@@ -4090,16 +4100,11 @@ fn short_cargo_option(argument: &OsStr) -> Option<(u8, usize)> {
     None
 }
 
+// Cargo owns the schema. Raw values below are retained only for the unchanged
+// v1 fingerprint projection, which distinguishes missing/null and future fields.
 struct MetadataPackage<'a> {
-    id: &'a str,
-    name: &'a str,
-    version: &'a str,
-    manifest_path: PathBuf,
-    is_local: bool,
-    source: Option<&'a str>,
-    semantic_fields: Vec<(&'static str, Option<String>)>,
-    cdylib_name: Option<&'a str>,
-    cdylib_examples: Vec<&'a str>,
+    package: &'a crate::cargo::observation::schema::Package,
+    original: &'a Value,
 }
 
 // Parsed once per Cargo resolution context. Each specification still selects
@@ -4108,51 +4113,48 @@ struct ParsedCargoMetadata<'a> {
     packages: HashMap<&'a str, MetadataPackage<'a>>,
     workspace_members: HashSet<&'a str>,
     nodes: HashMap<&'a str, MetadataNode<'a>>,
-    workspace_root: Option<&'a str>,
+    workspace_root: &'a Path,
 }
 
 struct MetadataNode<'a> {
-    dependencies: Vec<&'a str>,
+    node: &'a crate::cargo::observation::schema::Node,
     value: &'a Value,
 }
 
 impl<'a> ParsedCargoMetadata<'a> {
-    fn parse(metadata: &'a Value) -> Result<Self, String> {
-        let packages = metadata_packages(metadata)?;
+    fn parse(
+        metadata: &'a crate::cargo::observation::schema::Metadata,
+        original: &'a Value,
+    ) -> Result<Self, String> {
+        let packages = metadata_packages(metadata, original);
         let workspace_members = metadata
-            .get("workspace_members")
-            .and_then(Value::as_array)
-            .ok_or_else(|| "Cargo metadata has no workspace member array".to_owned())?
+            .workspace_members
             .iter()
-            .filter_map(Value::as_str)
+            .map(|id| id.repr.as_str())
             .collect();
-        let values = metadata
-            .pointer("/resolve/nodes")
-            .and_then(Value::as_array)
+        let resolve = metadata
+            .resolve
+            .as_ref()
             .ok_or_else(|| "Cargo metadata has no resolved dependency nodes".to_owned())?;
-        let mut nodes = HashMap::new();
-        for value in values {
-            let id = required_string(value, "id")?;
-            let dependencies = value
-                .get("deps")
-                .and_then(Value::as_array)
-                .ok_or_else(|| "Cargo metadata dependency node has no deps array".to_owned())?
-                .iter()
-                .map(|dependency| required_string(dependency, "pkg"))
-                .collect::<Result<_, _>>()?;
-            nodes.insert(
-                id,
-                MetadataNode {
-                    dependencies,
-                    value,
-                },
-            );
-        }
+        let nodes = resolve
+            .nodes
+            .iter()
+            .enumerate()
+            .map(|(index, node)| {
+                (
+                    node.id.repr.as_str(),
+                    MetadataNode {
+                        node,
+                        value: &original["resolve"]["nodes"][index],
+                    },
+                )
+            })
+            .collect();
         Ok(Self {
             packages,
             workspace_members,
             nodes,
-            workspace_root: metadata.get("workspace_root").and_then(Value::as_str),
+            workspace_root: metadata.workspace_root.as_std_path(),
         })
     }
 }
@@ -4191,14 +4193,16 @@ fn resolve_local_inputs(
     // constraint until the resolved snapshot is used to acquire Wasm artifacts.
     let mut artifact_names = BTreeSet::new();
     let wasm_artifact_error = selected_ids.iter().find_map(|id| {
-        let package = &metadata.packages[id];
+        let package = metadata.packages[id].package;
         if let Some(example) = &spec.example {
-            return (!package.cdylib_examples.contains(&example.as_str())).then(|| {
+            return (!package.targets.iter().any(|target| {
+                target.name == *example && target.is_example() && target.crate_types.contains(&crate::cargo::observation::schema::CrateType::CDyLib)
+            })).then(|| {
                 format!("Cargo package `{}` must declare the cdylib example `{example}`", package.name)
             });
         }
-        let library = default_library_name(package.name);
-        if package.cdylib_name != Some(library.as_str()) {
+        let library = default_library_name(package.name.as_str());
+        if package.targets.iter().find(|target| target.is_cdylib()).is_none_or(|target| target.name != library) {
             Some(format!(
                 "Cargo package `{}` must declare a cdylib library named `{}` to produce its expected Wasm artifact",
                 package.name, library,
@@ -4215,22 +4219,25 @@ fn resolve_local_inputs(
             continue;
         }
         if let Some(node) = metadata.nodes.get(id) {
-            selected_ids.extend(node.dependencies.iter().copied());
+            selected_ids.extend(
+                node.node
+                    .deps
+                    .iter()
+                    .map(|dependency| dependency.pkg.repr.as_str()),
+            );
         }
     }
 
-    let workspace_root = metadata
-        .workspace_root
-        .map_or_else(|| spec.workspace_root.clone(), PathBuf::from);
-    let workspace_projection = semantic_workspace_projection(metadata, &closure, &workspace_root)?;
-    let mut validation_inputs = workspace_configuration_inputs(spec, &workspace_root)?;
+    let workspace_root = metadata.workspace_root;
+    let workspace_projection = semantic_workspace_projection(metadata, &closure, workspace_root)?;
+    let mut validation_inputs = workspace_configuration_inputs(spec, workspace_root)?;
     append_package_inputs(
         &mut validation_inputs,
         &metadata.packages,
         closure,
-        &workspace_root,
+        workspace_root,
     )?;
-    append_additional_inputs(&mut validation_inputs, spec, &workspace_root);
+    append_additional_inputs(&mut validation_inputs, spec, workspace_root);
     validate_shared_incremental_target_boundary(spec, &validation_inputs)?;
     let exclusions = source_exclusions(spec, &validation_inputs);
     Ok((
@@ -4243,59 +4250,24 @@ fn resolve_local_inputs(
     ))
 }
 
-fn metadata_packages(metadata: &Value) -> Result<HashMap<&str, MetadataPackage<'_>>, String> {
-    let packages_value = metadata
-        .get("packages")
-        .and_then(Value::as_array)
-        .ok_or_else(|| "Cargo metadata has no package array".to_owned())?;
-    let mut packages = HashMap::new();
-    for value in packages_value {
-        let source = optional_string(value, "source")?;
-        let package = MetadataPackage {
-            id: required_string(value, "id")?,
-            name: required_string(value, "name")?,
-            version: required_string(value, "version")?,
-            manifest_path: PathBuf::from(required_string(value, "manifest_path")?),
-            is_local: value.get("source").is_some_and(Value::is_null),
-            source,
-            semantic_fields: SEMANTIC_PACKAGE_FIELDS
-                .iter()
-                .map(|field| (*field, value.get(*field).map(Value::to_string)))
-                .collect(),
-            cdylib_name: value
-                .get("targets")
-                .and_then(Value::as_array)
-                .and_then(|targets| {
-                    targets.iter().find(|target| {
-                        target
-                            .get("kind")
-                            .and_then(Value::as_array)
-                            .is_some_and(|kinds| kinds.iter().any(|kind| kind == "cdylib"))
-                    })
-                })
-                .and_then(|target| target.get("name"))
-                .and_then(Value::as_str),
-            cdylib_examples: value
-                .get("targets")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter(|target| {
-                    target
-                        .get("kind")
-                        .and_then(Value::as_array)
-                        .is_some_and(|kinds| kinds.iter().any(|kind| kind == "example"))
-                        && target
-                            .get("crate_types")
-                            .and_then(Value::as_array)
-                            .is_some_and(|types| types.iter().any(|kind| kind == "cdylib"))
-                })
-                .filter_map(|target| target.get("name").and_then(Value::as_str))
-                .collect(),
-        };
-        packages.insert(package.id, package);
-    }
-    Ok(packages)
+fn metadata_packages<'a>(
+    metadata: &'a crate::cargo::observation::schema::Metadata,
+    original: &'a Value,
+) -> HashMap<&'a str, MetadataPackage<'a>> {
+    metadata
+        .packages
+        .iter()
+        .enumerate()
+        .map(|(index, package)| {
+            (
+                package.id.repr.as_str(),
+                MetadataPackage {
+                    package,
+                    original: &original["packages"][index],
+                },
+            )
+        })
+        .collect()
 }
 
 fn selected_package_ids<'a>(
@@ -4308,9 +4280,12 @@ fn selected_package_ids<'a>(
             .packages
             .values()
             .filter(|package| {
-                package.name == *requested && metadata.workspace_members.contains(package.id)
+                package.package.name == *requested
+                    && metadata
+                        .workspace_members
+                        .contains(package.package.id.repr.as_str())
             })
-            .map(|package| package.id);
+            .map(|package| package.package.id.repr.as_str());
         match (matches.next(), matches.next()) {
             (Some(id), None) => selected_ids.push_back(id),
             (None, _) => {
@@ -4360,7 +4335,7 @@ fn semantic_workspace_projection(
             let node = metadata.nodes.get(id).ok_or_else(|| {
                 invalid_metadata(&format!("resolved package `{id}` has no dependency node"))
             })?;
-            let projection = semantic_package_projection(package, node.value, &identities)?;
+            let projection = semantic_package_projection(package, node, &identities)?;
             Ok::<_, WasmBuildError>((identity, projection))
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -4489,10 +4464,11 @@ fn semantic_package_identity(
     workspace_root: &Path,
     locked_packages: &[LockedPackageIdentity],
 ) -> Option<InputDigest> {
+    let package = package.package;
     let mut hasher = InputHasher::new("wasm-semantic-package-identity-v1");
     hasher.field("name", package.name.as_bytes());
-    hasher.field("version", package.version.as_bytes());
-    if package.is_local {
+    hasher.field("version", package.version.to_string().as_bytes());
+    if package.source.is_none() {
         let manifest = package.manifest_path.strip_prefix(workspace_root).ok()?;
         let package_root = package.manifest_path.parent()?;
         if package_root == workspace_root {
@@ -4500,18 +4476,18 @@ fn semantic_package_identity(
         }
         hasher.field("local-manifest", &os_bytes(manifest.as_os_str()));
     } else {
-        let metadata_source = package.source?;
+        let metadata_source = &package.source.as_ref()?.repr;
         let locked = locked_packages.iter().find(|locked| {
-            locked.name == package.name
-                && locked.version == package.version
-                && locked.source == metadata_source
+            package.name == locked.name
+                && locked.version == package.version.to_string()
+                && locked.source == *metadata_source
         })?;
         match locked.source.as_str() {
             source if source.starts_with("registry+") && locked.checksum.is_some() => {}
             source if source.starts_with("git+") && source.contains('#') => {}
             _ => return None,
         }
-        hasher.field("external-package-id", package.id.as_bytes());
+        hasher.field("external-package-id", package.id.repr.as_bytes());
         hasher.field("external-source", locked.source.as_bytes());
         hasher.field(
             "external-checksum",
@@ -4523,53 +4499,48 @@ fn semantic_package_identity(
 
 fn semantic_package_projection(
     package: &MetadataPackage<'_>,
-    node: &Value,
+    node: &MetadataNode<'_>,
     identities: &HashMap<&str, InputDigest>,
 ) -> Result<InputDigest, WasmBuildError> {
     // These are the effective package values Cargo can expose to compilation
     // through CARGO_PKG_* variables. Local manifests and external checksums
     // cover the remaining package definition.
     let mut hasher = InputHasher::new("wasm-semantic-package-projection-v1");
-    for (field, value) in &package.semantic_fields {
+    for field in SEMANTIC_PACKAGE_FIELDS {
         hasher.field("package-field-name", field.as_bytes());
-        match value {
-            Some(value) => hasher.field("package-field-value", value.as_bytes()),
+        match package.original.get(*field) {
+            Some(value) => hasher.field("package-field-value", value.to_string().as_bytes()),
             None => hasher.field("package-field-missing", b""),
         }
     }
 
     let mut features = node
-        .get("features")
-        .and_then(Value::as_array)
-        .ok_or_else(|| invalid_metadata("Cargo metadata dependency node has no features array"))?
+        .node
+        .features
         .iter()
-        .map(|feature| {
-            feature.as_str().ok_or_else(|| {
-                invalid_metadata("Cargo metadata dependency feature is not a string")
-            })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|feature| feature.as_str())
+        .collect::<Vec<_>>();
     features.sort_unstable();
     for feature in features {
         hasher.field("enabled-feature", feature.as_bytes());
     }
 
     let mut dependencies = node
-        .get("deps")
-        .and_then(Value::as_array)
-        .ok_or_else(|| invalid_metadata("Cargo metadata dependency node has no deps array"))?
+        .node
+        .deps
         .iter()
-        .map(|dependency| {
-            let name = required_string(dependency, "name")
-                .map_err(|message| invalid_metadata(&message))?;
-            let package_id =
-                required_string(dependency, "pkg").map_err(|message| invalid_metadata(&message))?;
+        .enumerate()
+        .map(|(index, dependency)| {
+            let name = dependency.name.as_str();
+            let package_id = dependency.pkg.repr.as_str();
             let identity = identities.get(package_id).copied().ok_or_else(|| {
                 invalid_metadata(&format!(
                     "dependency `{package_id}` is outside the selected package closure"
                 ))
             })?;
-            let kinds = dependency
+            // Preserve the v1 JSON projection, including future kind fields,
+            // rather than serialize Cargo's normalized schema back into it.
+            let kinds = node.value["deps"][index]
                 .get("dep_kinds")
                 .ok_or_else(|| invalid_metadata("Cargo metadata dependency has no kind array"))?
                 .to_string();
@@ -4785,7 +4756,8 @@ fn append_package_inputs(
                 "resolved package `{id}` is missing"
             )));
         };
-        if !package.is_local {
+        let package = package.package;
+        if package.source.is_some() {
             continue;
         }
         let root = package.manifest_path.parent().ok_or_else(|| {
@@ -4796,11 +4768,12 @@ fn append_package_inputs(
         })?;
         let relative_manifest = package
             .manifest_path
+            .as_std_path()
             .strip_prefix(workspace_root)
-            .unwrap_or(&package.manifest_path);
+            .unwrap_or(package.manifest_path.as_std_path());
         let label = PathBuf::from(format!("package/{}@{}", package.name, package.version))
             .join(relative_manifest.parent().unwrap_or_else(|| Path::new(".")));
-        inputs.push((label, root.to_owned()));
+        inputs.push((label, root.as_std_path().to_owned()));
     }
     Ok(())
 }
@@ -5316,23 +5289,6 @@ fn create_dir_all(path: &Path, operation: &'static str) -> Result<(), WasmBuildE
 fn add_if_present(inputs: &mut Vec<(PathBuf, PathBuf)>, label: &str, path: PathBuf) {
     if path.exists() {
         inputs.push((PathBuf::from(label), path));
-    }
-}
-
-fn required_string<'a>(value: &'a Value, field: &str) -> Result<&'a str, String> {
-    value
-        .get(field)
-        .and_then(Value::as_str)
-        .ok_or_else(|| format!("Cargo metadata field `{field}` is missing"))
-}
-
-fn optional_string<'a>(value: &'a Value, field: &str) -> Result<Option<&'a str>, String> {
-    match value.get(field) {
-        None | Some(Value::Null) => Ok(None),
-        Some(Value::String(value)) => Ok(Some(value)),
-        Some(_) => Err(format!(
-            "Cargo metadata field `{field}` is not a string or null"
-        )),
     }
 }
 

@@ -3,11 +3,50 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.3.4]
+## [0.5.1]
 
 - Share read-only Cargo configuration and environment observation with release
   consumers, preserving build-cache input paths and keeping admission local
   ([#35 — Share Cargo configuration observation](https://github.com/dragginzgame/ic-build/issues/35)).
+
+## [0.5.0] - 2026-10-15
+
+- Adopt Shared Tooling 0.15.0's committed snapshot and strict release-input
+  admission; qualify registry IC Host 0.18.6 with unchanged API minimums and
+  executable pins.
+- **Breaking:** merge `WasmBuildSpec::with_extra_env` overrides across calls,
+  with later values winning for duplicate names. Empty calls preserve prior
+  values; construct a new specification when a fresh environment map is needed.
+- **Breaking:** rename `WasmBuildSpec::with_rustc_program` to
+  `with_rustc_identity_program`. This selects only the compiler identity probe;
+  explicit `RUSTC` still selects Cargo's compiler and takes probe precedence.
+- **Breaking:** remove `artifacts::test_target_dir`. Consumers select their own
+  test output paths, for example `workspace.join("target").join(name)`.
+- Simplify collect-all artifact batching while preserving phase timings,
+  synchronous abort and retained primary/cleanup failures
+  ([#42 — Batch and boundary cleanup](https://github.com/dragginzgame/ic-build/issues/42)).
+
+- Correct the registry dependency and Shared Tooling guidance for published 0.4.0,
+  and reconcile delivered MSRV and retained-capture acceptance.
+
+## [0.4.0] - 2026-10-15
+
+- **Breaking:** require Rust 1.91.0 or newer and select `cargo-platform` 0.3.3.
+  Consumers adopting this release must prepare that compiler or newer; published
+  0.3.3's Rust 1.88 declaration is unchanged
+  ([#34 — Dependency graph MSRV](https://github.com/dragginzgame/ic-build/issues/34)).
+- Use equivalent Rust 1.91 duration constructors in tests and the cache example
+  to satisfy strict Clippy after the MSRV increase.
+- **Breaking:** remove the public `wasm_path` and `wasm_artifacts_ready` helpers.
+  Obtain verified output paths from retained artifact records; fixture-only path
+  construction belongs in consumer tests.
+- Decode Cargo metadata through the canonical schema while preserving Wasm
+  cache fingerprint projections, probe cancellation and retained diagnostics.
+- Delegate package-source traversal on Unix to Host's descriptor-based walker,
+  preserving source budgets and exact byte/mode evidence.
+
+- Adopt Shared Tooling 0.14.0's committed governance snapshot and concise
+  change-reporting guidance, preserving executable pins and release behavior.
 
 ## [0.3.3] - 2026-10-14
 

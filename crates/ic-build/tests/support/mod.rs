@@ -3,7 +3,14 @@
 
 pub mod wait;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+pub fn wasm_path(target_dir: &Path, crate_name: &str, profile_target_dir: &str) -> PathBuf {
+    target_dir
+        .join("wasm32-unknown-unknown")
+        .join(profile_target_dir)
+        .join(format!("{crate_name}.wasm"))
+}
 
 pub fn unique_temp_directory(label: &str) -> PathBuf {
     ic_host_fs::testing::create_fixture_directory(
