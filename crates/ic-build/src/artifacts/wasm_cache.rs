@@ -974,7 +974,10 @@ impl WasmBuildSpec {
         self
     }
 
-    /// Set deterministic OS-native child-process environment overrides.
+    /// Merge deterministic OS-native child-process environment overrides.
+    ///
+    /// Later values replace earlier values for the same name, including across
+    /// calls. An empty iterator preserves previously configured overrides.
     ///
     /// `CARGO_TARGET_DIR` is owned by the cache configuration and cannot be
     /// overridden here. Conflicting specifications fail before acquisition.
@@ -985,10 +988,11 @@ impl WasmBuildSpec {
         K: Into<OsString>,
         V: Into<OsString>,
     {
-        self.extra_env = environment
-            .into_iter()
-            .map(|(key, value)| (key.into(), value.into()))
-            .collect();
+        self.extra_env.extend(
+            environment
+                .into_iter()
+                .map(|(key, value)| (key.into(), value.into())),
+        );
         self
     }
 
@@ -1043,7 +1047,7 @@ impl WasmBuildSpec {
     /// together, use `with_extra_env([("RUSTC", program)])`; that explicit environment
     /// selection takes precedence over this identity-only setting.
     #[must_use]
-    pub fn with_rustc_program(mut self, program: impl Into<OsString>) -> Self {
+    pub fn with_rustc_identity_program(mut self, program: impl Into<OsString>) -> Self {
         self.rustc_program = program.into();
         self
     }

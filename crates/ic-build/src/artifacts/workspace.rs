@@ -86,12 +86,6 @@ fn locate_workspace(command: &mut Command) -> io::Result<PathBuf> {
     })
 }
 
-/// Return `<workspace>/target/<name>` for isolated host-side test artifacts.
-#[must_use]
-pub fn test_target_dir(workspace_root: &Path, name: &str) -> PathBuf {
-    workspace_root.join("target").join(name)
-}
-
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;

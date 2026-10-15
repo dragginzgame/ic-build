@@ -117,4 +117,4 @@ pub use wasm_cache::{
     prune_wasm_build_cache, resolve_cargo_build_inputs,
     resolve_cargo_build_inputs_with_probe_policy,
 };
-pub use workspace::{test_target_dir, workspace_root_for};
+pub use workspace::workspace_root_for;

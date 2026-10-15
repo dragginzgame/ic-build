@@ -2,11 +2,11 @@
 
 mod support;
 
-use ic_build::artifacts::{test_target_dir, workspace_root_for};
+use ic_build::artifacts::workspace_root_for;
 use std::{fs, path::PathBuf};
 use support::unique_temp_directory as unique_temp_dir;
 
-// Verify workspace and target helpers derive stable host-side paths.
+// Verify Cargo locates the workspace owning this package.
 #[test]
 fn workspace_helpers_resolve_expected_paths() {
     let workspace_root = workspace_root_for(env!("CARGO_MANIFEST_DIR")).unwrap();
@@ -18,10 +18,6 @@ fn workspace_helpers_resolve_expected_paths() {
             .parent()
             .unwrap()
             .join("Cargo.toml")
-    );
-    assert_eq!(
-        test_target_dir(&workspace_root, "pic-wasm"),
-        workspace_root.join("target/pic-wasm")
     );
 }
 

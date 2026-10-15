@@ -55,7 +55,8 @@ let spec = WasmBuildSpec::new(workspace, &target, &["application_canister"], "re
 
 For a custom profile, select its matching output directory and Cargo argument,
 and use its corresponding `CARGO_PROFILE_<NAME>_LTO` variable. Keep other explicit
-overrides in the same `with_extra_env` call; the setter replaces that map.
+overrides in chained `with_extra_env` calls; each call merges into the existing
+map. Later values win for duplicate names, and empty calls preserve prior values.
 [Cargo's profile environment configuration](https://doc.rust-lang.org/cargo/reference/config.html#profilenamelto)
 overrides the manifest. IC Build fingerprints explicit child environment and
 workspace profiles, so thin and fat selections have distinct cache identities.
@@ -259,13 +260,13 @@ preserved and need explicit maintenance if no longer wanted.
 ```rust,no_run
 use ic_build::artifacts::{
     ArtifactCachePrunePolicy, WasmBuildOutcome, WasmBuildSpec,
-    build_wasm_canisters_cached, test_target_dir, workspace_root_for,
+    build_wasm_canisters_cached, workspace_root_for,
 };
 use std::time::Duration;
 
 let workspace = workspace_root_for(env!("CARGO_MANIFEST_DIR"))
     .expect("resolve the crate's Cargo workspace");
-let target = test_target_dir(&workspace, "pic-wasm");
+let target = workspace.join("target").join("pic-wasm");
 let spec = WasmBuildSpec::new(
     &workspace,
     &target,
@@ -320,7 +321,7 @@ validated semantic workspace projection lets an unrelated host-only workspace
 dependency or lockfile change retain the same exact Wasm key.
 
 For a Cargo shim that selects another compiler, pair `with_cargo_program(shim)`
-with `with_rustc_program(actual_compiler)` so the `-vV` probe fingerprints that
+with `with_rustc_identity_program(actual_compiler)` so the `-vV` probe fingerprints that
 compiler. The latter selects identity only; it does not configure the shim's
 build. When Cargo should use a selected compiler, use
 `with_extra_env([("RUSTC", actual_compiler)])`, which also takes precedence for
