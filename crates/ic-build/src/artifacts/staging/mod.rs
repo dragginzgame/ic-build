@@ -54,18 +54,14 @@ impl OwnedDirectory {
     pub(super) fn cleanup(mut self) -> io::Result<()> {
         self.try_cleanup()
     }
-
-    pub(super) fn cleanup_on_drop(&mut self) {
-        if self.armed {
-            let _ = remove_path_if_present(&self.path);
-            self.disarm();
-        }
-    }
 }
 
 impl Drop for OwnedDirectory {
     fn drop(&mut self) {
-        self.cleanup_on_drop();
+        if self.armed {
+            let _ = remove_path_if_present(&self.path);
+            self.disarm();
+        }
     }
 }
 
@@ -130,12 +126,6 @@ impl ArtifactStagingDirectory {
     pub fn close(mut self) -> io::Result<()> {
         self.directory.disarm();
         remove_path_if_present(self.directory.path())
-    }
-}
-
-impl Drop for ArtifactStagingDirectory {
-    fn drop(&mut self) {
-        self.directory.cleanup_on_drop();
     }
 }
 

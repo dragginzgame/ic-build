@@ -66,7 +66,6 @@ mod transaction;
 mod transaction_batch;
 mod wasm_batch;
 mod wasm_cache;
-mod workspace;
 
 #[cfg(test)]
 pub(crate) mod test_support;
@@ -117,4 +116,3 @@ pub use wasm_cache::{
     prune_wasm_build_cache, resolve_cargo_build_inputs,
     resolve_cargo_build_inputs_with_probe_policy,
 };
-pub use workspace::workspace_root_for;

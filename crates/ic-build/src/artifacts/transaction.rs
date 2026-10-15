@@ -843,12 +843,6 @@ impl ArtifactBuildTransaction {
     }
 }
 
-impl Drop for ArtifactBuildTransaction {
-    fn drop(&mut self) {
-        self.staging_directory.cleanup_on_drop();
-    }
-}
-
 /// Verify or begin one exact external artifact-set transaction.
 ///
 /// A hit validates the complete cached output set and makes every configured

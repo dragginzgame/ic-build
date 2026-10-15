@@ -7,6 +7,9 @@
 #[cfg(test)]
 mod tests;
 
+mod workspace;
+pub use workspace::workspace_root_for;
+
 /// Canonical Cargo metadata and build-message types, without consumer mirrors.
 pub use cargo_metadata as schema;
 
