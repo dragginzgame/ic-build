@@ -6,7 +6,7 @@
 //! It never prunes existing artifacts or publishes a product release.
 
 use std::{
-    fs, io,
+    fmt, fs, io,
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
 };
@@ -150,6 +150,38 @@ pub struct CapturedArtifact {
     path: PathBuf,
 }
 
+/// Finalization failed after capture custody was transferred to the caller.
+///
+/// The exact bytes remain at [`Self::retained_path`]. If rename succeeded but
+/// cleanup failed, that path is the destination; otherwise it is the staging file.
+#[derive(Debug)]
+pub struct CaptureRetentionError {
+    /// Filesystem operation that failed.
+    pub source: io::Error,
+    /// Actual retained file path after the failed operation.
+    pub retained_path: PathBuf,
+    /// Owned staging child still requiring caller disposition.
+    pub staging_directory: PathBuf,
+}
+
+impl fmt::Display for CaptureRetentionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "capture retained at {} (staging {}): {}",
+            self.retained_path.display(),
+            self.staging_directory.display(),
+            self.source
+        )
+    }
+}
+
+impl std::error::Error for CaptureRetentionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.source)
+    }
+}
+
 impl CapturedArtifact {
     /// Capture an output synchronously before another producer can overwrite it.
     ///
@@ -183,6 +215,31 @@ impl CapturedArtifact {
     pub fn retain(mut self) -> PathBuf {
         self.staging.directory.disarm();
         self.path
+    }
+
+    /// Retain the exact capture at a caller-selected destination.
+    ///
+    /// Uses [`fs::rename`] semantics, including replacement of an existing
+    /// destination when supported. The caller owns destination admission and
+    /// later custody. Only the empty owned staging child is removed on success.
+    ///
+    /// # Errors
+    /// Rename or cleanup failure reports the actual retained bytes and staging
+    /// child. Neither failure deletes evidence or silently retries publication.
+    pub fn retain_to(self, destination: &Path) -> Result<PathBuf, CaptureRetentionError> {
+        let staging = self.staging.path().to_owned();
+        let retained = self.retain();
+        fs::rename(&retained, destination).map_err(|source| CaptureRetentionError {
+            source,
+            retained_path: retained.clone(),
+            staging_directory: staging.clone(),
+        })?;
+        fs::remove_dir(&staging).map_err(|source| CaptureRetentionError {
+            source,
+            retained_path: destination.to_owned(),
+            staging_directory: staging,
+        })?;
+        Ok(destination.to_owned())
     }
 
     /// Remove the captured output and its owned staging child, reporting cleanup failure.

@@ -1,5 +1,94 @@
 # Current handoff
 
+## Bounded Cargo observation and Canic removal rehearsal — pending 0.3.3
+
+Build #33 now has catalog/resolved-graph and selected-tree observations with
+caller-selected commands, environments, feature/target/lock/offline choices and
+complete-output limits. Metadata uses the upstream `cargo_metadata` 0.23.1 schema;
+feature-safe grouping shares the tree observer. Typed Host failure/status and
+truncation evidence remain intact; no default elapsed deadline or cache is added.
+All 18 affected Cargo cases, strict all-target/all-feature Clippy, warnings-denied
+docs and actual Rust 1.88 observation tests/library checks pass. The incoming
+Host 0.18.2 lock selection is preserved; own metadata remains 0.3.2.
+
+The isolated Canic rehearsal at committed `644d4b13012b395d6211a6907e2e6aafdf391db9`
+removes its local metadata schema/feature builder and unbounded command capture.
+Callers use canonical package IDs, target/dependency kinds and paths. Canic retains
+observation budgets, discovery/role recipes and bounded sanitized diagnostics.
+All 41 role-package cases, seven generated-package cases, 19 reuse cases (one
+optional measurement ignored), strict Host library/test Clippy and actual Rust
+1.91 library compilation pass. The
+producer path override and Host graph alignment exist only
+in that disposable rehearsal. Normal registry adoption requires producer
+publication and reconciliation with Canic's current input-selection/changelog
+work; its live source, index, graph and refs are untouched.
+
+A real shared-target Cargo probe confirms distinct same-name workspace package
+IDs can share one build-script output directory. Cached structured messages remain
+available with an absent uplifted depfile and ignore unrelated malformed records.
+Canic #553 must bind retained exports to exact package/recipe and record bytes;
+directory/prefix filtering cannot establish that authority. This probe and the
+new schema boundary do not implement that consumer receipt/admission repair.
+
+Canic #519's job `115969175140` now passes embedded-peer preflight and reaches
+PocketIC suites before cancellation. Full PocketIC/native/review acceptance stays
+open. Before-images, failed attempts, source patch and scoped evidence are under
+`/tmp/ic-build-cargo-observation/`. No broad gate, version bump, commit, release or
+publication ran for this task.
+
+## Capture finalization and peer source paths — pending 0.3.3
+
+Build #26's additive `CapturedArtifact::retain_to` and `CaptureRetentionError`
+are applied to the working tree, using the delivered directory-custody guard.
+Custody transfers before rename; failure reports the actual retained path and
+staging child, and cleanup removes only an empty child without hidden retry.
+All 11 staging cases, four handoff cases (one controlled worker ignored), strict
+Clippy/docs and actual Rust 1.88 pass on the normal registry graph.
+
+The proposed Jobs caller removes its manual rename/cleanup sequence and retains
+native error kind plus structured custody. Its two real capture tests and strict
+lint pass on source `37937543a58cd1fd54eea8dbd9bb0382f658a194`, with an isolated
+owner override only for rehearsal. The patch applies to the active caller; its
+live source and incoming application changes are untouched. Published owner
+adoption, native acceptance and Jobs review remain open at Build #26/Jobs #42.
+
+Canic CI run `38590334477` retained peer artifact `11909600044`. Its compiler and
+lock match local selection; the bytes reveal installed-rust-src-dependent
+standard-library locations. The selected compiler's virtual source root now
+normalizes those locations. The locally refreshed peer matches retained CI Wasm
+byte-for-byte at `ce25919429b494a761db6f8838e349a47df2dd809a4d6a7f83de4225af775ab2`.
+Canic #519 `ad69834` / #546 `fce62e2` carry the fix; #551 retains CI/native
+acceptance. Root source, index and own versions/refs remain uncommitted.
+Before-images, actual CI bytes, comparisons and caller proofs are retained under
+`/tmp/ic-build-retain033/`; earlier handoff/changelog edits are preserved.
+
+## Released 0.3.2 and PR reconciliation — 2026-10-14
+
+The maintainer published 0.3.2 from `da344beb8a951d020249a83746456399b5c5b6ef`.
+The downloaded archive matches its sparse-index checksum
+`9376d6ab7241be995d669f1b60674e435c669f41478a24ab29313970e2b9ad4b`.
+Release CI `38586895793` passes Linux/lint; native Intel/Apple Silicon are queued.
+This delivers #27/#32; their explicit native acceptance remains open.
+
+PR #29 `e2e7230` and #31 `f791954` are normally reconciled with that release.
+Only changelogs conflicted; pending notes select 0.3.3 and producer Rust is
+unchanged. Projection/native protocol units, the real native integration, strict
+Clippy/docs, actual Rust 1.88, formatting and links pass on Host 0.18.1.
+Both PRs are mergeable; new required checks and registry consumer adoption remain.
+Host stream-copy PR #93 remains unpublished; Build #24's reviewed rehearsal is
+retained and the live graph continues to use the published API.
+
+Canic's security, ordinary, MSRV and check jobs pass. PocketIC runs
+`38578657429`/`38578893452` still refuse peer preflight before server startup;
+both build `ce25919429b494a761db6f8838e349a47df2dd809a4d6a7f83de4225af775ab2`
+against expected `969b5a08c22a5fe1ec7749475e7e3b7993c1f9c8230781639eba346c451caa67`.
+The local real-registry-root Cargo-home reproduction preserves expected bytes.
+Canic #519 `51783a0` and normal topic merge #546 `8c6b81a` now retain actual
+mismatch Wasm/provenance in CI without relaxing refusal. Six focused cases on
+each topic, strict fixture-owner Clippy, actual Rust 1.91 libraries and workflow
+lint pass; normal peer verification passes locally. Current CI acceptance is pending.
+Evidence is under `/tmp/ic-build-after032/`; source assets stay unchanged.
+
 ## Fixture adoption and directory custody — pending 0.3.2
 
 Both Build test allocators use published Host 0.18.1's opt-in fixture API;

@@ -3,12 +3,25 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.3.3]
+## [0.3.4]
 
 - Verify exact workspace-version projections in Cargo lockfiles without allowing
   dependency, source, checksum or unrelated metadata changes. Version selection
   and release receipts remain caller-owned
   ([#28 — Verify strict workspace lock projections](https://github.com/dragginzgame/ic-build/issues/28)).
+
+## [0.3.3] - 2026-10-14
+
+- Observe Cargo catalogs, resolved graphs and selected dependency trees through
+  caller-bounded execution and Cargo's canonical Rust schema; share tree capture
+  with feature-safe grouping
+  ([#33 — Cargo observations](https://github.com/dragginzgame/ic-build/issues/33)).
+- Finalize captured artifacts at caller-selected destinations with explicit
+  retained-file and staging custody on rename or cleanup failure
+  ([#26 — Capture finalization](https://github.com/dragginzgame/ic-build/issues/26)).
+- Reconcile the release and PR handoff with published 0.3.2, preserving separate
+  native, consumer-adoption and Canic peer-reproduction acceptance
+  ([#1 — Extraction acceptance](https://github.com/dragginzgame/ic-build/issues/1)).
 
 ## [0.3.2] - 2026-10-14
 
