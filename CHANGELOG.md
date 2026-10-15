@@ -3,11 +3,30 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.3.4]
+## [0.4.1]
 
 - Compose inherited Cargo Rust flags with caller-selected arguments, preserving
   encoded-variable precedence, explicitly empty values and argument boundaries
   ([#36 — Cargo Rust flags](https://github.com/dragginzgame/ic-build/issues/36)).
+
+## [0.4.0] - 2026-10-15
+
+- **Breaking:** require Rust 1.91.0 or newer and select `cargo-platform` 0.3.3.
+  Consumers adopting this release must prepare that compiler or newer; published
+  0.3.3's Rust 1.88 declaration is unchanged
+  ([#34 — Dependency graph MSRV](https://github.com/dragginzgame/ic-build/issues/34)).
+- Use equivalent Rust 1.91 duration constructors in tests and the cache example
+  to satisfy strict Clippy after the MSRV increase.
+- **Breaking:** remove the public `wasm_path` and `wasm_artifacts_ready` helpers.
+  Obtain verified output paths from retained artifact records; fixture-only path
+  construction belongs in consumer tests.
+- Decode Cargo metadata through the canonical schema while preserving Wasm
+  cache fingerprint projections, probe cancellation and retained diagnostics.
+- Delegate package-source traversal on Unix to Host's descriptor-based walker,
+  preserving source budgets and exact byte/mode evidence.
+
+- Adopt Shared Tooling 0.14.0's committed governance snapshot and concise
+  change-reporting guidance, preserving executable pins and release behavior.
 
 ## [0.3.3] - 2026-10-14
 

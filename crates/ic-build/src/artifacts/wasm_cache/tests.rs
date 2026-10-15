@@ -712,20 +712,64 @@ fn semantic_workspace_projection_tracks_selected_dependencies_and_profiles() {
 }
 
 #[test]
+fn semantic_projection_preserves_v1_raw_metadata_fields() {
+    let id = "path+file:///workspace/member#member@1.2.3";
+    let original = serde_json::json!({
+        "id": id, "name": "member", "version": "1.2.3",
+        "manifest_path": "/workspace/member/Cargo.toml", "source": null,
+        "dependencies": [], "targets": [], "features": {},
+        "metadata": {"z": 7, "a": true}, "description": null,
+        "authors": [], "edition": "2024", "rust_version": "1.88",
+    });
+    let canonical = serde_json::from_value(original.clone()).unwrap();
+    let package = MetadataPackage {
+        package: &canonical,
+        original: &original,
+    };
+    let identity = semantic_package_identity(&package, Path::new("/workspace"), &[]).unwrap();
+    let value = serde_json::json!({
+        "id": id, "features": ["z", "a"], "dependencies": [],
+        "deps": [{"name": "self", "pkg": id,
+            "dep_kinds": [{"kind": null, "target": null, "future_field": "preserve"}]}],
+    });
+    let canonical_node = serde_json::from_value(value.clone()).unwrap();
+    let node = super::MetadataNode {
+        node: &canonical_node,
+        value: &value,
+    };
+    let projection = super::semantic_package_projection(
+        &package,
+        &node,
+        &std::collections::HashMap::from([(id, identity)]),
+    )
+    .unwrap();
+
+    // Captured independently from the original v1 implementation. Missing/null
+    // package fields and unknown dependency-kind fields remain hash-significant.
+    assert_eq!(
+        identity.to_hex(),
+        "ba511839396518effb69ed5d2aaf730822eb6c49bba88c264799b97b76059adb"
+    );
+    assert_eq!(
+        projection.to_hex(),
+        "aa1361a94b31abb1e0c59b6b7c90e6e9946d137e357612f80cff3189e0d48b3a"
+    );
+}
+
+#[test]
 fn semantic_package_identity_uses_selected_registry_lock_checksum() {
     let root = unique_temp_directory("semantic-registry-lock-identity");
     let source = "registry+https://example.invalid/index";
     let package_id = format!("{source}#dependency@1.2.3");
+    let original = serde_json::json!({
+        "id": package_id, "name": "dependency", "version": "1.2.3",
+        "manifest_path": root.join("registry/dependency/Cargo.toml"),
+        "source": source, "dependencies": [], "targets": [], "features": {}, "metadata": null,
+    });
+    let canonical = serde_json::from_value(original.clone()).unwrap();
     let package = MetadataPackage {
-        id: &package_id,
-        name: "dependency",
-        version: "1.2.3",
-        manifest_path: root.join("registry/dependency/Cargo.toml"),
-        is_local: false,
-        source: Some(source),
-        semantic_fields: Vec::new(),
-        cdylib_name: None,
-        cdylib_examples: Vec::new(),
+        package: &canonical,
+        original: &original,
     };
     let write_lock = |checksum: Option<&str>| {
         let checksum = checksum.map_or_else(String::new, |checksum| {
@@ -1192,7 +1236,7 @@ fn scheduled_shared_target_maintenance_skips_expensive_work_inside_interval() {
     let spec = WasmBuildSpec::new(&root, &root.join("exact"), &["fixture"], "debug")
         .with_shared_incremental_target(&target);
     let policy = SharedIncrementalTargetPrunePolicy::new().with_max_size_bytes(0);
-    let interval = Duration::from_secs(60 * 60);
+    let interval = Duration::from_hours(1);
 
     let first = maintain_shared_incremental_target_at_most_every(&spec, policy, interval)
         .expect("perform scheduled shared-target maintenance");
@@ -1273,11 +1317,11 @@ fn zero_progress_heartbeat_is_rejected_for_a_valid_build() {
 #[test]
 fn maintenance_configuration_is_readable_and_strict_by_default() {
     let shared_policy = SharedIncrementalTargetPrunePolicy::new().with_max_size_bytes(1024 * 1024);
-    let shared_interval = Duration::from_secs(60 * 60);
+    let shared_interval = Duration::from_hours(1);
     let shared_config =
         SharedIncrementalTargetMaintenanceConfig::new(shared_policy, shared_interval);
     let exact_policy = ArtifactCachePrunePolicy::new().with_max_size_bytes(2 * 1024 * 1024);
-    let exact_interval = Duration::from_secs(30 * 60);
+    let exact_interval = Duration::from_mins(30);
     let spec = WasmBuildSpec::new(Path::new("."), Path::new("target"), &["fixture"], "debug")
         .with_shared_incremental_target("target/shared")
         .with_shared_incremental_target_maintenance(shared_config)

@@ -16,7 +16,7 @@ use ic_build::artifacts::{
     WasmBuildOutcome, WasmBuildPhase, WasmBuildProgressConfig, WasmBuildProgressEvent,
     WasmBuildSession, WasmBuildSpec, build_wasm_canisters_cached,
     build_wasm_canisters_cached_with_progress, inspect_shared_incremental_target,
-    prepare_artifact_cache, prune_wasm_build_cache, resolve_cargo_build_inputs, wasm_path,
+    prepare_artifact_cache, prune_wasm_build_cache, resolve_cargo_build_inputs,
 };
 use std::{
     fs,
@@ -27,6 +27,7 @@ use std::{
 };
 
 use support::unique_temp_directory as unique_temp_dir;
+use support::wasm_path;
 
 #[cfg(unix)]
 use std::ffi::OsString;
@@ -814,7 +815,7 @@ fn scheduled_shared_target_maintenance_participates_in_wasm_acquisition() {
         .with_shared_incremental_target(&shared_target)
         .with_shared_incremental_target_maintenance_at_most_every(
             SharedIncrementalTargetPrunePolicy::new().with_max_size_bytes(u64::MAX),
-            Duration::from_secs(60 * 60),
+            Duration::from_hours(1),
         );
 
     let mut first_events = Vec::new();

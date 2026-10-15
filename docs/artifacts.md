@@ -785,17 +785,23 @@ and exact version admission, bounded output, an explicit environment and a deadl
 for external transforms. Keep the executable and its parent directories protected
 from concurrent writers during admission and execution.
 
-Read compiled Wasm through the shared filesystem owner:
+Read verified compiled Wasm through a retained build record and the shared
+filesystem owner:
 
 ```rust
-use ic_build::artifacts::wasm_path;
+use ic_build::artifacts::build_wasm_canisters_cached;
 use ic_host_fs::read::read_file;
 
-let path = wasm_path(target_dir, crate_name, profile_target_dir);
-let bytes = read_file(&path, max_bytes)?;
+let build = build_wasm_canisters_cached(&spec)?;
+let path = build.record().artifacts()[0].as_path();
+let bytes = read_file(path, max_bytes)?;
+drop(build); // Retain the cache entry until consumption finishes.
 ```
 
 The caller chooses the byte limit; failures are typed rather than panics.
+The pending 0.4 API removes `wasm_path` and `wasm_artifacts_ready`. Consumers
+obtain verified outputs from retained records. Path construction needed only
+by fixtures stays in consumer test support.
 Paths must be caller-controlled; symbolic links are allowed. Reading bytes does
 not validate Wasm; use `ic_host_artifacts::wasm::inspect` for structural facts.
 Stream identities, archives and Wasm inspection belong to `ic_host_artifacts`;

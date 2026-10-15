@@ -756,10 +756,7 @@ fn scheduled_pruning_skips_an_immediate_second_acquisition() {
     let spec = ArtifactCacheSpec::new(&root.join("cache"), "scheduled", "recipe/v1")
         .with_input("input", &input)
         .with_output("output", &root.join("output"))
-        .with_prune_policy_at_most_every(
-            ArtifactCachePrunePolicy::new(),
-            Duration::from_secs(60 * 60),
-        );
+        .with_prune_policy_at_most_every(ArtifactCachePrunePolicy::new(), Duration::from_hours(1));
 
     let built = build_output(&spec, b"output");
     assert!(built.record().maintenance().is_some());
@@ -772,7 +769,7 @@ fn scheduled_pruning_skips_an_immediate_second_acquisition() {
 
     let changed_policy = spec.with_prune_policy_at_most_every(
         ArtifactCachePrunePolicy::new().with_max_size_bytes(0),
-        Duration::from_secs(60 * 60),
+        Duration::from_hours(1),
     );
     let reused = prepare_artifact_cache(&changed_policy).expect("reuse under changed policy");
     assert!(
