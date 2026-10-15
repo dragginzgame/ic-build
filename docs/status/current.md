@@ -1,14 +1,14 @@
 # Current handoff
 
-## Cargo configuration observation — pending 0.5.1
+## Cargo configuration observation — pending 0.6.1
 
-Reconciled PR #38 with released 0.5.0 at `4feef85`, preserving its published
-metadata, Host 0.18.6 graph and compiler/environment semantics. Three public
+Reconciled PR #38 with released 0.6.0 at `d0eaf2d`, preserving its published
+metadata, Host 0.19.0 graph and compiler/environment semantics. Three public
 observation cases, four configuration/include/alias cases and compiler identity
 invalidation pass on actual Rust 1.91. Strict library/test Clippy and warning-denied
 Rustdoc pass. Hosted native checks must qualify the updated PR head; no integration
 merge, release or publication is included. Evidence is retained under
-`/tmp/canic-upstream-prs-20261015/`.
+`/tmp/memory0411-build/target/qualification/memory0411/`.
 
 The isolated producer under [#35](https://github.com/dragginzgame/ic-build/issues/35)
 extracts the existing configuration/include walker into `cargo::environment`.
@@ -23,6 +23,44 @@ actual Rust 1.88 observation tests pass on the unchanged committed Host 0.18.2
 graph. Native macOS checks, producer integration/publication and Memory's registry
 adoption under [Memory #110](https://github.com/dragginzgame/ic-memory/issues/110)
 remain separate. No sibling working checkout or own package version was changed.
+
+## Directory cleanup, workspace observation and controlled capture — pending 0.6.0
+
+Released source is 0.5.0 `4feef850010ed725edb9b9e9adeaed140baf5106`.
+Owned-directory fields now perform Drop cleanup directly; transaction staging
+still drops before both locks, while explicit close/abort recovery is preserved.
+Workspace discovery moves to `cargo::observation::workspace_root_for` with the
+caller's Command and OutputLimits. The old artifact export is gone. Offline
+membership, auto-install refusal and complete-output admission remain; failed
+commands retain typed Host status, diagnostics and cleanup evidence. In-repository
+callers and the guide use the new contract. This selects 0.6.0 notes without
+changing package metadata.
+
+All 47 affected observation/staging/transaction units, real Cargo membership
+cases and the cross-process artifact-lock parent case pass on actual Rust 1.91.
+Strict all-target Clippy, MSRV compilation, Rustdoc, formatting, links, workspace
+metadata, pins and snapshot checks pass on Linux.
+
+Host candidate `a9fe39d6eed16b302e2f929b331c101da818c69a` extends existing
+PR #99 through normal merges of released 0.18.6 and then 0.19.0 main.
+The unpublished cancellation API accepts explicit cleanup and a shared absolute
+deadline through the existing capture engine. All 68 selected tool/resolution/
+internal process cases, strict affected lint/docs and actual Rust 1.88 checks pass.
+The temporary Build caller deletion passes all 65 Wasm-cache cases, strict Clippy
+and actual Rust 1.91 all-target checking against that coherent Host family, with
+external selections unchanged. Normal Build retains its published implementation
+until a reviewed Host release permits a real minimum and the prepared caller
+deletion.
+
+[#43](https://github.com/dragginzgame/ic-build/issues/43) tracks delivery and
+consumer adoption; native macOS qualification remains separate. Normal sibling
+checkouts, Root staging, package version and lock selection are preserved.
+After an initial approval-review rejection, the maintainer explicitly delegated
+the upstream delivery. Candidate `a9fe39d6` is pushed to existing Host PR #99;
+its description records the updated API and fresh validation. No merge or
+release ran.
+Before-images, candidate source, the adoption patch and raw logs are retained
+under `/tmp/ic-build-cleanup5-20261015/`.
 
 ## Shared Tooling 0.15.0 and registry Host 0.18.6 — 2026-10-15
 

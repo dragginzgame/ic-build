@@ -10,7 +10,7 @@ use ic_host_process::testing::write_executable_script;
 use ic_build::artifacts::{
     SharedIncrementalTargetMaintenanceOutcome, SharedIncrementalTargetPrunePolicy,
     WasmBuildOutcome, WasmBuildSpec, build_wasm_canisters_cached,
-    maintain_shared_incremental_target_at_most_every, workspace_root_for,
+    maintain_shared_incremental_target_at_most_every,
 };
 use std::{
     ffi::OsString,
@@ -19,8 +19,8 @@ use std::{
     process::Command,
     time::Duration,
 };
-use support::unique_temp_directory;
 use support::wait::wait_for_path;
+use support::{discover_workspace, unique_temp_directory};
 
 const PERF_PROBE_PACKAGE: &str = "ic_testkit_perf_probe";
 const WORKER_ROOT_ENV: &str = "IC_TESTKIT_WASM_PROCESS_ROOT";
@@ -29,7 +29,7 @@ const WORKER_ID_ENV: &str = "IC_TESTKIT_WASM_PROCESS_WORKER";
 #[test]
 fn different_cache_roots_coordinate_one_shared_incremental_target_across_processes() {
     let workspace =
-        workspace_root_for(env!("CARGO_MANIFEST_DIR")).expect("resolve Cargo workspace");
+        discover_workspace(env!("CARGO_MANIFEST_DIR")).expect("resolve Cargo workspace");
     if !workspace
         .join("crates/ic_testkit_perf_probe/Cargo.toml")
         .is_file()
@@ -67,7 +67,7 @@ fn different_cache_roots_coordinate_one_shared_incremental_target_across_process
 #[test]
 fn scheduled_shared_target_maintenance_runs_once_across_processes() {
     let workspace =
-        workspace_root_for(env!("CARGO_MANIFEST_DIR")).expect("resolve Cargo workspace");
+        discover_workspace(env!("CARGO_MANIFEST_DIR")).expect("resolve Cargo workspace");
     if !workspace
         .join("crates/ic_testkit_perf_probe/Cargo.toml")
         .is_file()
@@ -111,7 +111,7 @@ fn shared_incremental_process_worker() {
     wait_for_path(&root.join("go"));
 
     let workspace =
-        workspace_root_for(env!("CARGO_MANIFEST_DIR")).expect("resolve Cargo workspace");
+        discover_workspace(env!("CARGO_MANIFEST_DIR")).expect("resolve Cargo workspace");
     let real_cargo = std::env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo"));
     let spec = WasmBuildSpec::new(
         &workspace,
@@ -156,7 +156,7 @@ fn scheduled_shared_target_maintenance_process_worker() {
     wait_for_path(&root.join("go"));
 
     let workspace =
-        workspace_root_for(env!("CARGO_MANIFEST_DIR")).expect("resolve Cargo workspace");
+        discover_workspace(env!("CARGO_MANIFEST_DIR")).expect("resolve Cargo workspace");
     let spec = WasmBuildSpec::new(
         &workspace,
         &root.join(format!("cache-{worker}")),

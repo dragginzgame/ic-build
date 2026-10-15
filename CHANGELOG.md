@@ -3,11 +3,21 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.5.1]
+## [0.6.1]
 
 - Share read-only Cargo configuration and environment observation with release
   consumers, preserving build-cache input paths and keeping admission local
   ([#35 — Share Cargo configuration observation](https://github.com/dragginzgame/ic-build/issues/35)).
+
+## [0.6.0] - 2026-10-15
+
+- **Breaking:** move `artifacts::workspace_root_for` to
+  `cargo::observation::workspace_root_for` and require the caller's Cargo command
+  and capture limits. Offline membership discovery still avoids dependency
+  resolution and toolchain installation; there is no old-path reexport.
+- Let owned-directory fields perform Drop cleanup directly, preserving staging
+  cleanup before transaction locks are released and explicit recovery behavior
+  ([#43 — Discovery and cleanup boundaries](https://github.com/dragginzgame/ic-build/issues/43)).
 
 ## [0.5.0] - 2026-10-15
 

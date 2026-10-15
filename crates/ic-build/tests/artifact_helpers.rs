@@ -2,14 +2,14 @@
 
 mod support;
 
-use ic_build::artifacts::workspace_root_for;
 use std::{fs, path::PathBuf};
+use support::discover_workspace;
 use support::unique_temp_directory as unique_temp_dir;
 
 // Verify Cargo locates the workspace owning this package.
 #[test]
 fn workspace_helpers_resolve_expected_paths() {
-    let workspace_root = workspace_root_for(env!("CARGO_MANIFEST_DIR")).unwrap();
+    let workspace_root = discover_workspace(env!("CARGO_MANIFEST_DIR")).unwrap();
     assert_eq!(
         workspace_root.join("Cargo.toml"),
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -43,21 +43,21 @@ fn workspace_discovery_obeys_cargo_membership_and_independent_roots() {
     }
     let canonical = root.canonicalize().unwrap();
     assert_eq!(
-        workspace_root_for(root.join("apps/demo/worker")).unwrap(),
+        discover_workspace(root.join("apps/demo/worker")).unwrap(),
         canonical
     );
     assert_eq!(
-        workspace_root_for(root.join("external")).unwrap(),
+        discover_workspace(root.join("external")).unwrap(),
         canonical
     );
     for independent in ["excluded", "testing"] {
         assert_eq!(
-            workspace_root_for(root.join(independent)).unwrap(),
+            discover_workspace(root.join(independent)).unwrap(),
             canonical.join(independent)
         );
     }
-    assert!(workspace_root_for(root.join("unlisted")).is_err());
-    assert!(workspace_root_for(root.join("missing")).is_err());
+    assert!(discover_workspace(root.join("unlisted")).is_err());
+    assert!(discover_workspace(root.join("missing")).is_err());
     assert!(!root.join("Cargo.lock").exists());
     assert!(!root.join("target").exists());
     fs::remove_dir_all(root).unwrap();

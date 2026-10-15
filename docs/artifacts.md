@@ -243,13 +243,15 @@ establish Query adoption or native smoke qualification.
 
 ## Wasm artifact helpers
 
-The host-only `artifacts` module provides workspace-relative paths, dedicated
-test target directories, content-addressed build coordination, Wasm loading,
-and exact generated-artifact freshness checks:
+The host-only `artifacts` module provides content-addressed build coordination,
+retained outputs and exact generated-artifact freshness checks. Consumers select
+their own test target directories.
 
-`workspace_root_for` asks prepared Cargo for actual workspace membership and
-returns `io::Result<PathBuf>`. It supports App layouts, exclusions and independent
-workspaces without guessing from directory names or resolving dependencies.
+`cargo::observation::workspace_root_for` asks caller-selected prepared Cargo for
+actual workspace membership and returns `io::Result<PathBuf>`. Supply a command
+and output limits as with other Cargo observations. It supports App layouts,
+exclusions and independent workspaces without guessing from directory names or
+resolving dependencies, and always selects offline discovery.
 `WasmBuildSpec::new` shares `<workspace>/target/ic-testkit-incremental` compiler
 state across fingerprints by default. Exact final artifacts remain independently
 cached. Select `with_isolated_builds()` only when separate compiler state is
@@ -260,11 +262,21 @@ preserved and need explicit maintenance if no longer wanted.
 ```rust,no_run
 use ic_build::artifacts::{
     ArtifactCachePrunePolicy, WasmBuildOutcome, WasmBuildSpec,
-    build_wasm_canisters_cached, workspace_root_for,
+    build_wasm_canisters_cached,
 };
-use std::time::Duration;
+use ic_build::cargo::observation::workspace_root_for;
+use ic_host_process::tool::{OutputLimit, OutputLimits};
+use std::{process::Command, time::Duration};
 
-let workspace = workspace_root_for(env!("CARGO_MANIFEST_DIR"))
+let workspace = workspace_root_for(
+    env!("CARGO_MANIFEST_DIR"),
+    OutputLimits {
+        stdout: OutputLimit::Terminate(64 * 1024),
+        stderr: OutputLimit::Terminate(64 * 1024),
+        timeout: None,
+    },
+    Command::new("cargo"),
+)
     .expect("resolve the crate's Cargo workspace");
 let target = workspace.join("target").join("pic-wasm");
 let spec = WasmBuildSpec::new(
