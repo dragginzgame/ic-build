@@ -7,11 +7,22 @@
 #[cfg(test)]
 mod tests;
 
+mod workspace;
+pub use workspace::workspace_root_for;
+
 /// Canonical Cargo metadata and build-message types, without consumer mirrors.
 pub use cargo_metadata as schema;
 
 use ic_host_process::tool::{CompletedExecution, OutputLimits, capture_command};
+use serde::Deserialize;
+use serde_json::Value;
 use std::{collections::BTreeSet, path::Path, process::Command};
+
+// Borrow the captured document so cache owners can retain its exact projection
+// without cloning the JSON tree or rebuilding it from normalized schema fields.
+pub(crate) fn decode_metadata(value: &Value) -> Result<schema::Metadata, serde_json::Error> {
+    schema::Metadata::deserialize(value)
+}
 
 /// Caller-selected features for one Cargo graph.
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -5,6 +5,7 @@ mod support;
 use ic_build::artifacts::{
     ArtifactCacheOutcome, ArtifactCachePreparation, ArtifactCacheSpec, prepare_artifact_cache,
 };
+use ic_host_process::testing::crash_barrier::{wait_for_child_path, wait_for_path};
 use std::{
     fs::{self, OpenOptions},
     io::Write as _,
@@ -13,8 +14,7 @@ use std::{
     thread,
     time::Duration,
 };
-use support::unique_temp_directory;
-use support::wait::wait_for_path;
+use support::fs_fixture::unique_temp_directory;
 
 const WORKER_ROOT_ENV: &str = "IC_TESTKIT_ARTIFACT_PROCESS_ROOT";
 const WORKER_ID_ENV: &str = "IC_TESTKIT_ARTIFACT_PROCESS_WORKER";
@@ -27,8 +27,20 @@ fn overlapping_processes_build_one_exact_artifact_set() {
     let mut first = spawn_worker(&executable, &root, "first");
     let mut second = spawn_worker(&executable, &root, "second");
 
-    wait_for_path(&root.join("ready-first"));
-    wait_for_path(&root.join("ready-second"));
+    wait_for_child_path(
+        &mut first,
+        &root.join("ready-first"),
+        "first worker ready",
+        Duration::from_secs(10),
+    )
+    .expect("wait for first worker");
+    wait_for_child_path(
+        &mut second,
+        &root.join("ready-second"),
+        "second worker ready",
+        Duration::from_secs(10),
+    )
+    .expect("wait for second worker");
     fs::write(root.join("go"), b"go").expect("release process-test workers");
 
     assert!(first.wait().expect("wait for first worker").success());
@@ -56,7 +68,12 @@ fn artifact_cache_process_worker() {
     );
     let worker = std::env::var(WORKER_ID_ENV).expect("worker identity environment must be set");
     fs::write(root.join(format!("ready-{worker}")), b"ready").expect("mark worker ready");
-    wait_for_path(&root.join("go"));
+    wait_for_path(
+        &root.join("go"),
+        "parent start marker",
+        Duration::from_secs(10),
+    )
+    .expect("wait for parent start");
 
     let spec = ArtifactCacheSpec::new(&root.join("cache"), "process-lock", "recipe/v1")
         .with_coordination_scope(&format!("process-{worker}"))

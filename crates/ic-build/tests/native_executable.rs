@@ -9,12 +9,18 @@ use std::{cell::Cell, ffi::OsString, fs, process::Command};
 
 #[test]
 fn actual_cargo_reports_custom_profile_executable_and_streams_failed_build_diagnostics() {
-    let root = support::unique_temp_directory("native-executable");
+    let root = support::fs_fixture::unique_temp_directory("native-executable");
     fs::create_dir(root.join("examples")).unwrap();
     fs::write(root.join("Cargo.toml"), "[package]\nname = \"native-fixture\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[profile.custom]\ninherits = \"dev\"\n").unwrap();
     fs::write(
         root.join("examples/worker.rs"),
         "fn unused_fixture() {}\nfn main() { println!(\"{}\", env!(\"NATIVE_FIXTURE_VALUE\")); }\n",
+    )
+    .unwrap();
+    fs::create_dir(root.join("src")).unwrap();
+    fs::write(
+        root.join("src/main.rs"),
+        "fn main() { println!(\"binary\"); }\n",
     )
     .unwrap();
     let cargo_program = std::env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo"));
@@ -57,6 +63,18 @@ fn actual_cargo_reports_custom_profile_executable_and_streams_failed_build_diagn
         Command::new(&built.executable).output().unwrap().stdout,
         b"factory-preserved\n"
     );
+    let binary = NativeExecutableSpec {
+        target_name: "native-fixture",
+        target_kind: "bin",
+        ..spec
+    };
+    let built = build_native_executable(&binary, factory, &mut diagnostics, || Ok(())).unwrap();
+    assert_eq!(calls.get(), 4);
+    assert_eq!(built.target_directory, target);
+    assert_eq!(
+        Command::new(&built.executable).output().unwrap().stdout,
+        b"binary\n"
+    );
     calls.set(0);
     let admissions = Cell::new(0);
     let error = build_native_executable(&spec, factory, &mut diagnostics, || {
@@ -88,4 +106,5 @@ fn actual_cargo_reports_custom_profile_executable_and_streams_failed_build_diagn
         Some(101)
     );
     assert!(String::from_utf8_lossy(&diagnostics).contains("this_does_not_compile"));
+    fs::remove_dir_all(root).expect("remove native fixture");
 }

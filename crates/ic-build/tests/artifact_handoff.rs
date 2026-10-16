@@ -23,15 +23,13 @@ use std::{
 };
 
 fn fixture() -> PathBuf {
-    let root = support::unique_temp_directory("handoff");
-    fs::create_dir_all(root.join("workspace/src")).unwrap();
-    fs::write(
-        root.join("workspace/Cargo.toml"),
-        "[package]\nname = \"fixture\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n\
-         [lib]\ncrate-type = [\"cdylib\"]\n",
+    let root = support::fs_fixture::unique_temp_directory("handoff");
+    support::cargo::write_fixture_package(
+        &root.join("workspace"),
+        "[workspace]\n[lib]\ncrate-type = [\"cdylib\"]\n",
+        "pub fn fixture() {}\n",
     )
     .unwrap();
-    fs::write(root.join("workspace/src/lib.rs"), "pub fn fixture() {}\n").unwrap();
     // Use real Cargo metadata but synthetic variant-specific build bytes. No
     // Wasm toolchain or canister runtime is needed to exercise cache ownership.
     write_executable_script(
@@ -49,21 +47,16 @@ printf '%s' "$VARIANT" > "$output/wasm32-unknown-unknown/debug/fixture.wasm"
 }
 
 fn isolated_wasm_spec(root: &Path, variant: &str) -> WasmBuildSpec {
-    WasmBuildSpec::new(
-        &root.join("workspace"),
-        &root.join("wasm"),
-        &["fixture"],
-        "debug",
-    )
-    .with_cargo_program(root.join("cargo.sh"))
-    .with_extra_env([
-        (
-            "REAL_CARGO",
-            std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()),
-        ),
-        ("VARIANT", variant.to_owned()),
-    ])
-    .with_prune_policy(ArtifactCachePrunePolicy::new().with_max_size_bytes(0))
+    WasmBuildSpec::new(&root.join("workspace"), &root.join("wasm"), &["fixture"])
+        .with_cargo_program(root.join("cargo.sh"))
+        .with_extra_env([
+            (
+                "REAL_CARGO",
+                std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()),
+            ),
+            ("VARIANT", variant.to_owned()),
+        ])
+        .with_prune_policy(ArtifactCachePrunePolicy::new().with_max_size_bytes(0))
 }
 
 fn wasm_spec(root: &Path, variant: &str) -> WasmBuildSpec {

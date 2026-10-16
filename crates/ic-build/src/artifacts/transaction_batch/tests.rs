@@ -6,8 +6,8 @@ use super::{
 };
 use crate::artifacts::{
     ArtifactCacheOutcome, ArtifactCachePreparation, ArtifactCacheSpec, prepare_artifact_cache,
-    test_support::unique_temp_directory,
 };
+use crate::fs_fixture::unique_temp_directory;
 
 #[test]
 fn labeled_transactions_build_then_reuse_in_order() {
@@ -146,6 +146,58 @@ fn callback_failure_retains_label_timings_and_later_transaction() {
 }
 
 #[test]
+#[cfg(unix)]
+fn callback_and_abort_failures_retain_both_causes_and_continue() {
+    let root = unique_temp_directory("artifact-cache-batch-abort-failure");
+    let input = root.join("input");
+    fs::write(&input, b"input").unwrap();
+    let specs = [
+        artifact_spec(&root, &input, "first", "first.out"),
+        artifact_spec(&root, &input, "second", "second.out"),
+    ];
+    let mut retained_stage = None;
+    let report = build_artifact_caches_batch(&specs, |label, transaction| {
+        if label == "first" {
+            let stage = transaction.staging_directory().to_owned();
+            let parent = stage.parent().unwrap();
+            let retained = root.join("retained-staging");
+            fs::rename(parent, &retained).unwrap();
+            fs::write(
+                parent,
+                b"obstruct abort without relying on process permissions",
+            )
+            .unwrap();
+            retained_stage = Some(retained.join(stage.file_name().unwrap()));
+            return Err("primary callback failure");
+        }
+        fs::write(transaction.output_path("output").unwrap(), b"later output").unwrap();
+        Ok(())
+    });
+    let report = report.unwrap();
+    let failed = report.failures().next().unwrap();
+    let ArtifactCacheBatchFailure::Build {
+        source,
+        cleanup_error: Some(cleanup),
+        timings,
+    } = failed.failure()
+    else {
+        panic!("callback failure must retain the separate abort error");
+    };
+    assert_eq!(**source, "primary callback failure");
+    let crate::artifacts::ArtifactCacheError::Io { source, .. } = cleanup.as_ref() else {
+        panic!("abort must retain its original filesystem error");
+    };
+    assert_eq!(source.kind(), std::io::ErrorKind::NotADirectory);
+    assert_eq!(failed.entry_elapsed(), timings.total());
+    assert!(timings.callback().is_some());
+    assert!(timings.cleanup().is_some());
+    assert!(timings.commit().is_none());
+    assert!(retained_stage.unwrap().exists());
+    assert_eq!(fs::read(root.join("second.out")).unwrap(), b"later output");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn preparation_failure_is_labeled_timed_and_does_not_stop_later_entries() {
     let root = unique_temp_directory("artifact-cache-batch-cache-failure");
     let input = root.join("input");
@@ -177,6 +229,7 @@ fn preparation_failure_is_labeled_timed_and_does_not_stop_later_entries() {
     let failure = &failures[0];
     assert_eq!(failure.index(), 1);
     assert_eq!(failure.label(), "invalid");
+    assert_eq!(failure.entry_elapsed(), failure.timings().total());
     assert_eq!(
         failure.failure().phase(),
         ArtifactCacheBatchFailurePhase::Preparation
@@ -224,6 +277,7 @@ fn commit_failure_is_labeled_timed_and_does_not_stop_later_entries() {
         failure.failure().phase(),
         ArtifactCacheBatchFailurePhase::Commit
     );
+    assert_eq!(failure.entry_elapsed(), failure.timings().total());
     assert!(failure.timings().callback().is_some());
     assert!(failure.timings().cleanup().is_none());
     assert!(failure.timings().commit().is_some());

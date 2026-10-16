@@ -3,15 +3,7 @@ override SHARED_TOOLING_ROOT := $(CURDIR)
 export SHARED_TOOLING_ROOT
 export RELEASE_DELIVERY ?= direct
 export YQ := $(CURDIR)/.tools/host/bin/yq
-LOCAL_TOOL_INSTALL_TARGETS += install-release-tools
-LOCAL_TOOL_CHECK_TARGETS += release-tools-check
 include make/consumer.mk
-
-.PHONY: install-release-tools release-tools-check
-install-release-tools:
-	+@bash scripts/release/cargo-editor.sh > /dev/null
-release-tools-check:
-	+@bash scripts/release/cargo-editor.sh --check > /dev/null
 
 .PHONY: help version tasks check ci check-doc-links check-workspace check-pins \
         check-package clippy docs-check test msrv \

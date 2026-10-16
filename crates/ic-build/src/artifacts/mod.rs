@@ -64,10 +64,8 @@ mod inputs;
 mod staging;
 mod transaction;
 mod transaction_batch;
-mod wasm;
 mod wasm_batch;
 mod wasm_cache;
-mod workspace;
 
 #[cfg(test)]
 pub(crate) mod test_support;
@@ -93,7 +91,6 @@ pub use transaction_batch::{
     ArtifactCacheBatchMetrics, ArtifactCacheBatchOutcomeEntry, ArtifactCacheBatchReport,
     LabeledArtifactCacheSpec, build_artifact_caches_batch,
 };
-pub use wasm::{wasm_artifacts_ready, wasm_path};
 pub use wasm_batch::{
     LabeledWasmBuildSpec, WasmBuildBatchConfig, WasmBuildBatchContractError, WasmBuildBatchEntry,
     WasmBuildBatchFailure, WasmBuildBatchMaintenanceEntry, WasmBuildBatchMetrics,
@@ -119,4 +116,3 @@ pub use wasm_cache::{
     prune_wasm_build_cache, resolve_cargo_build_inputs,
     resolve_cargo_build_inputs_with_probe_policy,
 };
-pub use workspace::{test_target_dir, workspace_root_for};

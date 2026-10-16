@@ -8,7 +8,7 @@ use std::time::Duration;
 use {
     ic_host_artifacts::artifact::Sha256Digest,
     ic_host_process::tool::{
-        AdmittedTool, ExecutionContext, OutputLimit, OutputLimits, ToolSpec, resolve_executable,
+        AdmittedTool, ExecutionContext, OutputLimit, OutputLimits, VersionSpec, resolve_executable,
     },
 };
 
@@ -34,16 +34,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Admission uses caller authority, never a digest computed from untrusted
     // selected bytes. Transform tools must work with this empty environment.
     let admitted = AdmittedTool::admit(
-        &ToolSpec {
+        &VersionSpec {
             executable: &tool,
-            sha256: sha256
-                .to_str()
-                .ok_or("SHA-256 must be UTF-8")?
-                .parse::<Sha256Digest>()?,
             executable_bytes: 256 * 1024 * 1024,
             version_arguments: &["--version".into()],
             version_identity: version.to_str().ok_or("version must be UTF-8")?,
         },
+        sha256
+            .to_str()
+            .ok_or("SHA-256 must be UTF-8")?
+            .parse::<Sha256Digest>()?,
         &context,
         limits,
     )?;
@@ -61,7 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .with_output("result", &output)
     .with_prune_policy(
         ArtifactCachePrunePolicy::new()
-            .with_max_age(Duration::from_secs(7 * 24 * 60 * 60))
+            .with_max_age(Duration::from_hours(7 * 24))
             .with_max_size_bytes(2 * 1024 * 1024 * 1024),
     );
 

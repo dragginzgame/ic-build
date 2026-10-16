@@ -141,8 +141,9 @@ Consumer choices described in those guides remain subject to this baseline.
   Rust, type-declaration and documentation added/removed/net metrics, with explicit
   zeroes or unavailable evidence. Keep Git line churn separate from semantic
   deletion counts. In the final Codex app handoff, use **symbol changes** with
-  separately counted genuine deletions, moves and renames; an edited declaration
-  is not a deletion. Keep the detailed inventory in that handoff only. Ordinary
+  genuinely created and deleted functions, methods and types only. Omit moved,
+  renamed and edited declaration inventories and counts; retained identities are
+  not creations or deletions. Keep the compact inventory in that handoff only. Ordinary
   public API removal and consumer-action documentation stays at its normal owner.
 - Complete changelog maintenance under the [common changelog rules](rules/changelogs.md)
   as part of the coherent batch, including automatically selecting and maintaining
@@ -213,6 +214,14 @@ Consumer choices described in those guides remain subject to this baseline.
   Keep reviewed snapshots intact. If the pinned baseline still requires that
   cadence, record a scoped maintainer-approved exception until a reviewed
   snapshot containing this policy is adopted, then retire the redundant exception.
+- Shared Tooling owns regression tests for its implementation. Consumers qualify
+  snapshot integrity, their actual callers and product contracts, and applicable
+  native tool behavior. Adopting shared code does not require replaying its full
+  producer regression matrix in every consumer gate. Retain an upstream fixture
+  when it supplies a named consumer proof that is otherwise missing; review that
+  proof before retiring any dispatch. Follow the
+  [consumer qualification selection](docs/consuming-snapshots.md#consumer-qualification-selection)
+  when changing test rosters; this does not automatically change existing gates.
 - Check for active builds before compilation or source mutation. Do not change
   source under active validation or compete for its build lock. Use the owning
   repository's build directory; preserve unrelated artifacts.

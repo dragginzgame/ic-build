@@ -5,8 +5,8 @@ use super::{
 };
 use crate::artifacts::{
     ArtifactCacheMaintenance, ArtifactCachePrunePolicy, WasmBuildSpec, resolve_cargo_build_inputs,
-    test_support::unique_temp_directory,
 };
+use crate::fs_fixture::unique_temp_directory;
 use std::{
     ffi::OsString,
     fs,
@@ -128,7 +128,7 @@ fn cargo_snapshot_keys_semantic_identity_and_guards_raw_workspace_inputs() {
         .expect("write Cargo snapshot workspace manifest");
     };
     write_workspace("host_dep_a");
-    let build_spec = WasmBuildSpec::new(&root, &root.join("target"), &["canister"], "debug");
+    let build_spec = WasmBuildSpec::new(&root, &root.join("target"), &["canister"]);
     let before = resolve_cargo_build_inputs(&build_spec).expect("resolve first Cargo snapshot");
     let artifact_spec = |resolved| {
         ArtifactCacheSpec::new(&root.join("cache"), "post-link", "recipe/v1")
@@ -756,10 +756,7 @@ fn scheduled_pruning_skips_an_immediate_second_acquisition() {
     let spec = ArtifactCacheSpec::new(&root.join("cache"), "scheduled", "recipe/v1")
         .with_input("input", &input)
         .with_output("output", &root.join("output"))
-        .with_prune_policy_at_most_every(
-            ArtifactCachePrunePolicy::new(),
-            Duration::from_secs(60 * 60),
-        );
+        .with_prune_policy_at_most_every(ArtifactCachePrunePolicy::new(), Duration::from_hours(1));
 
     let built = build_output(&spec, b"output");
     assert!(built.record().maintenance().is_some());
@@ -772,7 +769,7 @@ fn scheduled_pruning_skips_an_immediate_second_acquisition() {
 
     let changed_policy = spec.with_prune_policy_at_most_every(
         ArtifactCachePrunePolicy::new().with_max_size_bytes(0),
-        Duration::from_secs(60 * 60),
+        Duration::from_hours(1),
     );
     let reused = prepare_artifact_cache(&changed_policy).expect("reuse under changed policy");
     assert!(

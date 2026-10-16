@@ -1,5 +1,5 @@
 use super::*;
-use crate::artifacts::test_support::unique_temp_directory;
+use crate::fs_fixture::unique_temp_directory;
 use ic_host_process::tool::{ExecutionFailure, OutputLimit, ToolError};
 use std::{fs, path::PathBuf};
 

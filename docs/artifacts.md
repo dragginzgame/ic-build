@@ -1,5 +1,9 @@
 # Artifact and Wasm build APIs
 
+Examples use the pending 0.9 constructor API. Upgrade callers by removing the
+fourth argument from `WasmBuildSpec::new`; keep Cargo profile arguments in
+`with_cargo_profile_args`. This checkout has no published 0.9 release yet.
+
 These generic APIs are extracted from IC Testkit. Recipes, budgets, tool
 selection, credentials, source custody and lifecycle remain with the caller.
 The existing v1 retained formats and namespaces are unchanged.
@@ -48,14 +52,15 @@ use std::path::Path;
 
 let workspace = Path::new("/application/workspace");
 let target = workspace.join("target/canister-builds");
-let spec = WasmBuildSpec::new(workspace, &target, &["application_canister"], "release")
+let spec = WasmBuildSpec::new(workspace, &target, &["application_canister"])
     .with_cargo_profile_args(["--release", "--locked", "--offline"])
     .with_extra_env([("CARGO_PROFILE_RELEASE_LTO", "fat")]);
 ```
 
 For a custom profile, select its matching output directory and Cargo argument,
 and use its corresponding `CARGO_PROFILE_<NAME>_LTO` variable. Keep other explicit
-overrides in the same `with_extra_env` call; the setter replaces that map.
+overrides in chained `with_extra_env` calls; each call merges into the existing
+map. Later values win for duplicate names, and empty calls preserve prior values.
 [Cargo's profile environment configuration](https://doc.rust-lang.org/cargo/reference/config.html#profilenamelto)
 overrides the manifest. IC Build fingerprints explicit child environment and
 workspace profiles, so thin and fat selections have distinct cache identities.
@@ -123,6 +128,16 @@ or lowercase file SHA-256. Capture preserves native paths; this particular diges
 encoding refuses non-UTF-8 paths. Existing cache domains and field encoding remain
 unchanged. Consumers keep their record formats and namespaces.
 
+Pending 0.7.0 adds `digest_relative_to(root)` for descriptive source fingerprints
+that survive checkout relocation. It projects the same captured facts using
+sorted UTF-8 relative labels with `/` separators and the existing field framing.
+The root must be absolute; parent traversal, outside inputs and non-UTF-8 relative
+names refuse. Standard path-component normalization applies. Projection reads no
+filesystem, so it can run after the captured sources have been removed. Consumers
+select complete inventories, source custody and rebuild directives; a descriptive
+fingerprint does not attest that an executable was built from those sources.
+The original `digest()` and cache formats remain unchanged.
+
 `before.validate_after(&after)` permits replacement or expansion of the declared
 inventory while requiring the same identity and exclusion policy. It rechecks
 every original root, even if a later depfile no longer names it, and rejects
@@ -173,6 +188,10 @@ record through every use of `path()`, including later Cargo commands that may
 overwrite or delete the original output. Multiple captures remain independent,
 including captures of identical source bytes. Closing or dropping a capture
 releases only its temporary staging directory.
+Capture streams through Host's bounded copy and durable writer with constant
+scratch memory. Regular-file and initial size admission happen before staging;
+the stream independently enforces the budget. Keep the source stable throughout
+capture. An open descriptor retains its inode rather than freezing its contents.
 `retain()` explicitly transfers the captured path and its staging child to
 caller-owned evidence retention. It preserves the bytes after the record is
 consumed; the caller owns later cleanup and custody. It creates no cache or
@@ -240,15 +259,71 @@ Query also retains DID selection, public metadata, smoke/deployment lifecycle an
 publication. Host owns generic custom-section framing. This capability does not
 establish Query adoption or native smoke qualification.
 
+## Strict Cargo lockfile version projections
+
+Pending 0.7.0 provides `cargo::lock_projection::verify_workspace_version_projection`.
+Pass saved before/after TOML and explicit `WorkspaceVersionProjection` entries
+containing each unsourced package name, expected prior version and permitted next
+version. The verifier compares the complete parsed lockfiles after projecting only
+those package versions. Comments and table-field ordering may differ; dependencies,
+source/checksum fields, array order and all unrelated values must remain identical.
+Invalid/duplicate selections, missing or ambiguous packages and unexpected prior
+versions return typed `LockProjectionError` evidence.
+
+Callers retain input byte limits, saved-file custody, version policy, rendering,
+receipts and release ordering. This pure verifier reads and writes no files.
+Memory's adoption is tracked by [#96](https://github.com/dragginzgame/ic-memory/issues/96).
+Canic's fixture normalization also rewrites version-qualified dependency references;
+that broader transformation is deliberately refused by this strict contract.
+
+## Inherited Cargo Rust flags
+
+Pending 0.7.0 provides `cargo::flags::combined_encoded_rustflags(&extra_flags)`.
+Pass each additional argument as a separate `String`; when it returns `Some`,
+set that value as `CARGO_ENCODED_RUSTFLAGS` on the Cargo command. An empty slice
+returns `None`, so leave the command's inherited flags unchanged.
+
+The helper reads the current process environment. Encoded flags take precedence
+over ordinary `RUSTFLAGS`, including an explicitly empty encoded value. It splits
+ordinary flags on whitespace and preserves each addition's argument boundaries.
+For a command with explicit flag overrides, compose in that selected environment;
+do not treat ambient flags as the command's effective overrides. Callers retain
+target/configuration precedence, remap roots and destinations, and build policy.
+Canic can pass its source, Cargo-home and sysroot remaps as three additions rather
+than replacing inherited flags with their encoded concatenation.
+
+## Cargo configuration observations
+
+Published 0.6.1 exposes the engine's configuration walker through
+`cargo::environment`. `configuration_directories` enumerates invocation ancestors
+and the explicitly supplied Cargo home without reading ambient environment.
+`preferred_configuration` selects `config` before `config.toml`;
+`observe_configurations` follows selected include trees and returns lookup paths,
+stable locations, raw SHA-256 bytes and compiler-override field names.
+Within one call, recorded lookup paths are not read or expanded again; distinct
+aliases retain their own include lookup directories. A new call observes fresh
+bytes under the caller's source-custody contract.
+
+For Canic adoption, retain its source-custody and release recipe. Keep absent
+candidate paths in pre-build `InputEvidence`; observing existing configuration
+files does not establish authority for a newly discovered include. Choose
+effective versus conservative roots explicitly and validate the expanded input
+set after execution. Preserve typed refusal and retained evidence; no retry or
+cache/release admission comes from observation. Configuration contents are
+excluded from returned facts and malformed-TOML diagnostics. Cargo itself still
+owns which configuration syntax its selected version accepts.
+
 ## Wasm artifact helpers
 
-The host-only `artifacts` module provides workspace-relative paths, dedicated
-test target directories, content-addressed build coordination, Wasm loading,
-and exact generated-artifact freshness checks:
+The host-only `artifacts` module provides content-addressed build coordination,
+retained outputs and exact generated-artifact freshness checks. Consumers select
+their own test target directories.
 
-`workspace_root_for` asks prepared Cargo for actual workspace membership and
-returns `io::Result<PathBuf>`. It supports App layouts, exclusions and independent
-workspaces without guessing from directory names or resolving dependencies.
+`cargo::observation::workspace_root_for` asks caller-selected prepared Cargo for
+actual workspace membership and returns `io::Result<PathBuf>`. Supply a command
+and output limits as with other Cargo observations. It supports App layouts,
+exclusions and independent workspaces without guessing from directory names or
+resolving dependencies, and always selects offline discovery.
 `WasmBuildSpec::new` shares `<workspace>/target/ic-testkit-incremental` compiler
 state across fingerprints by default. Exact final artifacts remain independently
 cached. Select `with_isolated_builds()` only when separate compiler state is
@@ -259,18 +334,27 @@ preserved and need explicit maintenance if no longer wanted.
 ```rust,no_run
 use ic_build::artifacts::{
     ArtifactCachePrunePolicy, WasmBuildOutcome, WasmBuildSpec,
-    build_wasm_canisters_cached, test_target_dir, workspace_root_for,
+    build_wasm_canisters_cached,
 };
-use std::time::Duration;
+use ic_build::cargo::observation::workspace_root_for;
+use ic_host_process::tool::{OutputLimit, OutputLimits};
+use std::{process::Command, time::Duration};
 
-let workspace = workspace_root_for(env!("CARGO_MANIFEST_DIR"))
+let workspace = workspace_root_for(
+    env!("CARGO_MANIFEST_DIR"),
+    OutputLimits {
+        stdout: OutputLimit::Terminate(64 * 1024),
+        stderr: OutputLimit::Terminate(64 * 1024),
+        timeout: None,
+    },
+    Command::new("cargo"),
+)
     .expect("resolve the crate's Cargo workspace");
-let target = test_target_dir(&workspace, "pic-wasm");
+let target = workspace.join("target").join("pic-wasm");
 let spec = WasmBuildSpec::new(
     &workspace,
     &target,
     &["counter_canister"],
-    "release",
 )
 .with_cargo_profile_args(["--release", "--locked"])
 .with_inherited_env(["COUNTER_SCHEMA_MODE"])
@@ -320,7 +404,7 @@ validated semantic workspace projection lets an unrelated host-only workspace
 dependency or lockfile change retain the same exact Wasm key.
 
 For a Cargo shim that selects another compiler, pair `with_cargo_program(shim)`
-with `with_rustc_program(actual_compiler)` so the `-vV` probe fingerprints that
+with `with_rustc_identity_program(actual_compiler)` so the `-vV` probe fingerprints that
 compiler. The latter selects identity only; it does not configure the shim's
 build. When Cargo should use a selected compiler, use
 `with_extra_env([("RUSTC", actual_compiler)])`, which also takes precedence for
@@ -401,11 +485,12 @@ these paths through `WasmBuildSpec`; overriding `CARGO_TARGET_DIR` through
 `with_extra_env` or passing `--target-dir` through `with_cargo_profile_args`
 returns `InvalidSpec` before acquisition.
 
-The profile output directory must match the Cargo arguments: default builds and
+The profile output directory is derived from Cargo arguments: default builds and
 `--profile dev` or `--profile test` use `debug`; `--release`, `-r`, and
-`--profile bench` use `release`; custom profiles use their own name. A mismatch
-returns `InvalidSpec` before input resolution or cache work. Setting the output
-directory alone does not select a Cargo profile.
+`--profile bench` use `release`; custom profiles use their own name. Replacing
+profile arguments also replaces the derived directory. Missing, repeated or
+unsafe profile selections return `InvalidSpec` before input resolution or cache
+work. Existing recipes retain their fingerprint encoding and cache namespaces.
 
 Wasm acquisition builds package libraries with Cargo's `--lib` flag by default.
 Use `with_example(name)` to select one named `cdylib` example from exactly one
@@ -444,7 +529,6 @@ let spec = WasmBuildSpec::new(
     &workspace,
     &exact_cache,
     &["counter_canister"],
-    "debug",
 )
 .with_shared_incremental_target(&shared_incremental)
 .with_shared_incremental_target_maintenance_at_most_every(
@@ -517,7 +601,6 @@ let spec = WasmBuildSpec::new(
     &workspace,
     &target,
     &["counter_canister"],
-    "debug",
 )
 .with_shared_incremental_target(target.join("shared"))
 .with_shared_incremental_target_maintenance(maintenance);
@@ -546,7 +629,6 @@ let spec = WasmBuildSpec::new(
     &workspace,
     &workspace.join("target/pic-wasm"),
     &["counter_canister"],
-    "debug",
 );
 let outcome = build_wasm_canisters_cached_with_progress(
     &spec,
@@ -582,11 +664,11 @@ use ic_build::artifacts::{
 let specs = [
     LabeledWasmBuildSpec::new(
         "role-a",
-        WasmBuildSpec::new(&workspace, &target, &["role_a"], "debug"),
+        WasmBuildSpec::new(&workspace, &target, &["role_a"]),
     ),
     LabeledWasmBuildSpec::new(
         "role-b",
-        WasmBuildSpec::new(&workspace, &target, &["role_b"], "debug"),
+        WasmBuildSpec::new(&workspace, &target, &["role_b"]),
     ),
 ];
 let batch = build_wasm_canisters_cached_batch(&specs)?;
@@ -785,17 +867,23 @@ and exact version admission, bounded output, an explicit environment and a deadl
 for external transforms. Keep the executable and its parent directories protected
 from concurrent writers during admission and execution.
 
-Read compiled Wasm through the shared filesystem owner:
+Read verified compiled Wasm through a retained build record and the shared
+filesystem owner:
 
 ```rust
-use ic_build::artifacts::wasm_path;
+use ic_build::artifacts::build_wasm_canisters_cached;
 use ic_host_fs::read::read_file;
 
-let path = wasm_path(target_dir, crate_name, profile_target_dir);
-let bytes = read_file(&path, max_bytes)?;
+let build = build_wasm_canisters_cached(&spec)?;
+let path = build.record().artifacts()[0].as_path();
+let bytes = read_file(path, max_bytes)?;
+drop(build); // Retain the cache entry until consumption finishes.
 ```
 
 The caller chooses the byte limit; failures are typed rather than panics.
+The pending 0.4 API removes `wasm_path` and `wasm_artifacts_ready`. Consumers
+obtain verified outputs from retained records. Path construction needed only
+by fixtures stays in consumer test support.
 Paths must be caller-controlled; symbolic links are allowed. Reading bytes does
 not validate Wasm; use `ic_host_artifacts::wasm::inspect` for structural facts.
 Stream identities, archives and Wasm inspection belong to `ic_host_artifacts`;
@@ -804,10 +892,11 @@ resolution, execution and Git provenance belong to `ic_host_process`; Candid
 extraction and response decoding belong to `ic_host_tools`. Its pure Candid text
 APIs are portable; extraction, execution, resolution and provenance are Unix-only.
 Structural Wasm inspection does not replace PocketIC's runtime validation.
-IC Build 0.3.1 requires compatible IC Host 0.18 releases, including checked
-native permission conversion for retained staging on macOS. Align direct Host dependencies
+IC Build 0.8 and pending 0.9 require compatible IC Host 0.21 releases at the
+public dependency boundary. Retained staging still
+uses checked native permission conversion on macOS. Align direct Host dependencies
 when passing `OutputLimits` or matching typed Host failures across the engine
-boundary. Host 0.17 and 0.18 values have different Rust crate identities even
+boundary. Host 0.20 and 0.21 values have different Rust crate identities even
 when their fields match. The earlier IC Build 0.2.0 boundary also means an
 `ic-build = "0.1"` requirement does not select this engine. Process execution returns completed
 results even for nonzero exits: call `require_success()` before admitting or

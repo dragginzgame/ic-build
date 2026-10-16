@@ -2,7 +2,7 @@
 
 IC Build provides common Cargo/Wasm builds and retained artifact caches, moved
 from IC Testkit, and feature-safe Cargo grouping from Canic.
-The [published 0.2 family is available on crates.io](https://crates.io/crates/ic-build).
+The [published 0.9 family is available on crates.io](https://crates.io/crates/ic-build/0.9.0).
 The owning
 [extraction issue](https://github.com/dragginzgame/ic-build/issues/1) tracks
 producer and consumer acceptance.
@@ -28,15 +28,17 @@ Tooling. IC Build must not depend on Canic, IcyDB, PocketIC or IC Testkit.
 
 ## Use
 
-Add the registry dependency to your host-side package:
+The examples below use the published 0.9 API. Add the registry dependency to
+your host-side package:
 
 ```toml
 [dependencies]
-ic-build = "0.2"
+ic-build = "0.9"
 ```
 
-Import the engine directly and keep the returned record alive while using its
-artifacts. With a prepared Cargo/Wasm toolchain and a caller-held source lease:
+Rust 1.91.0 or newer is required. Import the engine directly and keep the returned
+record alive while using its artifacts. With a prepared Cargo/Wasm toolchain and a
+caller-held source lease:
 
 ```rust,no_run
 use ic_build::artifacts::{WasmBuildSpec, build_wasm_canisters_cached};
@@ -44,7 +46,7 @@ use std::path::Path;
 
 fn build(workspace: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let target = workspace.join("target/canister-builds");
-    let spec = WasmBuildSpec::new(workspace, &target, &["counter_canister"], "release")
+    let spec = WasmBuildSpec::new(workspace, &target, &["counter_canister"])
         .with_cargo_profile_args(["--release", "--locked"]);
     let outcome = build_wasm_canisters_cached(&spec)?;
     let wasm = std::fs::read(&outcome.record().artifacts()[0])?;
@@ -53,8 +55,19 @@ fn build(workspace: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
 ```
 
 Consumers select packages, profiles, environment and maintenance policy.
-Select IC Host 0.18 when passing `OutputLimits` or typed Host failures across
-IC Build's public grouping/capture boundary.
+To adopt 0.9, remove the fourth argument from `WasmBuildSpec::new` and retain
+profile selection through `with_cargo_profile_args`. Output directories follow
+those arguments automatically, including when a later call replaces them.
+Published 0.6.1 adds `ic_build::cargo::environment` for read-only configuration
+discovery, include traversal, raw-byte digests and compiler-override facts. Consumers select
+effective or conservative input paths and retain compiler admission, receipt
+framing and source custody. Configuration contents are excluded from returned
+facts and failure diagnostics. Observation executes no Cargo commands and does
+not establish build or release validity.
+
+IC Build 0.8 and 0.9 use IC Host 0.21 at the public grouping/capture boundary;
+align direct Host dependencies before passing
+`OutputLimits` or typed Host failures across that boundary.
 The [deployable-Wasm LTO guidance](docs/artifacts.md#deployable-wasm-lto) records
 whole-canister measurements and shows how a common adapter can apply full LTO
 through the existing API, with complete-application qualification before adopting
@@ -66,13 +79,13 @@ contracts.
 
 ## Native executables
 
-`cargo::native::build_native_executable` (Unix) builds a selected binary or
-example and returns Cargo's actual executable path and target root. The caller
-supplies the Cargo command factory, package/target, extra build arguments and
-per-message JSON allowance. Custom profiles and target directories require no
-output-layout guesses. Compiler diagnostics stream to the selected writer;
-ordinary stderr configuration remains intact. Builds have no default deadline.
-The result does not establish immutable artifact custody or release admission.
+Pending 0.9.1 adds `cargo::native::build_native_executable` on Unix. It builds an
+explicit package's binary or example and returns Cargo's reported executable and
+target root, without reconstructing paths for custom profiles or target directories.
+The caller supplies its Cargo command factory, profile/features, diagnostics writer
+and per-message JSON allowance. Set shared manifest/configuration/target paths in
+the factory so metadata and build use the same recipe; build-only selection and
+path overrides are refused. Compiler diagnostics stream without a default deadline.
 
 ```rust,no_run
 use ic_build::cargo::native::{NativeExecutableSpec, build_native_executable};
@@ -93,15 +106,20 @@ let built = build_native_executable(&spec, || {
 # Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
 ```
 
+Admission runs before each dispatch; commands already running complete through
+Host's direct-child owner. Source/configuration/tool exclusion, in-flight signal
+policy and artifact lifetime stay with the caller. This result does not establish
+immutable artifact custody or release admission.
+
 ## Development
 
-Shared Tooling 0.11.2 is pinned in
+Shared Tooling 0.15.2 is pinned in
 [.shared-tooling.snapshot](.shared-tooling.snapshot); commands use this reviewed
 local snapshot. The [Make interface](docs/make-interface.md) owns common setup,
 formatting, hook installation and release entrypoints.
 
 The virtual root [Cargo manifest](Cargo.toml) owns the workspace version, edition 2024,
-MSRV 1.88.0, common metadata and lints. The
+MSRV 1.91.0, common metadata and lints. The
 [ic-build package](crates/ic-build/Cargo.toml) inherits them and permits registry
 publication through the explicit tagged-release command. The [library root](crates/ic-build/src/lib.rs)
 exports the generic engine. The root [lockfile](Cargo.lock) records its selected
@@ -123,11 +141,9 @@ cargo fetch --locked
 make install-hooks
 ```
 
-`make install-tools` also prepares the consumer-pinned `cargo-set-version`
-release editor from [ci/release-tools.env](ci/release-tools.env) through the
-canonical shared Cargo tool installer. `make tools-check` admits it offline;
-release adapters use that admitted executable directly. Global Cargo plugins
-are not setup prerequisites.
+Release preparation uses the shared workspace-version renderer and does not
+require an additional Cargo editor. Global Cargo plugins are not setup
+prerequisites.
 
 [rust-toolchain.toml](rust-toolchain.toml) selects the existing Rust 1.99.0
 development compiler, rustfmt, Clippy and its Wasm target independently of the qualified Linux

@@ -3,12 +3,143 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.3.4]
+## [0.9.1]
 
-- Build selected native binaries/examples using Cargo's reported package and
-  executable identities instead of reconstructing target paths. Diagnostics
-  stream without a default elapsed-time deadline; callers retain tool, profile,
-  source and artifact custody ([#30](https://github.com/dragginzgame/ic-build/issues/30)).
+- Build selected native binaries/examples from Cargo's exact package and
+  executable messages, including custom profiles and target directories.
+  Diagnostics stream without a default elapsed-time deadline; callers retain
+  tool, source and artifact custody
+  ([#30 — Select native Cargo executables](https://github.com/dragginzgame/ic-build/issues/30)).
+
+## [0.9.0] - 2026-10-16
+
+- **Breaking:** remove the fourth, output-directory argument from
+  `WasmBuildSpec::new`. Cargo profile arguments now select both the build profile
+  and its artifact directory; replacing those arguments updates the directory.
+  Callers must remove the fourth argument and keep profile selection in
+  `with_cargo_profile_args`.
+- Preserve existing fingerprint encoding and cache namespaces for matching
+  recipes. Malformed profiles and unsafe derived directories still refuse
+  before tool execution or acquisition.
+- Consolidate artifact identifier/label length checks and use Host's existing
+  raw-byte SHA-256 API for configuration observations, preserving limits,
+  diagnostics and raw digest bytes.
+- **Testing:** restore batch specification-failure coverage after the constructor
+  migration and isolate the refusal fixture from source-tree artifacts.
+
+## [0.8.0] - 2026-10-16
+
+- **Breaking:** align exposed Host types with the selected IC Host 0.21 graph.
+  Consumers passing Host limits or typed errors across this boundary must align
+  their direct Host dependencies and rebuild.
+
+- Decode standalone and archive-qualification Cargo metadata directly into the
+  canonical schema without an intermediate JSON tree; retain original JSON in
+  cache fingerprinting.
+- Adopt Shared Tooling 0.15.2 and delegate locked release-cache preparation and
+  pin checks to its shared preflight helper, preserving source/recovery admission
+  ([#39 — Shared release preflight](https://github.com/dragginzgame/ic-build/issues/39)).
+- Remove the unused Cargo release-editor installation, pin and admission flow;
+  the shared workspace-version renderer prepares versions directly.
+- Use Host's existing SHA-256 formatter for input digests, preserving lowercase
+  hexadecimal output, leading zeroes and cache identities.
+- Observe each Cargo configuration lookup path and include tree once per call,
+  retaining distinct aliases, include ordering and fresh-call re-observation.
+- Simplify depfile parsing by collecting dependencies directly and retaining
+  only target presence, preserving strict syntax refusal and phony rules.
+- Reuse Host's SHA-256 parser for package checksums while retaining lowercase
+  syntax, qualification diagnostics and exact external-selection checks.
+- Run shared-target coordination and scheduled-maintenance process qualification
+  against independent Build-owned Cargo/Wasm fixtures, removing skips for a
+  missing Testkit package.
+- Share fixture-directory setup across unit and integration tests and use Host
+  marker waits with explicit timeouts and early worker-exit diagnostics.
+
+## [0.7.0] - 2026-10-15
+
+- **Breaking:** align exposed Host types with IC Host 0.20. Consumers passing
+  Host limits or typed errors across this boundary must align their
+  direct Host dependencies and rebuild. Keep trusted digest admission in the
+  example and integration tests through Host's new `VersionSpec` API
+  ([#9 — Exposed Host boundary](https://github.com/dragginzgame/ic-build/issues/9)).
+
+- Verify exact workspace-version projections in Cargo lockfiles without allowing
+  dependency, source, checksum or unrelated metadata changes. Version selection
+  and release receipts remain caller-owned
+  ([#28 — Strict workspace lock projections](https://github.com/dragginzgame/ic-build/issues/28)).
+- Hash captured input evidence relative to an explicit root for relocatable
+  source fingerprints, preserving absolute-path digests and caller-owned
+  inventories and provenance policy
+  ([#40 — Relative source evidence](https://github.com/dragginzgame/ic-build/issues/40)).
+- Compose inherited Cargo Rust flags with caller-selected arguments, preserving
+  encoded-variable precedence, explicitly empty values and argument boundaries
+  ([#36 — Cargo Rust flags](https://github.com/dragginzgame/ic-build/issues/36)).
+
+## [0.6.1] - 2026-10-15
+
+- Consolidate Cargo argument interpretation, exact-cache preparation and private
+  Cargo fixture scaffolding while preserving public builders, fingerprint bytes
+  and retained cache formats
+  ([#46 — Internal cleanup](https://github.com/dragginzgame/ic-build/issues/46)).
+- Stream captured artifacts through Host's bounded copy and durable writer,
+  avoiding a complete in-memory copy while retaining source admission, typed
+  failures and staging lifetime
+  ([#45 — Capture and Host mechanics](https://github.com/dragginzgame/ic-build/issues/45)).
+- Share read-only Cargo configuration and include observations through
+  `cargo::environment`; reuse that owner in the Wasm engine while preserving
+  cache identities, lookup aliases and caller-owned admission
+  ([#35 — Cargo configuration observations](https://github.com/dragginzgame/ic-build/issues/35)).
+- Correct registry and Host dependency guidance for published 0.6.0 and record
+  Canic's delivered workspace-discovery and Host-boundary adoption.
+
+## [0.6.0] - 2026-10-15
+
+- **Breaking:** move `artifacts::workspace_root_for` to
+  `cargo::observation::workspace_root_for` and require the caller's Cargo command
+  and capture limits. Offline membership discovery still avoids dependency
+  resolution and toolchain installation; there is no old-path reexport.
+- Let owned-directory fields perform Drop cleanup directly, preserving staging
+  cleanup before transaction locks are released and explicit recovery behavior
+  ([#43 — Discovery and cleanup boundaries](https://github.com/dragginzgame/ic-build/issues/43)).
+
+## [0.5.0] - 2026-10-15
+
+- Adopt Shared Tooling 0.15.0's committed snapshot and strict release-input
+  admission; qualify registry IC Host 0.18.6 with unchanged API minimums and
+  executable pins.
+- **Breaking:** merge `WasmBuildSpec::with_extra_env` overrides across calls,
+  with later values winning for duplicate names. Empty calls preserve prior
+  values; construct a new specification when a fresh environment map is needed.
+- **Breaking:** rename `WasmBuildSpec::with_rustc_program` to
+  `with_rustc_identity_program`. This selects only the compiler identity probe;
+  explicit `RUSTC` still selects Cargo's compiler and takes probe precedence.
+- **Breaking:** remove `artifacts::test_target_dir`. Consumers select their own
+  test output paths, for example `workspace.join("target").join(name)`.
+- Simplify collect-all artifact batching while preserving phase timings,
+  synchronous abort and retained primary/cleanup failures
+  ([#42 — Batch and boundary cleanup](https://github.com/dragginzgame/ic-build/issues/42)).
+
+- Correct the registry dependency and Shared Tooling guidance for published 0.4.0,
+  and reconcile delivered MSRV and retained-capture acceptance.
+
+## [0.4.0] - 2026-10-15
+
+- **Breaking:** require Rust 1.91.0 or newer and select `cargo-platform` 0.3.3.
+  Consumers adopting this release must prepare that compiler or newer; published
+  0.3.3's Rust 1.88 declaration is unchanged
+  ([#34 — Dependency graph MSRV](https://github.com/dragginzgame/ic-build/issues/34)).
+- Use equivalent Rust 1.91 duration constructors in tests and the cache example
+  to satisfy strict Clippy after the MSRV increase.
+- **Breaking:** remove the public `wasm_path` and `wasm_artifacts_ready` helpers.
+  Obtain verified output paths from retained artifact records; fixture-only path
+  construction belongs in consumer tests.
+- Decode Cargo metadata through the canonical schema while preserving Wasm
+  cache fingerprint projections, probe cancellation and retained diagnostics.
+- Delegate package-source traversal on Unix to Host's descriptor-based walker,
+  preserving source budgets and exact byte/mode evidence.
+
+- Adopt Shared Tooling 0.14.0's committed governance snapshot and concise
+  change-reporting guidance, preserving executable pins and release behavior.
 
 ## [0.3.3] - 2026-10-14
 

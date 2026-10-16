@@ -1,12 +1,12 @@
 //! Selected native executables from Cargo's own package and artifact messages.
 
+use super::{observation::schema, selection::CargoSelection};
 use ic_host_process::{
     child::OwnedChild,
     tool::{
         OutputLimit, OutputLimits, OutputStream, SuccessfulExit, communicate_child_with_observer,
     },
 };
-use serde_json::Value;
 use std::{
     error::Error,
     ffi::OsString,
@@ -26,7 +26,9 @@ pub struct NativeExecutableSpec<'a> {
     pub target_name: &'a str,
     /// `bin` or `example`, selecting Cargo's corresponding build target.
     pub target_kind: &'a str,
-    /// Additional build arguments, such as profile, features and target selection.
+    /// Additional build arguments, such as profile and features. Package, target,
+    /// manifest, target-directory and configuration overrides are refused; select
+    /// shared configuration and paths in the command factory instead.
     pub build_args: &'a [OsString],
     /// Maximum metadata bytes or bytes in one Cargo JSON message, including LF.
     /// Total streamed diagnostic output and build duration have no default limit.
@@ -75,9 +77,18 @@ pub fn build_native_executable(
     if spec.package.is_empty() || spec.target_name.is_empty() || spec.max_message_bytes == 0 {
         return Err(protocol("empty native target selection or message allowance").into());
     }
+    let arguments = CargoSelection::parse(spec.build_args.to_vec());
+    if !arguments.flags.is_empty() {
+        return Err(protocol("native build arguments override the selected recipe").into());
+    }
+    arguments
+        .profile
+        .as_ref()
+        .map_err(|message| protocol(message))?;
     admit()?;
     let mut command = cargo();
     command.args(["metadata", "--locked", "--no-deps", "--format-version", "1"]);
+    command.args(&arguments.metadata_arguments);
     let mut bytes = Vec::new();
     execute(&mut command, |stream, chunk| match stream {
         OutputStream::Stdout => append(&mut bytes, chunk, spec.max_message_bytes),
@@ -120,23 +131,22 @@ pub fn build_native_executable(
     })
 }
 
-fn selection(metadata: &Value, spec: &NativeExecutableSpec<'_>) -> io::Result<(String, PathBuf)> {
-    let packages = metadata["packages"]
-        .as_array()
-        .ok_or_else(|| protocol("Cargo omitted packages"))?;
-    let mut matching = packages
+fn selection(
+    metadata: &schema::Metadata,
+    spec: &NativeExecutableSpec<'_>,
+) -> io::Result<(String, PathBuf)> {
+    let mut matching = metadata
+        .packages
         .iter()
-        .filter(|package| package["name"] == spec.package);
+        .filter(|package| package.name.as_str() == spec.package);
     let package = matching
         .next()
         .ok_or_else(|| protocol("Cargo omitted selected package"))?;
     if matching.next().is_some() {
         return Err(protocol("Cargo package name is ambiguous"));
     }
-    let targets = package["targets"]
-        .as_array()
-        .ok_or_else(|| protocol("Cargo omitted package targets"))?;
-    if targets
+    if package
+        .targets
         .iter()
         .filter(|target| matches_target(target, spec))
         .count()
@@ -144,23 +154,20 @@ fn selection(metadata: &Value, spec: &NativeExecutableSpec<'_>) -> io::Result<(S
     {
         return Err(protocol("Cargo target is missing or ambiguous"));
     }
-    let id = package["id"]
-        .as_str()
-        .filter(|id| !id.is_empty())
-        .ok_or_else(|| protocol("Cargo omitted package identity"))?;
-    let root = metadata["target_directory"]
-        .as_str()
-        .map(PathBuf::from)
-        .filter(|root| root.is_absolute())
-        .ok_or_else(|| protocol("Cargo omitted absolute target directory"))?;
-    Ok((id.to_owned(), root))
+    if package.id.repr.is_empty() {
+        return Err(protocol("Cargo omitted package identity"));
+    }
+    if !metadata.target_directory.is_absolute() {
+        return Err(protocol("Cargo omitted absolute target directory"));
+    }
+    Ok((
+        package.id.repr.clone(),
+        metadata.target_directory.clone().into_std_path_buf(),
+    ))
 }
 
-fn matches_target(target: &Value, spec: &NativeExecutableSpec<'_>) -> bool {
-    target["name"] == spec.target_name
-        && target["kind"]
-            .as_array()
-            .is_some_and(|kinds| kinds.iter().any(|kind| kind == spec.target_kind))
+fn matches_target(target: &schema::Target, spec: &NativeExecutableSpec<'_>) -> bool {
+    target.name == spec.target_name && target.kind.contains(&spec.target_kind.into())
 }
 
 fn message(
@@ -170,24 +177,21 @@ fn message(
     executable: &mut Option<PathBuf>,
     diagnostics: &mut impl Write,
 ) -> io::Result<()> {
-    let message: Value = serde_json::from_slice(bytes).map_err(io::Error::other)?;
-    match message["reason"]
-        .as_str()
-        .ok_or_else(|| protocol("invalid Cargo message reason"))?
-    {
-        "compiler-message" => {
-            if let Some(rendered) = message["message"]["rendered"].as_str() {
+    let message: schema::Message = serde_json::from_slice(bytes).map_err(io::Error::other)?;
+    match message {
+        schema::Message::CompilerMessage(message) => {
+            if let Some(rendered) = message.message.rendered {
                 diagnostics.write_all(rendered.as_bytes())?;
             }
         }
-        "compiler-artifact"
-            if message["package_id"] == package_id && matches_target(&message["target"], spec) =>
+        schema::Message::CompilerArtifact(artifact)
+            if artifact.package_id.repr == package_id && matches_target(&artifact.target, spec) =>
         {
-            let path = message["executable"]
-                .as_str()
-                .map(PathBuf::from)
+            let path = artifact
+                .executable
                 .filter(|path| path.is_absolute())
-                .ok_or_else(|| protocol("Cargo omitted absolute executable path"))?;
+                .ok_or_else(|| protocol("Cargo omitted absolute executable path"))?
+                .into_std_path_buf();
             if executable.replace(path).is_some() {
                 return Err(protocol("Cargo reported multiple selected executables"));
             }

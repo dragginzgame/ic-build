@@ -2,8 +2,13 @@
 //!
 //! Consumers supply package/version selection, tools, source custody and budgets.
 //! This is local build evidence, never registry publication or release admission.
+use super::observation::schema::{Metadata, Package};
+use ic_host_artifacts::artifact::Sha256Digest;
 use ic_host_process::tool::{CompletedExecution, OutputLimits, ToolError, capture_command};
+mod source_inventory;
+#[cfg(test)]
 use serde_json::{Value, json};
+use source_inventory::sources;
 use std::{
     collections::{BTreeMap, BTreeSet},
     error::Error,
@@ -182,7 +187,7 @@ fn qualify(
         "1",
     ]);
     let metadata = execute(&mut command, &evidence, "entry-metadata", limits.process)?;
-    let metadata: Value = serde_json::from_slice(&metadata)?;
+    let metadata = serde_json::from_slice(&metadata)?;
     let mut originals = BTreeMap::new();
     originals.insert(
         workspace.join("Cargo.toml"),
@@ -190,14 +195,10 @@ fn qualify(
     );
     for spec in packages {
         let selected = package(&metadata, spec.name)?;
-        if selected["version"] != spec.version {
+        if selected.version.to_string() != spec.version {
             return Err("entry package version differs from selection".into());
         }
-        let path = PathBuf::from(
-            selected["manifest_path"]
-                .as_str()
-                .ok_or("missing entry manifest")?,
-        );
+        let path = selected.manifest_path.clone().into_std_path_buf();
         originals.insert(path.clone(), read(&path, limits.file_bytes)?);
     }
     for (index, bytes) in originals.values().enumerate() {
@@ -360,12 +361,11 @@ fn execute(
     }
 }
 
-fn package<'a>(metadata: &'a Value, name: &str) -> Result<&'a Value, Cause> {
-    let selected = metadata["packages"]
-        .as_array()
-        .ok_or("missing metadata packages")?
+fn package<'a>(metadata: &'a Metadata, name: &str) -> Result<&'a Package, Cause> {
+    let selected = metadata
+        .packages
         .iter()
-        .filter(|p| p["name"] == name)
+        .filter(|p| p.name == name)
         .collect::<Vec<_>>();
     if selected.len() != 1 {
         return Err(format!("expected one extracted package: {name}").into());
@@ -374,23 +374,21 @@ fn package<'a>(metadata: &'a Value, name: &str) -> Result<&'a Value, Cause> {
 }
 
 fn admit_graph(
-    metadata: &Value,
+    metadata: &Metadata,
     root: &Path,
     packages: &[PackageArchiveSpec<'_>],
 ) -> Result<(), Cause> {
-    let members = metadata["workspace_members"]
-        .as_array()
-        .ok_or("missing workspace members")?;
+    let members = &metadata.workspace_members;
     let mut selected = BTreeSet::new();
     for spec in packages {
         let package = package(metadata, spec.name)?;
         let manifest = root
             .join(format!("{}-{}/Cargo.toml", spec.name, spec.version))
             .canonicalize()?;
-        if package["version"] != spec.version
-            || !package["source"].is_null()
-            || package["manifest_path"].as_str().map(Path::new) != Some(manifest.as_path())
-            || !members.contains(&package["id"])
+        if package.version.to_string() != spec.version
+            || package.source.is_some()
+            || package.manifest_path.as_std_path() != manifest
+            || !members.contains(&package.id)
         {
             return Err(format!(
                 "resolved package is not the exact extracted payload: {}",
@@ -398,7 +396,7 @@ fn admit_graph(
             )
             .into());
         }
-        selected.insert(package["id"].as_str().ok_or("missing package identity")?);
+        selected.insert(&package.id);
     }
     if members.len() != packages.len() || selected.len() != members.len() {
         return Err("unexpected extracted workspace member".into());
@@ -426,13 +424,9 @@ fn external_rows(bytes: &[u8]) -> Result<BTreeMap<(String, String, String), Stri
         let source = source.as_str().ok_or("invalid lock source")?;
         let checksum = if source.starts_with("registry+") {
             let checksum = text("checksum")?;
-            if checksum.len() != 64
-                || !checksum
-                    .bytes()
-                    .all(|b| b.is_ascii_digit() || matches!(b, b'a'..=b'f'))
-            {
-                return Err("invalid package checksum".into());
-            }
+            checksum
+                .parse::<Sha256Digest>()
+                .map_err(|_| "invalid package checksum")?;
             checksum
         } else {
             ""
@@ -460,60 +454,6 @@ fn admit_lock(entry: &[u8], payload: &[u8]) -> Result<(), Cause> {
         .any(|(key, checksum)| entry.get(key) != Some(checksum))
     {
         return Err("packaging changed external selection".into());
-    }
-    Ok(())
-}
-
-fn sources(
-    root: &Path,
-    packages: &[PackageArchiveSpec<'_>],
-    limits: PackageQualificationLimits,
-) -> Result<BTreeMap<PathBuf, Value>, Cause> {
-    let mut files = BTreeMap::new();
-    let mut remaining = limits.source_entries;
-    for spec in packages {
-        inventory(
-            root,
-            &root.join(format!("{}-{}", spec.name, spec.version)),
-            limits,
-            0,
-            &mut remaining,
-            &mut files,
-        )?;
-    }
-    Ok(files)
-}
-fn inventory(
-    root: &Path,
-    path: &Path,
-    limits: PackageQualificationLimits,
-    depth: usize,
-    remaining: &mut usize,
-    files: &mut BTreeMap<PathBuf, Value>,
-) -> Result<(), Cause> {
-    if depth > limits.source_depth || *remaining == 0 {
-        return Err("extracted source traversal budget exceeded".into());
-    }
-    *remaining -= 1;
-    let metadata = fs::symlink_metadata(path)?;
-    if metadata.is_dir() {
-        for entry in fs::read_dir(path)? {
-            inventory(root, &entry?.path(), limits, depth + 1, remaining, files)?;
-        }
-    } else if metadata.is_file() {
-        #[cfg(unix)]
-        let mode = {
-            use std::os::unix::fs::MetadataExt as _;
-            metadata.mode() & 0o777
-        };
-        #[cfg(not(unix))]
-        let mode = metadata.permissions().readonly();
-        files.insert(
-            path.strip_prefix(root)?.to_owned(),
-            json!({"sha256": hash(path, limits.file_bytes)?, "mode": mode}),
-        );
-    } else {
-        return Err(format!("unsupported extracted source entry: {}", path.display()).into());
     }
     Ok(())
 }

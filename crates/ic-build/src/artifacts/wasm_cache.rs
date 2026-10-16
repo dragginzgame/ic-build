@@ -1,3 +1,4 @@
+use crate::cargo::selection::{CargoSelection, SelectionFlag};
 use ic_host_process::{
     child::{CleanupPolicy, OwnedChild},
     tool::{
@@ -24,6 +25,9 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 use toml::Value as TomlValue;
+
+mod acquisition;
+use acquisition::prepare_exact_cache_entry;
 
 use super::{
     cache_fs::{
@@ -73,8 +77,7 @@ pub struct WasmBuildSpec {
     target_dir: PathBuf,
     packages: Vec<String>,
     example: Option<String>,
-    profile_target_dir: String,
-    cargo_profile_args: Vec<OsString>,
+    cargo_selection: CargoSelection,
     extra_env: BTreeMap<OsString, OsString>,
     inherited_env: BTreeSet<OsString>,
     additional_inputs: Vec<PathBuf>,
@@ -294,7 +297,7 @@ struct BatchResolutionKey<'a> {
     workspace_root: &'a Path,
     cargo_program: &'a OsStr,
     rustc_program: &'a OsStr,
-    metadata_arguments: Vec<OsString>,
+    metadata_arguments: &'a [OsString],
     environment: BTreeMap<OsString, Option<OsString>>,
 }
 
@@ -863,11 +866,10 @@ pub enum WasmBuildError {
 impl WasmBuildSpec {
     /// Describe one Cargo build targeting `wasm32-unknown-unknown`.
     ///
-    /// `profile_target_dir` is Cargo's output subdirectory, such as `debug`,
-    /// `release`, or the name supplied to `--profile`. It must be one normal
-    /// path component so artifacts remain inside their target directories.
-    /// It must match the profile selected by `with_cargo_profile_args`: the
-    /// default, `dev`, and `test` use `debug`; `release` and `bench` use `release`.
+    /// The output subdirectory is derived from [`Self::with_cargo_profile_args`]:
+    /// the default, `dev`, and `test` use `debug`; `release` and `bench` use
+    /// `release`; custom profiles use their names. The derived directory must
+    /// be one normal path component so artifacts remain inside their targets.
     /// Relative `workspace_root` and exact `target_dir` paths are resolved from
     /// the caller's working directory. Shared targets are workspace-relative.
     /// Package names are sorted and deduplicated for identity, discovery,
@@ -881,12 +883,7 @@ impl WasmBuildSpec {
     /// library name: package hyphens become underscores. Artifact paths use that
     /// admitted name; genuinely renamed libraries are refused.
     #[must_use]
-    pub fn new(
-        workspace_root: &Path,
-        target_dir: &Path,
-        packages: &[&str],
-        profile_target_dir: &str,
-    ) -> Self {
+    pub fn new(workspace_root: &Path, target_dir: &Path, packages: &[&str]) -> Self {
         let mut packages = packages
             .iter()
             .map(|package| (*package).to_owned())
@@ -898,8 +895,7 @@ impl WasmBuildSpec {
             target_dir: target_dir.to_owned(),
             packages,
             example: None,
-            profile_target_dir: profile_target_dir.to_owned(),
-            cargo_profile_args: Vec::new(),
+            cargo_selection: CargoSelection::parse(Vec::new()),
             extra_env: BTreeMap::new(),
             inherited_env: BTreeSet::new(),
             additional_inputs: Vec::new(),
@@ -956,8 +952,8 @@ impl WasmBuildSpec {
     /// rejected: use Cargo's discovered configuration files or explicit
     /// environment overrides so resolution and execution share tracked inputs.
     /// Help and build-graph flags are rejected because they exit successfully
-    /// without building. The selected profile must match `profile_target_dir`;
-    /// declaring an output directory does not select a Cargo profile.
+    /// without building. These arguments also select the profile output directory;
+    /// a later call replaces both the arguments and the derived directory.
     /// Binary, example, test, bench, and all-target selectors are rejected to
     /// preserve structural library/example selection. Use [`Self::with_example`]
     /// for a named example. `--lib` is supported only for the default library.
@@ -967,14 +963,19 @@ impl WasmBuildSpec {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        self.cargo_profile_args = arguments
-            .into_iter()
-            .map(|argument| argument.as_ref().to_owned())
-            .collect();
+        self.cargo_selection = CargoSelection::parse(
+            arguments
+                .into_iter()
+                .map(|argument| argument.as_ref().to_owned())
+                .collect(),
+        );
         self
     }
 
-    /// Set deterministic OS-native child-process environment overrides.
+    /// Merge deterministic OS-native child-process environment overrides.
+    ///
+    /// Later values replace earlier values for the same name, including across
+    /// calls. An empty iterator preserves previously configured overrides.
     ///
     /// `CARGO_TARGET_DIR` is owned by the cache configuration and cannot be
     /// overridden here. Conflicting specifications fail before acquisition.
@@ -985,10 +986,11 @@ impl WasmBuildSpec {
         K: Into<OsString>,
         V: Into<OsString>,
     {
-        self.extra_env = environment
-            .into_iter()
-            .map(|(key, value)| (key.into(), value.into()))
-            .collect();
+        self.extra_env.extend(
+            environment
+                .into_iter()
+                .map(|(key, value)| (key.into(), value.into())),
+        );
         self
     }
 
@@ -1043,7 +1045,7 @@ impl WasmBuildSpec {
     /// together, use `with_extra_env([("RUSTC", program)])`; that explicit environment
     /// selection takes precedence over this identity-only setting.
     #[must_use]
-    pub fn with_rustc_program(mut self, program: impl Into<OsString>) -> Self {
+    pub fn with_rustc_identity_program(mut self, program: impl Into<OsString>) -> Self {
         self.rustc_program = program.into();
         self
     }
@@ -1950,7 +1952,11 @@ impl<'a, 'session> WasmBuildBatchInputResolver<'a, 'session> {
             self.resolved[*index].is_none() && validate_spec(self.specs[*index]).is_ok()
         });
         let results = progress.run_phase(WasmBuildProgressPhase::InputDiscovery, || {
-            let parsed = ParsedCargoMetadata::parse(metadata);
+            let canonical = crate::cargo::observation::decode_metadata(metadata);
+            let parsed = canonical
+                .as_ref()
+                .map_err(ToString::to_string)
+                .and_then(|canonical| ParsedCargoMetadata::parse(canonical, metadata));
             pending
                 .map(|index| {
                     let spec = self.specs[index];
@@ -2025,7 +2031,7 @@ impl<'a> BatchResolutionKey<'a> {
                 .extra_env
                 .get(OsStr::new("RUSTC"))
                 .unwrap_or(&spec.rustc_program),
-            metadata_arguments: metadata_arguments(&spec.cargo_profile_args),
+            metadata_arguments: &spec.cargo_selection.metadata_arguments,
             environment: effective_environment(spec),
         }
     }
@@ -3209,14 +3215,9 @@ fn reconstruct_exact_cache_entry(
     progress: &mut ProgressReporter<'_>,
 ) -> Result<Vec<FileDigest>, WasmBuildError> {
     let cached_artifacts = expected_artifacts(spec, cache_entry);
-    progress.run_phase(WasmBuildProgressPhase::ArtifactPublication, || {
-        remove_unretained_entry(cache_entry).map_err(wasm_cache_fs_error)?;
-        create_dir_all(
-            cache_entry,
-            "create content-addressed Cargo target directory",
-        )
+    let incomplete = progress.run_phase(WasmBuildProgressPhase::ArtifactPublication, || {
+        prepare_exact_cache_entry(cache_entry)
     })?;
-    let incomplete = OwnedDirectory::new(cache_entry.to_owned());
     let result = progress.run_phase(WasmBuildProgressPhase::ArtifactPublication, || {
         copy_wasm_artifacts(artifacts, &cached_artifacts)?;
         let missing = missing_artifacts(&cached_artifacts);
@@ -3245,19 +3246,12 @@ fn build_wasm_cache_miss(
     let cache_entry = cache_entry_directory(spec, fingerprint);
     let preparation_started = Instant::now();
     progress.begin_phase(WasmBuildFailurePhase::ArtifactPublication);
-    let preparation_result = (|| {
-        remove_unretained_entry(&cache_entry).map_err(wasm_cache_fs_error)?;
-        create_dir_all(
-            &cache_entry,
-            "create content-addressed Cargo target directory",
-        )
-    })();
+    let preparation_result = prepare_exact_cache_entry(&cache_entry);
     progress.record_phase(
         WasmBuildFailurePhase::ArtifactPublication,
         preparation_started.elapsed(),
     );
-    preparation_result?;
-    let incomplete_directory = OwnedDirectory::new(cache_entry.clone());
+    let incomplete_directory = preparation_result?;
     let build_result = (|| {
         if matches!(
             spec.cache_mode,
@@ -3559,24 +3553,16 @@ fn validate_spec(spec: &WasmBuildSpec) -> Result<(), WasmBuildError> {
             message: "at least one Cargo package is required".to_owned(),
         });
     }
-    let mut profile_components = Path::new(&spec.profile_target_dir).components();
-    if !matches!(
-        (profile_components.next(), profile_components.next()),
-        (Some(Component::Normal(_)), None)
-    ) {
-        return Err(WasmBuildError::InvalidSpec {
-            message: "Cargo profile target directory must be one normal path component".to_owned(),
-        });
-    }
     if spec.target.is_empty() {
         return Err(WasmBuildError::InvalidSpec {
             message: "Cargo compilation target must not be empty".to_owned(),
         });
     }
-    if spec.cargo_profile_args.iter().any(|argument| {
-        matches!(argument.to_str(), Some("--help" | "--unit-graph"))
-            || matches!(short_cargo_option(argument), Some((b'h', _)))
-    }) {
+    if spec
+        .cargo_selection
+        .flags
+        .contains(&SelectionFlag::NonBuilding)
+    {
         return Err(WasmBuildError::InvalidSpec {
             message:
                 "Cargo help and build-graph flags exit without building and cannot be used for Wasm acquisition"
@@ -3584,38 +3570,30 @@ fn validate_spec(spec: &WasmBuildSpec) -> Result<(), WasmBuildError> {
         });
     }
     if spec.extra_env.contains_key(OsStr::new("CARGO_TARGET_DIR"))
-        || spec.cargo_profile_args.iter().any(|argument| {
-            argument == OsStr::new("--target-dir")
-                || argument.as_encoded_bytes().starts_with(b"--target-dir=")
-        })
+        || spec
+            .cargo_selection
+            .flags
+            .contains(&SelectionFlag::TargetDirectory)
     {
         return Err(WasmBuildError::InvalidSpec {
             message: "Cargo target directories are owned by the build specification; use target_dir or with_shared_incremental_target instead of command overrides".to_owned(),
         });
     }
     validate_cargo_target_selection(spec)?;
-    if spec.cargo_profile_args.iter().any(|argument| {
-        let option = argument
-            .as_encoded_bytes()
-            .split(|byte| *byte == b'=')
-            .next()
-            .unwrap_or_default();
-        matches!(
-            option,
-            b"--manifest-path"
-                | b"--target"
-                | b"--package"
-                | b"--workspace"
-                | b"--all"
-                | b"--exclude"
-                | b"--config"
-        ) || matches!(short_cargo_option(argument), Some((b'm' | b'p' | b'C', _)))
-    }) {
+    if spec
+        .cargo_selection
+        .flags
+        .contains(&SelectionFlag::InputSelection)
+    {
         return Err(WasmBuildError::InvalidSpec {
             message: "Cargo workspace, package, target, and configuration inputs are owned by the build specification; use workspace_root, packages, with_target, and discovered Cargo configuration files or with_extra_env instead of command overrides".to_owned(),
         });
     }
-    validate_cargo_profile(spec)?;
+    spec.cargo_selection
+        .profile_target_dir()
+        .map_err(|message| WasmBuildError::InvalidSpec {
+            message: message.to_owned(),
+        })?;
     if matches!(
         &spec.cache_mode,
         WasmBuildCacheMode::SharedIncremental { target_dir } if target_dir.as_os_str().is_empty()
@@ -3647,10 +3625,7 @@ fn validate_cargo_target_selection(spec: &WasmBuildSpec) -> Result<(), WasmBuild
                 (components.next(), components.next()),
                 (Some(Component::Normal(_)), None)
             )
-            || spec
-                .cargo_profile_args
-                .iter()
-                .any(|argument| argument == "--lib")
+            || spec.cargo_selection.flags.contains(&SelectionFlag::Library)
         {
             return Err(WasmBuildError::InvalidSpec {
                 message: "a named Cargo example requires one package, a normal target name and no --lib override".to_owned(),
@@ -3668,82 +3643,13 @@ fn validate_cargo_target_selection(spec: &WasmBuildSpec) -> Result<(), WasmBuild
             message: "Cargo package names must be normal path components".to_owned(),
         });
     }
-    if spec.cargo_profile_args.iter().any(|argument| {
-        let option = argument
-            .as_encoded_bytes()
-            .split(|byte| *byte == b'=')
-            .next()
-            .unwrap_or_default();
-        matches!(
-            option,
-            b"--bin"
-                | b"--bins"
-                | b"--example"
-                | b"--examples"
-                | b"--test"
-                | b"--tests"
-                | b"--bench"
-                | b"--benches"
-                | b"--all-targets"
-        )
-    }) {
+    if spec
+        .cargo_selection
+        .flags
+        .contains(&SelectionFlag::TargetSelection)
+    {
         return Err(WasmBuildError::InvalidSpec {
             message: "Cargo target selection is owned by the build specification; use with_example for a named cdylib example".to_owned(),
-        });
-    }
-    Ok(())
-}
-
-fn validate_cargo_profile(spec: &WasmBuildSpec) -> Result<(), WasmBuildError> {
-    let mut selected = None;
-    let mut arguments = spec.cargo_profile_args.iter();
-    while let Some(argument) = arguments.next() {
-        let profile = if argument == "--profile" {
-            Some(
-                arguments
-                    .next()
-                    .and_then(|value| value.to_str())
-                    .ok_or_else(|| WasmBuildError::InvalidSpec {
-                        message: "Cargo --profile requires a UTF-8 profile name".to_owned(),
-                    })?,
-            )
-        } else if let Some(profile) = argument.to_str().and_then(|s| s.strip_prefix("--profile=")) {
-            Some(profile)
-        } else {
-            let bytes = argument.as_encoded_bytes();
-            // Only switches before the first value-taking short option count:
-            // -qrFextra selects release, while -Fextra and -j4 do not.
-            let short_option = short_cargo_option(argument);
-            let flags_end = short_option.map_or(bytes.len(), |(_, index)| index);
-            let release = argument == "--release"
-                || (bytes.starts_with(b"-")
-                    && !bytes.starts_with(b"--")
-                    && bytes[..flags_end].contains(&b'r'));
-            if matches!(short_option, Some((_, index)) if index + 1 == bytes.len()) {
-                arguments.next();
-            }
-            release.then_some("release")
-        };
-        if let Some(profile) = profile
-            && (profile.is_empty() || selected.replace(profile).is_some())
-        {
-            return Err(WasmBuildError::InvalidSpec {
-                message: "select one nonempty Cargo profile".to_owned(),
-            });
-        }
-    }
-    let profile = selected.unwrap_or("dev");
-    let expected = match profile {
-        "dev" | "test" => "debug",
-        "bench" => "release",
-        custom => custom,
-    };
-    if spec.profile_target_dir != expected {
-        return Err(WasmBuildError::InvalidSpec {
-            message: format!(
-                "Cargo profile {profile:?} writes to {expected:?}, but profile target directory is {:?}; select matching Cargo profile arguments and output directory",
-                spec.profile_target_dir,
-            ),
         });
     }
     Ok(())
@@ -3778,7 +3684,9 @@ fn build_fingerprint_with_policy(
     let discovery_started = Instant::now();
     let (inputs, exclusions) =
         progress.run_phase(WasmBuildProgressPhase::InputDiscovery, || {
-            let parsed = ParsedCargoMetadata::parse(&metadata)
+            let canonical = crate::cargo::observation::decode_metadata(&metadata)
+                .map_err(|error| invalid_metadata(&error.to_string()))?;
+            let parsed = ParsedCargoMetadata::parse(&canonical, &metadata)
                 .map_err(|message| invalid_metadata(&message))?;
             resolve_local_inputs(spec, &parsed)
         })?;
@@ -3843,8 +3751,14 @@ fn finish_build_fingerprint(
     } else {
         hasher.field("cargo-target-selection", b"lib");
     }
-    hasher.field("profile-target-dir", spec.profile_target_dir.as_bytes());
-    for argument in &spec.cargo_profile_args {
+    hasher.field(
+        "profile-target-dir",
+        spec.cargo_selection
+            .profile_target_dir()
+            .expect("Cargo profile was validated before fingerprinting")
+            .as_bytes(),
+    );
+    for argument in &spec.cargo_selection.arguments {
         hasher.field("cargo-argument", &os_bytes(argument));
     }
     for (key, value) in effective_environment(spec) {
@@ -3902,7 +3816,7 @@ fn cargo_metadata_with_policy(
     command
         .current_dir(&spec.workspace_root)
         .args(["metadata", "--format-version", "1"]);
-    for argument in metadata_arguments(&spec.cargo_profile_args) {
+    for argument in &spec.cargo_selection.metadata_arguments {
         command.arg(argument);
     }
     apply_command_environment(&mut command, spec);
@@ -4030,76 +3944,11 @@ fn capture_controlled_probe(
     )
 }
 
-fn metadata_arguments(arguments: &[OsString]) -> Vec<OsString> {
-    let mut selected = Vec::new();
-    let mut arguments = arguments.iter();
-    while let Some(argument) = arguments.next() {
-        if let Some((b'F', index)) = short_cargo_option(argument) {
-            // Cargo accepts clusters such as -qFextra and -rF=extra. Profile
-            // and output flags do not belong in metadata's resolution context.
-            // Valid feature names are UTF-8; preserve malformed arguments for
-            // Cargo to diagnose instead of replacing their bytes.
-            selected.push(argument.to_str().map_or_else(
-                || argument.clone(),
-                |text| OsString::from(format!("-F{}", &text[index + 1..])),
-            ));
-            if index + 1 == argument.as_encoded_bytes().len()
-                && let Some(value) = arguments.next()
-            {
-                selected.push(value.clone());
-            }
-            continue;
-        }
-        let argument_text = argument.to_string_lossy();
-        match argument_text.as_ref() {
-            "--all-features" | "--no-default-features" | "--locked" | "--offline" | "--frozen" => {
-                selected.push(argument.clone());
-            }
-            "--features" | "--filter-platform" => {
-                selected.push(argument.clone());
-                if let Some(value) = arguments.next() {
-                    selected.push(value.clone());
-                }
-            }
-            _ if argument_text.starts_with("--features=")
-                || argument_text.starts_with("--filter-platform=") =>
-            {
-                selected.push(argument.clone());
-            }
-            _ => {}
-        }
-    }
-    selected
-}
-
-// Return the first help or value-taking short option and its byte position.
-// Bytes after a value-taking option are its value, not more switches.
-// Unknown options remain Cargo's responsibility to reject.
-fn short_cargo_option(argument: &OsStr) -> Option<(u8, usize)> {
-    let bytes = argument.as_encoded_bytes();
-    if !bytes.starts_with(b"-") || bytes.starts_with(b"--") {
-        return None;
-    }
-    for (index, byte) in bytes.iter().copied().enumerate().skip(1) {
-        match byte {
-            b'v' | b'q' | b'r' => {}
-            b'h' | b'F' | b'j' | b'Z' | b'm' | b'p' | b'C' => return Some((byte, index)),
-            _ => return None,
-        }
-    }
-    None
-}
-
+// Cargo owns the schema. Raw values below are retained only for the unchanged
+// v1 fingerprint projection, which distinguishes missing/null and future fields.
 struct MetadataPackage<'a> {
-    id: &'a str,
-    name: &'a str,
-    version: &'a str,
-    manifest_path: PathBuf,
-    is_local: bool,
-    source: Option<&'a str>,
-    semantic_fields: Vec<(&'static str, Option<String>)>,
-    cdylib_name: Option<&'a str>,
-    cdylib_examples: Vec<&'a str>,
+    package: &'a crate::cargo::observation::schema::Package,
+    original: &'a Value,
 }
 
 // Parsed once per Cargo resolution context. Each specification still selects
@@ -4108,51 +3957,48 @@ struct ParsedCargoMetadata<'a> {
     packages: HashMap<&'a str, MetadataPackage<'a>>,
     workspace_members: HashSet<&'a str>,
     nodes: HashMap<&'a str, MetadataNode<'a>>,
-    workspace_root: Option<&'a str>,
+    workspace_root: &'a Path,
 }
 
 struct MetadataNode<'a> {
-    dependencies: Vec<&'a str>,
+    node: &'a crate::cargo::observation::schema::Node,
     value: &'a Value,
 }
 
 impl<'a> ParsedCargoMetadata<'a> {
-    fn parse(metadata: &'a Value) -> Result<Self, String> {
-        let packages = metadata_packages(metadata)?;
+    fn parse(
+        metadata: &'a crate::cargo::observation::schema::Metadata,
+        original: &'a Value,
+    ) -> Result<Self, String> {
+        let packages = metadata_packages(metadata, original);
         let workspace_members = metadata
-            .get("workspace_members")
-            .and_then(Value::as_array)
-            .ok_or_else(|| "Cargo metadata has no workspace member array".to_owned())?
+            .workspace_members
             .iter()
-            .filter_map(Value::as_str)
+            .map(|id| id.repr.as_str())
             .collect();
-        let values = metadata
-            .pointer("/resolve/nodes")
-            .and_then(Value::as_array)
+        let resolve = metadata
+            .resolve
+            .as_ref()
             .ok_or_else(|| "Cargo metadata has no resolved dependency nodes".to_owned())?;
-        let mut nodes = HashMap::new();
-        for value in values {
-            let id = required_string(value, "id")?;
-            let dependencies = value
-                .get("deps")
-                .and_then(Value::as_array)
-                .ok_or_else(|| "Cargo metadata dependency node has no deps array".to_owned())?
-                .iter()
-                .map(|dependency| required_string(dependency, "pkg"))
-                .collect::<Result<_, _>>()?;
-            nodes.insert(
-                id,
-                MetadataNode {
-                    dependencies,
-                    value,
-                },
-            );
-        }
+        let nodes = resolve
+            .nodes
+            .iter()
+            .enumerate()
+            .map(|(index, node)| {
+                (
+                    node.id.repr.as_str(),
+                    MetadataNode {
+                        node,
+                        value: &original["resolve"]["nodes"][index],
+                    },
+                )
+            })
+            .collect();
         Ok(Self {
             packages,
             workspace_members,
             nodes,
-            workspace_root: metadata.get("workspace_root").and_then(Value::as_str),
+            workspace_root: metadata.workspace_root.as_std_path(),
         })
     }
 }
@@ -4191,14 +4037,16 @@ fn resolve_local_inputs(
     // constraint until the resolved snapshot is used to acquire Wasm artifacts.
     let mut artifact_names = BTreeSet::new();
     let wasm_artifact_error = selected_ids.iter().find_map(|id| {
-        let package = &metadata.packages[id];
+        let package = metadata.packages[id].package;
         if let Some(example) = &spec.example {
-            return (!package.cdylib_examples.contains(&example.as_str())).then(|| {
+            return (!package.targets.iter().any(|target| {
+                target.name == *example && target.is_example() && target.crate_types.contains(&crate::cargo::observation::schema::CrateType::CDyLib)
+            })).then(|| {
                 format!("Cargo package `{}` must declare the cdylib example `{example}`", package.name)
             });
         }
-        let library = default_library_name(package.name);
-        if package.cdylib_name != Some(library.as_str()) {
+        let library = default_library_name(package.name.as_str());
+        if package.targets.iter().find(|target| target.is_cdylib()).is_none_or(|target| target.name != library) {
             Some(format!(
                 "Cargo package `{}` must declare a cdylib library named `{}` to produce its expected Wasm artifact",
                 package.name, library,
@@ -4215,22 +4063,25 @@ fn resolve_local_inputs(
             continue;
         }
         if let Some(node) = metadata.nodes.get(id) {
-            selected_ids.extend(node.dependencies.iter().copied());
+            selected_ids.extend(
+                node.node
+                    .deps
+                    .iter()
+                    .map(|dependency| dependency.pkg.repr.as_str()),
+            );
         }
     }
 
-    let workspace_root = metadata
-        .workspace_root
-        .map_or_else(|| spec.workspace_root.clone(), PathBuf::from);
-    let workspace_projection = semantic_workspace_projection(metadata, &closure, &workspace_root)?;
-    let mut validation_inputs = workspace_configuration_inputs(spec, &workspace_root)?;
+    let workspace_root = metadata.workspace_root;
+    let workspace_projection = semantic_workspace_projection(metadata, &closure, workspace_root)?;
+    let mut validation_inputs = workspace_configuration_inputs(spec, workspace_root)?;
     append_package_inputs(
         &mut validation_inputs,
         &metadata.packages,
         closure,
-        &workspace_root,
+        workspace_root,
     )?;
-    append_additional_inputs(&mut validation_inputs, spec, &workspace_root);
+    append_additional_inputs(&mut validation_inputs, spec, workspace_root);
     validate_shared_incremental_target_boundary(spec, &validation_inputs)?;
     let exclusions = source_exclusions(spec, &validation_inputs);
     Ok((
@@ -4243,59 +4094,24 @@ fn resolve_local_inputs(
     ))
 }
 
-fn metadata_packages(metadata: &Value) -> Result<HashMap<&str, MetadataPackage<'_>>, String> {
-    let packages_value = metadata
-        .get("packages")
-        .and_then(Value::as_array)
-        .ok_or_else(|| "Cargo metadata has no package array".to_owned())?;
-    let mut packages = HashMap::new();
-    for value in packages_value {
-        let source = optional_string(value, "source")?;
-        let package = MetadataPackage {
-            id: required_string(value, "id")?,
-            name: required_string(value, "name")?,
-            version: required_string(value, "version")?,
-            manifest_path: PathBuf::from(required_string(value, "manifest_path")?),
-            is_local: value.get("source").is_some_and(Value::is_null),
-            source,
-            semantic_fields: SEMANTIC_PACKAGE_FIELDS
-                .iter()
-                .map(|field| (*field, value.get(*field).map(Value::to_string)))
-                .collect(),
-            cdylib_name: value
-                .get("targets")
-                .and_then(Value::as_array)
-                .and_then(|targets| {
-                    targets.iter().find(|target| {
-                        target
-                            .get("kind")
-                            .and_then(Value::as_array)
-                            .is_some_and(|kinds| kinds.iter().any(|kind| kind == "cdylib"))
-                    })
-                })
-                .and_then(|target| target.get("name"))
-                .and_then(Value::as_str),
-            cdylib_examples: value
-                .get("targets")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter(|target| {
-                    target
-                        .get("kind")
-                        .and_then(Value::as_array)
-                        .is_some_and(|kinds| kinds.iter().any(|kind| kind == "example"))
-                        && target
-                            .get("crate_types")
-                            .and_then(Value::as_array)
-                            .is_some_and(|types| types.iter().any(|kind| kind == "cdylib"))
-                })
-                .filter_map(|target| target.get("name").and_then(Value::as_str))
-                .collect(),
-        };
-        packages.insert(package.id, package);
-    }
-    Ok(packages)
+fn metadata_packages<'a>(
+    metadata: &'a crate::cargo::observation::schema::Metadata,
+    original: &'a Value,
+) -> HashMap<&'a str, MetadataPackage<'a>> {
+    metadata
+        .packages
+        .iter()
+        .enumerate()
+        .map(|(index, package)| {
+            (
+                package.id.repr.as_str(),
+                MetadataPackage {
+                    package,
+                    original: &original["packages"][index],
+                },
+            )
+        })
+        .collect()
 }
 
 fn selected_package_ids<'a>(
@@ -4308,9 +4124,12 @@ fn selected_package_ids<'a>(
             .packages
             .values()
             .filter(|package| {
-                package.name == *requested && metadata.workspace_members.contains(package.id)
+                package.package.name == *requested
+                    && metadata
+                        .workspace_members
+                        .contains(package.package.id.repr.as_str())
             })
-            .map(|package| package.id);
+            .map(|package| package.package.id.repr.as_str());
         match (matches.next(), matches.next()) {
             (Some(id), None) => selected_ids.push_back(id),
             (None, _) => {
@@ -4360,7 +4179,7 @@ fn semantic_workspace_projection(
             let node = metadata.nodes.get(id).ok_or_else(|| {
                 invalid_metadata(&format!("resolved package `{id}` has no dependency node"))
             })?;
-            let projection = semantic_package_projection(package, node.value, &identities)?;
+            let projection = semantic_package_projection(package, node, &identities)?;
             Ok::<_, WasmBuildError>((identity, projection))
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -4489,10 +4308,11 @@ fn semantic_package_identity(
     workspace_root: &Path,
     locked_packages: &[LockedPackageIdentity],
 ) -> Option<InputDigest> {
+    let package = package.package;
     let mut hasher = InputHasher::new("wasm-semantic-package-identity-v1");
     hasher.field("name", package.name.as_bytes());
-    hasher.field("version", package.version.as_bytes());
-    if package.is_local {
+    hasher.field("version", package.version.to_string().as_bytes());
+    if package.source.is_none() {
         let manifest = package.manifest_path.strip_prefix(workspace_root).ok()?;
         let package_root = package.manifest_path.parent()?;
         if package_root == workspace_root {
@@ -4500,18 +4320,18 @@ fn semantic_package_identity(
         }
         hasher.field("local-manifest", &os_bytes(manifest.as_os_str()));
     } else {
-        let metadata_source = package.source?;
+        let metadata_source = &package.source.as_ref()?.repr;
         let locked = locked_packages.iter().find(|locked| {
-            locked.name == package.name
-                && locked.version == package.version
-                && locked.source == metadata_source
+            package.name == locked.name
+                && locked.version == package.version.to_string()
+                && locked.source == *metadata_source
         })?;
         match locked.source.as_str() {
             source if source.starts_with("registry+") && locked.checksum.is_some() => {}
             source if source.starts_with("git+") && source.contains('#') => {}
             _ => return None,
         }
-        hasher.field("external-package-id", package.id.as_bytes());
+        hasher.field("external-package-id", package.id.repr.as_bytes());
         hasher.field("external-source", locked.source.as_bytes());
         hasher.field(
             "external-checksum",
@@ -4523,53 +4343,48 @@ fn semantic_package_identity(
 
 fn semantic_package_projection(
     package: &MetadataPackage<'_>,
-    node: &Value,
+    node: &MetadataNode<'_>,
     identities: &HashMap<&str, InputDigest>,
 ) -> Result<InputDigest, WasmBuildError> {
     // These are the effective package values Cargo can expose to compilation
     // through CARGO_PKG_* variables. Local manifests and external checksums
     // cover the remaining package definition.
     let mut hasher = InputHasher::new("wasm-semantic-package-projection-v1");
-    for (field, value) in &package.semantic_fields {
+    for field in SEMANTIC_PACKAGE_FIELDS {
         hasher.field("package-field-name", field.as_bytes());
-        match value {
-            Some(value) => hasher.field("package-field-value", value.as_bytes()),
+        match package.original.get(*field) {
+            Some(value) => hasher.field("package-field-value", value.to_string().as_bytes()),
             None => hasher.field("package-field-missing", b""),
         }
     }
 
     let mut features = node
-        .get("features")
-        .and_then(Value::as_array)
-        .ok_or_else(|| invalid_metadata("Cargo metadata dependency node has no features array"))?
+        .node
+        .features
         .iter()
-        .map(|feature| {
-            feature.as_str().ok_or_else(|| {
-                invalid_metadata("Cargo metadata dependency feature is not a string")
-            })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|feature| feature.as_str())
+        .collect::<Vec<_>>();
     features.sort_unstable();
     for feature in features {
         hasher.field("enabled-feature", feature.as_bytes());
     }
 
     let mut dependencies = node
-        .get("deps")
-        .and_then(Value::as_array)
-        .ok_or_else(|| invalid_metadata("Cargo metadata dependency node has no deps array"))?
+        .node
+        .deps
         .iter()
-        .map(|dependency| {
-            let name = required_string(dependency, "name")
-                .map_err(|message| invalid_metadata(&message))?;
-            let package_id =
-                required_string(dependency, "pkg").map_err(|message| invalid_metadata(&message))?;
+        .enumerate()
+        .map(|(index, dependency)| {
+            let name = dependency.name.as_str();
+            let package_id = dependency.pkg.repr.as_str();
             let identity = identities.get(package_id).copied().ok_or_else(|| {
                 invalid_metadata(&format!(
                     "dependency `{package_id}` is outside the selected package closure"
                 ))
             })?;
-            let kinds = dependency
+            // Preserve the v1 JSON projection, including future kind fields,
+            // rather than serialize Cargo's normalized schema back into it.
+            let kinds = node.value["deps"][index]
                 .get("dep_kinds")
                 .ok_or_else(|| invalid_metadata("Cargo metadata dependency has no kind array"))?
                 .to_string();
@@ -4704,50 +4519,46 @@ fn append_cargo_configuration_inputs(
                 source,
             })?;
 
-    let mut roots = invocation_root
-        .ancestors()
-        .filter_map(|directory| effective_cargo_config(&directory.join(".cargo")))
-        .collect::<Vec<_>>();
-    if let Some(cargo_home) = effective_cargo_home(spec, &invocation_root)
-        && let Some(config) = effective_cargo_config(&cargo_home)
-    {
-        roots.push(config);
-    }
-
-    let mut active = BTreeSet::new();
-    for config in roots {
-        append_cargo_configuration_tree(inputs, &config, &canonical_workspace, &mut active, false)?;
+    let cargo_home = command_environment_value(spec, "CARGO_HOME");
+    let default_home = default_home_directory(spec);
+    let directories = crate::cargo::environment::configuration_directories(
+        &invocation_root,
+        cargo_home.as_deref(),
+        default_home.as_deref().map(Path::as_os_str),
+    )
+    .map_err(|source| WasmBuildError::Io {
+        operation: "resolve Cargo configuration directories",
+        path: invocation_root.clone(),
+        source,
+    })?;
+    let roots: Vec<_> = directories
+        .iter()
+        .filter_map(|directory| crate::cargo::environment::preferred_configuration(directory))
+        .collect();
+    let observed =
+        crate::cargo::environment::observe_configurations(&roots).map_err(|error| match error {
+            crate::cargo::environment::ConfigurationError::Io {
+                operation,
+                path,
+                source,
+            } => WasmBuildError::Io {
+                operation,
+                path,
+                source,
+            },
+            crate::cargo::environment::ConfigurationError::Invalid { path, message } => {
+                WasmBuildError::InvalidCargoConfiguration { path, message }
+            }
+        })?;
+    for config in observed {
+        if !inputs.iter().any(|(_, path)| path == &config.path) {
+            inputs.push((
+                cargo_configuration_label(&config.location, &canonical_workspace),
+                config.path,
+            ));
+        }
     }
     Ok(())
-}
-
-fn effective_cargo_config(directory: &Path) -> Option<PathBuf> {
-    let extensionless = directory.join("config");
-    if extensionless.exists() {
-        return Some(extensionless);
-    }
-    let toml = directory.join("config.toml");
-    toml.exists().then_some(toml)
-}
-
-fn effective_cargo_home(spec: &WasmBuildSpec, invocation_root: &Path) -> Option<PathBuf> {
-    if let Some(cargo_home) = command_environment_value(spec, "CARGO_HOME") {
-        let cargo_home = PathBuf::from(cargo_home);
-        return Some(if cargo_home.is_absolute() {
-            cargo_home
-        } else {
-            invocation_root.join(cargo_home)
-        });
-    }
-
-    default_home_directory(spec).map(|home| {
-        let home = if home.is_absolute() {
-            home
-        } else {
-            invocation_root.join(home)
-        };
-        home.join(".cargo")
-    })
 }
 
 #[cfg(windows)]
@@ -4769,132 +4580,12 @@ fn command_environment_value(spec: &WasmBuildSpec, name: &str) -> Option<OsStrin
         .or_else(|| std::env::var_os(name))
 }
 
-fn append_cargo_configuration_tree(
-    inputs: &mut Vec<(PathBuf, PathBuf)>,
-    config: &Path,
-    workspace_root: &Path,
-    active: &mut BTreeSet<PathBuf>,
-    optional: bool,
-) -> Result<(), WasmBuildError> {
-    let contents = match fs::read_to_string(config) {
-        Ok(contents) => contents,
-        Err(error) if optional && error.kind() == io::ErrorKind::NotFound => return Ok(()),
-        Err(source) => {
-            return Err(WasmBuildError::Io {
-                operation: "read Cargo configuration",
-                path: config.to_owned(),
-                source,
-            });
-        }
-    };
-    let parent = config
-        .parent()
-        .ok_or_else(|| WasmBuildError::InvalidCargoConfiguration {
-            path: config.to_owned(),
-            message: "configuration path has no parent directory".to_owned(),
-        })?;
-    // Normalize the containing directory, preserving the configured file
-    // entry. Cargo resolves includes beside that entry, not its referent.
-    let location = parent
-        .canonicalize()
-        .map_err(|source| WasmBuildError::Io {
-            operation: "resolve Cargo configuration directory",
-            path: parent.to_owned(),
-            source,
-        })?
-        .join(config.file_name().ok_or_else(|| {
-            invalid_cargo_configuration(config, "configuration path has no file name")
-        })?);
-    // Only active recursion is suppressed. Separate directory aliases must
-    // each retain their nested lookup paths even when they currently agree.
-    if !active.insert(location.clone()) {
-        return Ok(());
-    }
-    let configuration = toml::from_str::<TomlValue>(&contents).map_err(|error| {
-        WasmBuildError::InvalidCargoConfiguration {
-            path: config.to_owned(),
-            message: error.to_string(),
-        }
-    })?;
-    // Keep the lookup path so rehashing observes replaced file or directory
-    // symlinks. A shared referent can have different includes at each location.
-    if !inputs.iter().any(|(_, path)| path == config) {
-        inputs.push((
-            cargo_configuration_label(&location, workspace_root),
-            config.to_owned(),
-        ));
-    }
-    if let Some(include) = configuration.get("include") {
-        for (included, optional) in cargo_configuration_includes(include, config)? {
-            let included = if included.is_absolute() {
-                included
-            } else {
-                parent.join(included)
-            };
-            append_cargo_configuration_tree(inputs, &included, workspace_root, active, optional)?;
-        }
-    }
-    active.remove(&location);
-    Ok(())
-}
-
-fn cargo_configuration_includes(
-    include: &TomlValue,
-    config: &Path,
-) -> Result<Vec<(PathBuf, bool)>, WasmBuildError> {
-    let values = match include {
-        TomlValue::Array(values) => values.as_slice(),
-        value => std::slice::from_ref(value),
-    };
-    values
-        .iter()
-        .map(|value| match value {
-            TomlValue::String(path) => Ok((PathBuf::from(path), false)),
-            TomlValue::Table(table) => {
-                let path = table
-                    .get("path")
-                    .and_then(TomlValue::as_str)
-                    .ok_or_else(|| {
-                        invalid_cargo_configuration(
-                            config,
-                            "Cargo configuration include table requires a string `path`",
-                        )
-                    })?;
-                let optional = table
-                    .get("optional")
-                    .map(|value| {
-                        value.as_bool().ok_or_else(|| {
-                            invalid_cargo_configuration(
-                                config,
-                                "Cargo configuration include `optional` must be a boolean",
-                            )
-                        })
-                    })
-                    .transpose()?
-                    .unwrap_or(false);
-                Ok((PathBuf::from(path), optional))
-            }
-            _ => Err(invalid_cargo_configuration(
-                config,
-                "Cargo configuration `include` must contain paths or include tables",
-            )),
-        })
-        .collect()
-}
-
 fn cargo_configuration_label(config: &Path, workspace_root: &Path) -> PathBuf {
     if let Ok(relative) = config.strip_prefix(workspace_root) {
         return PathBuf::from("cargo-config/workspace").join(relative);
     }
     let location = digest_bytes("cargo-config-location-v1", &os_bytes(config.as_os_str()));
     PathBuf::from("cargo-config/external").join(location.to_hex())
-}
-
-fn invalid_cargo_configuration(path: &Path, message: &str) -> WasmBuildError {
-    WasmBuildError::InvalidCargoConfiguration {
-        path: path.to_owned(),
-        message: message.to_owned(),
-    }
 }
 
 fn append_package_inputs(
@@ -4909,7 +4600,8 @@ fn append_package_inputs(
                 "resolved package `{id}` is missing"
             )));
         };
-        if !package.is_local {
+        let package = package.package;
+        if package.source.is_some() {
             continue;
         }
         let root = package.manifest_path.parent().ok_or_else(|| {
@@ -4920,11 +4612,12 @@ fn append_package_inputs(
         })?;
         let relative_manifest = package
             .manifest_path
+            .as_std_path()
             .strip_prefix(workspace_root)
-            .unwrap_or(&package.manifest_path);
+            .unwrap_or(package.manifest_path.as_std_path());
         let label = PathBuf::from(format!("package/{}@{}", package.name, package.version))
             .join(relative_manifest.parent().unwrap_or_else(|| Path::new(".")));
-        inputs.push((label, root.to_owned()));
+        inputs.push((label, root.as_std_path().to_owned()));
     }
     Ok(())
 }
@@ -5135,7 +4828,8 @@ fn cargo_build_command(
         command.arg("--lib");
     }
     command.args(["--target", &spec.target]).args(
-        spec.cargo_profile_args
+        spec.cargo_selection
+            .arguments
             .iter()
             .filter(|argument| argument.as_os_str() != OsStr::new("--lib")),
     );
@@ -5271,10 +4965,14 @@ fn default_library_name(package: &str) -> String {
 }
 
 fn expected_artifacts(spec: &WasmBuildSpec, target_dir: &Path) -> Vec<PathBuf> {
+    let profile = target_dir.join(&spec.target).join(
+        spec.cargo_selection
+            .profile_target_dir()
+            .expect("Cargo profile was validated before artifact discovery"),
+    );
     spec.packages
         .iter()
         .map(|package| {
-            let profile = target_dir.join(&spec.target).join(&spec.profile_target_dir);
             spec.example.as_ref().map_or_else(
                 || profile.join(format!("{}.wasm", default_library_name(package))),
                 |example| {
@@ -5440,23 +5138,6 @@ fn create_dir_all(path: &Path, operation: &'static str) -> Result<(), WasmBuildE
 fn add_if_present(inputs: &mut Vec<(PathBuf, PathBuf)>, label: &str, path: PathBuf) {
     if path.exists() {
         inputs.push((PathBuf::from(label), path));
-    }
-}
-
-fn required_string<'a>(value: &'a Value, field: &str) -> Result<&'a str, String> {
-    value
-        .get(field)
-        .and_then(Value::as_str)
-        .ok_or_else(|| format!("Cargo metadata field `{field}` is missing"))
-}
-
-fn optional_string<'a>(value: &'a Value, field: &str) -> Result<Option<&'a str>, String> {
-    match value.get(field) {
-        None | Some(Value::Null) => Ok(None),
-        Some(Value::String(value)) => Ok(Some(value)),
-        Some(_) => Err(format!(
-            "Cargo metadata field `{field}` is not a string or null"
-        )),
     }
 }
 

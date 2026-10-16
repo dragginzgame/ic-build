@@ -1,13 +1,14 @@
 #[cfg(unix)]
 use ic_host_process::testing::write_executable_script;
 
-use super::test_support::{fake_wasm_build_spec, unique_temp_directory};
+use super::test_support::fake_wasm_build_spec;
 use super::{ArtifactCachePreparation, ArtifactCacheSpec, prepare_artifact_cache};
+use crate::fs_fixture::unique_temp_directory;
 use std::{ffi::OsString, fs, path::Path, time::Duration};
 use {
     ic_host_artifacts::artifact::{ArtifactError, Sha256Digest},
     ic_host_process::tool::{
-        AdmittedTool, ExecutionContext, OutputLimit, OutputLimits, ToolError, ToolSpec,
+        AdmittedTool, ExecutionContext, OutputLimit, OutputLimits, ToolError, VersionSpec,
         resolve_executable,
     },
 };
@@ -31,13 +32,13 @@ fn admitted_shared_tool_output_is_published_and_invalidated_by_tool_bytes() {
         timeout: Some(Duration::from_secs(5)),
     };
     let tool = AdmittedTool::admit(
-        &ToolSpec {
+        &VersionSpec {
             executable: &executable,
-            sha256: Sha256Digest::compute(script),
             executable_bytes: script.len() as u64,
             version_arguments: &[OsString::from("--version")],
             version_identity: "fixture-tool 1.0",
         },
+        Sha256Digest::compute(script),
         &context,
         limits,
     )
@@ -93,7 +94,7 @@ fn shim_wasm_and_post_link_caches_reuse_and_invalidate_independently() {
     let compiler = root.join("selected-rustc");
     write_executable_script(&compiler, "#!/bin/sh\nprintf 'compiler-A\\n'\n")
         .expect("write executable test script");
-    let spec = spec.with_rustc_program(compiler.as_os_str());
+    let spec = spec.with_rustc_identity_program(compiler.as_os_str());
     let executable = root.join("optimizer");
     let script = b"#!/bin/sh\nif [ \"$1\" = --version ]; then printf 'optimizer 1\\n'; else /bin/cp \"$1\" \"$3\"; printf 'run\\n' >> \"$0.calls\"; fi\n";
     write_executable_script(&executable, script).expect("write executable test script");
@@ -108,13 +109,13 @@ fn shim_wasm_and_post_link_caches_reuse_and_invalidate_independently() {
     };
     let admit = |bytes: &[u8]| {
         AdmittedTool::admit(
-            &ToolSpec {
+            &VersionSpec {
                 executable: &executable,
-                sha256: Sha256Digest::compute(bytes),
                 executable_bytes: bytes.len() as u64,
                 version_arguments: &[OsString::from("--version")],
                 version_identity: "optimizer 1",
             },
+            Sha256Digest::compute(bytes),
             &context,
             limits,
         )
@@ -209,13 +210,13 @@ fn failed_admitted_producers_cannot_publish_or_reuse_staged_output() {
         write_executable_script(&executable, &failing_script)
             .expect("write executable test script");
         let producer = AdmittedTool::admit(
-            &ToolSpec {
+            &VersionSpec {
                 executable: &executable,
-                sha256: Sha256Digest::compute(failing_script.as_bytes()),
                 executable_bytes: failing_script.len() as u64,
                 version_arguments: &[OsString::from("--version")],
                 version_identity: "producer 1",
             },
+            Sha256Digest::compute(failing_script.as_bytes()),
             &context,
             limits,
         )

@@ -1,3 +1,4 @@
+use ic_host_artifacts::artifact::Sha256Digest;
 use sha2::{Digest, Sha256};
 use std::{
     borrow::Cow,
@@ -64,10 +65,7 @@ impl InputDigest {
 
 impl std::fmt::Display for InputDigest {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for byte in self.0 {
-            write!(formatter, "{byte:02x}")?;
-        }
-        Ok(())
+        Sha256Digest::from_bytes(self.0).fmt(formatter)
     }
 }
 
@@ -676,7 +674,7 @@ mod tests {
         LabeledPathDigestCache, copy_file_atomic, digest_bytes, digest_file,
         digest_labeled_paths_composable,
     };
-    use crate::artifacts::test_support::unique_temp_directory;
+    use crate::fs_fixture::unique_temp_directory;
     use std::{fs, path::PathBuf};
 
     #[cfg(unix)]

@@ -494,92 +494,73 @@ where
     let started = Instant::now();
     let mut entries = Vec::with_capacity(specs.len());
     for (index, labeled) in specs.iter().enumerate() {
-        let entry_started = Instant::now();
-        let preparation_started = Instant::now();
-        let preparation = prepare_artifact_cache(&labeled.spec);
-        let preparation_elapsed = preparation_started.elapsed();
-        let (result, entry_elapsed) = match preparation {
-            Ok(ArtifactCachePreparation::Reused(record)) => (
-                Ok(ArtifactCacheOutcome::Reused(record)),
-                entry_started.elapsed(),
-            ),
-            Ok(ArtifactCachePreparation::Build(transaction)) => {
-                let callback_started = Instant::now();
-                let callback_result = populate(&labeled.label, &transaction);
-                let callback_elapsed = callback_started.elapsed();
-                if let Err(source) = callback_result {
-                    let cleanup_started = Instant::now();
-                    let cleanup_error = transaction.abort().err().map(Box::new);
-                    let cleanup_elapsed = cleanup_started.elapsed();
-                    let entry_elapsed = entry_started.elapsed();
-                    (
-                        Err(ArtifactCacheBatchFailure::Build {
-                            source: Box::new(source),
-                            cleanup_error,
-                            timings: ArtifactCacheBatchFailureTimings {
-                                preparation: preparation_elapsed,
-                                callback: Some(callback_elapsed),
-                                cleanup: Some(cleanup_elapsed),
-                                commit: None,
-                                total: entry_elapsed,
-                            },
-                        }),
-                        entry_elapsed,
-                    )
-                } else {
-                    let commit_started = Instant::now();
-                    match transaction.commit() {
-                        Ok(outcome) => (Ok(outcome), entry_started.elapsed()),
-                        Err(source) => {
-                            let commit_elapsed = commit_started.elapsed();
-                            let entry_elapsed = entry_started.elapsed();
-                            (
-                                Err(ArtifactCacheBatchFailure::Cache {
-                                    phase: ArtifactCacheBatchFailurePhase::Commit,
-                                    source: Box::new(source),
-                                    timings: ArtifactCacheBatchFailureTimings {
-                                        preparation: preparation_elapsed,
-                                        callback: Some(callback_elapsed),
-                                        cleanup: None,
-                                        commit: Some(commit_elapsed),
-                                        total: entry_elapsed,
-                                    },
-                                }),
-                                entry_elapsed,
-                            )
-                        }
-                    }
-                }
-            }
-            Err(source) => {
-                let entry_elapsed = entry_started.elapsed();
-                (
-                    Err(ArtifactCacheBatchFailure::Cache {
-                        phase: ArtifactCacheBatchFailurePhase::Preparation,
-                        source: Box::new(source),
-                        timings: ArtifactCacheBatchFailureTimings {
-                            preparation: preparation_elapsed,
-                            callback: None,
-                            cleanup: None,
-                            commit: None,
-                            total: entry_elapsed,
-                        },
-                    }),
-                    entry_elapsed,
-                )
-            }
-        };
-        entries.push(ArtifactCacheBatchEntry {
-            index,
-            label: labeled.label.clone(),
-            result,
-            entry_elapsed,
-        });
+        entries.push(build_artifact_cache_entry(index, labeled, &mut populate));
     }
     Ok(ArtifactCacheBatchReport {
         entries,
         total: started.elapsed(),
     })
+}
+
+fn build_artifact_cache_entry<E>(
+    index: usize,
+    labeled: &LabeledArtifactCacheSpec,
+    populate: &mut impl FnMut(&str, &ArtifactBuildTransaction) -> Result<(), E>,
+) -> ArtifactCacheBatchEntry<E> {
+    let entry_started = Instant::now();
+    let mut timings = ArtifactCacheBatchFailureTimings::default();
+    let mut result = (|| {
+        let preparation_started = Instant::now();
+        let preparation = prepare_artifact_cache(&labeled.spec);
+        timings.preparation = preparation_started.elapsed();
+        let transaction = match preparation.map_err(|source| ArtifactCacheBatchFailure::Cache {
+            phase: ArtifactCacheBatchFailurePhase::Preparation,
+            source: Box::new(source),
+            timings,
+        })? {
+            ArtifactCachePreparation::Reused(record) => {
+                return Ok(ArtifactCacheOutcome::Reused(record));
+            }
+            ArtifactCachePreparation::Build(transaction) => transaction,
+        };
+
+        let callback_started = Instant::now();
+        let callback_result = populate(&labeled.label, &transaction);
+        timings.callback = Some(callback_started.elapsed());
+        if let Err(source) = callback_result {
+            let cleanup_started = Instant::now();
+            let cleanup_error = transaction.abort().err().map(Box::new);
+            timings.cleanup = Some(cleanup_started.elapsed());
+            return Err(ArtifactCacheBatchFailure::Build {
+                source: Box::new(source),
+                cleanup_error,
+                timings,
+            });
+        }
+
+        let commit_started = Instant::now();
+        let committed = transaction.commit();
+        timings.commit = Some(commit_started.elapsed());
+        committed.map_err(|source| ArtifactCacheBatchFailure::Cache {
+            phase: ArtifactCacheBatchFailurePhase::Commit,
+            source: Box::new(source),
+            timings,
+        })
+    })();
+    let entry_elapsed = entry_started.elapsed();
+    if let Err(
+        ArtifactCacheBatchFailure::Cache { timings, .. }
+        | ArtifactCacheBatchFailure::Build { timings, .. },
+    ) = &mut result
+    {
+        timings.total = entry_elapsed;
+    }
+    ArtifactCacheBatchEntry {
+        index,
+        label: labeled.label.clone(),
+        result,
+        entry_elapsed,
+    }
 }
 
 fn validate_batch_labels(

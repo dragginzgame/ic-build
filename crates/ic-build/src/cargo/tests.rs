@@ -102,7 +102,7 @@ fn unsuccessful_tree_commands_preserve_status_and_bounded_diagnostics() {
 #[test]
 #[cfg(unix)]
 fn incomplete_tree_capture_and_spawn_failures_preserve_typed_host_errors() {
-    let root = crate::artifacts::test_support::unique_temp_directory("batch-capture-failure");
+    let root = crate::fs_fixture::unique_temp_directory("batch-capture-failure");
     let packages = ["role".to_string()];
     let limits = OutputLimits {
         stdout: OutputLimit::Truncate(20),
@@ -137,7 +137,7 @@ use std::fs;
 
 #[test]
 fn real_cargo_resolution_batches_peers_and_splits_feature_growth() {
-    let root = crate::artifacts::test_support::unique_temp_directory("build-feature-batches");
+    let root = crate::fs_fixture::unique_temp_directory("build-feature-batches");
     fs::create_dir_all(&root).unwrap();
     fs::write(root.join("Cargo.toml"), "[workspace]\nmembers=[\"shared\",\"exclusive\",\"left\",\"peer\",\"right\"]\nresolver=\"3\"\n").unwrap();
     for (name, extra) in [

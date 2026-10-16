@@ -1,5 +1,5 @@
 use super::*;
-use crate::artifacts::test_support::unique_temp_directory;
+use crate::fs_fixture::unique_temp_directory;
 use ic_host_process::tool::{ExecutionFailure, OutputLimit};
 use std::{process::Stdio, time::Duration};
 
@@ -72,8 +72,11 @@ fn graph_requires_exact_extracted_identity_and_unique_members() {
         version: "1.0.0",
         patch_registry: false,
     }];
-    let metadata = json!({"packages": [{"name": "sample", "version": "1.0.0", "source": null, "manifest_path": directory.join("Cargo.toml"), "id": "selected"}], "workspace_members": ["selected"]});
-    admit_graph(&metadata, &root, &specs).unwrap();
+    let metadata = json!({"packages": [{"name": "sample", "version": "1.0.0", "source": null, "manifest_path": directory.join("Cargo.toml"), "id": "selected", "dependencies": [], "targets": [], "features": {}, "metadata": null}], "workspace_members": ["selected"], "workspace_root": root, "target_directory": root.join("target"), "version": 1});
+    let admit = |metadata: &Value| -> Result<(), Cause> {
+        admit_graph(&serde_json::from_value(metadata.clone())?, &root, &specs)
+    };
+    admit(&metadata).unwrap();
     for (field, value) in [
         ("source", json!("registry+wrong")),
         ("version", json!("0.9.0")),
@@ -82,11 +85,11 @@ fn graph_requires_exact_extracted_identity_and_unique_members() {
     ] {
         let mut altered = metadata.clone();
         altered["packages"][0][field] = value;
-        assert!(admit_graph(&altered, &root, &specs).is_err());
+        assert!(admit(&altered).is_err());
     }
     let mut altered = metadata;
     altered["workspace_members"] = json!(["selected", "selected"]);
-    assert!(admit_graph(&altered, &root, &specs).is_err());
+    assert!(admit(&altered).is_err());
 }
 
 #[test]
@@ -103,6 +106,21 @@ fn lock_allows_only_original_external_selections_and_checksums() {
         row.replace("checksum", "missing"),
     ] {
         assert!(admit_lock(row.as_bytes(), changed.as_bytes()).is_err());
+    }
+    for checksum in ["0".repeat(64), "0123456789abcdef".repeat(4)] {
+        let valid = row.replace(&"a".repeat(64), &checksum);
+        admit_lock(valid.as_bytes(), valid.as_bytes()).unwrap();
+    }
+    for checksum in [
+        "a".repeat(63),
+        "a".repeat(65),
+        "A".repeat(64),
+        "g".repeat(64),
+        "é".repeat(32),
+    ] {
+        let invalid = row.replace(&"a".repeat(64), &checksum);
+        let error = admit_lock(invalid.as_bytes(), invalid.as_bytes()).unwrap_err();
+        assert_eq!(error.to_string(), "invalid package checksum");
     }
     assert!(admit_lock(row.as_bytes(), b"package = []").is_err());
     assert!(admit_lock(row.as_bytes(), b"version = 4").is_err());
@@ -211,4 +229,31 @@ fn directory_depth_and_entry_counts_bound_empty_tree_traversal() {
         )
         .is_err()
     );
+    fs::create_dir(root.join("other-1.0.0")).unwrap();
+    let all_specs = [
+        PackageArchiveSpec {
+            name: "sample",
+            version: "1.0.0",
+            patch_registry: false,
+        },
+        PackageArchiveSpec {
+            name: "other",
+            version: "1.0.0",
+            patch_registry: false,
+        },
+    ];
+    for (source_entries, succeeds) in [(3, false), (4, true)] {
+        assert_eq!(
+            sources(
+                &root,
+                &all_specs,
+                PackageQualificationLimits {
+                    source_entries,
+                    ..limits()
+                }
+            )
+            .is_ok(),
+            succeeds
+        );
+    }
 }

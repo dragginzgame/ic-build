@@ -1,5 +1,5 @@
 use super::{ArtifactStagingDirectory, CapturedArtifact, OwnedDirectory};
-use crate::artifacts::test_support::unique_temp_directory;
+use crate::fs_fixture::unique_temp_directory;
 use std::{fs, io};
 
 #[test]
@@ -128,6 +128,37 @@ fn simultaneous_captures_retain_distinct_versions_without_blocking() {
     assert_eq!(fs::read(duplicate.path()).unwrap(), b"first");
     duplicate.close().unwrap();
     second.close().unwrap();
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn capture_streams_empty_and_multichunk_sources_and_admits_before_staging() {
+    use ic_host_fs::read::hash_file;
+
+    let root = unique_temp_directory("streamed-capture");
+    let source = root.join("input");
+    for length in [0, 1, 16 * 1024, 3 * 64 * 1024 + 7] {
+        fs::write(&source, vec![42; length]).unwrap();
+        let captured = CapturedArtifact::capture(&source, &root, length).unwrap();
+        assert_eq!(
+            hash_file(captured.path(), length as u64).unwrap(),
+            hash_file(&source, length as u64).unwrap()
+        );
+        captured.close().unwrap();
+    }
+    let absent_parent = root.join("absent");
+    let error = CapturedArtifact::capture(&source, &absent_parent, 1).unwrap_err();
+    assert!(matches!(
+        error.get_ref().and_then(|cause| cause.downcast_ref()),
+        Some(ic_host_artifacts::artifact::ArtifactError::LimitExceeded { limit: 1 })
+    ));
+    let error = CapturedArtifact::capture(&root, &absent_parent, usize::MAX).unwrap_err();
+    assert!(matches!(
+        error.get_ref().and_then(|cause| cause.downcast_ref()),
+        Some(ic_host_artifacts::artifact::ArtifactError::NotRegularFile)
+    ));
+    assert!(!absent_parent.exists());
+    assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
     fs::remove_dir_all(root).unwrap();
 }
 
