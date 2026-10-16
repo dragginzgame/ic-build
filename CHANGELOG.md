@@ -3,6 +3,14 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.11.1]
+
+- Own Unix native Candid extraction through `artifacts::candid`, moved from
+  Host Tools. Preserve caller-admitted tools, bounded raw output, source/tool
+  identities and source-change refusal with retained process evidence
+  ([#51 — Own native Candid extraction](https://github.com/dragginzgame/ic-build/issues/51)).
+  Tool selection, normalization, grammar, custody and publication stay local.
+
 ## [0.11.0] - 2026-10-16
 
 - **Breaking:** align exposed Host types with the incoming Host 0.23.1 selection.

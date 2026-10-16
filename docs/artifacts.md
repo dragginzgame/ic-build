@@ -889,8 +889,22 @@ not validate Wasm; use `ic_host_artifacts::wasm::inspect` for structural facts.
 Stream identities, archives and Wasm inspection belong to `ic_host_artifacts`;
 pathname reads and durable publication belong to `ic_host_fs`; executable
 resolution, execution and Git provenance belong to `ic_host_process`; Candid
-extraction and response decoding belong to `ic_host_tools`. Its pure Candid text
-APIs are portable; extraction, execution, resolution and provenance are Unix-only.
+service interpretation and response decoding belong to `ic_host_tools`.
+Bounded line normalization belongs to `ic_host_text`. Native extraction is
+Build's Unix-only `artifacts::candid::extract`: supply an admitted tool, absolute
+source path, execution context, source-byte allowance and output limits. It
+returns source/tool identities and complete raw successful process evidence,
+rejecting changed or unreadable sources after invocation while retaining output.
+It never normalizes, parses, caches or publishes the result. Callers exclude
+concurrent source/tool writers, choose optional deadlines and admit text/grammar
+separately. Before/after digests cannot rule out transient writes.
+
+This additive producer API retains Build's selected Host 0.23 types and Rust
+1.91 floor. Publish it before Host's 0.24 removal, then align Build's exposed
+Host dependency with 0.24 before consumers upgrade their complete Host graph.
+Changing the exposed Host dependency is a separate Build compatibility change;
+this move does not update its selected graph or retained artifact formats.
+See [#51 — Own native Candid extraction](https://github.com/dragginzgame/ic-build/issues/51).
 Structural Wasm inspection does not replace PocketIC's runtime validation.
 IC Build 0.8 and pending 0.9 require compatible IC Host 0.21 releases at the
 public dependency boundary. Retained staging still

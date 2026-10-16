@@ -14,6 +14,14 @@ and build dependency trees match isolated resolution. Consumers own recipes,
 tools, output budgets, source custody, release identities and lifecycle.
 PocketIC stays in Testkit; complete-release admission stays in Canic.
 
+On Unix, `artifacts::candid::extract` invokes a caller-admitted extractor with
+an absolute source path, retains bounded raw process evidence and checks the
+source identity before and after success. Callers own tools, limits, environment,
+normalization, grammar, source exclusion and publication. Before/after hashes
+do not detect transient writes; callers must hold their source lease.
+This API moves from Host Tools for its pending 0.24 removal
+([#51 — Own native Candid extraction](https://github.com/dragginzgame/ic-build/issues/51)).
+
 Start with [Build ownership and extraction](docs/design/build-ownership.md).
 It records the inspected build paths, duplicated responsibilities, intended
 owners, retained safety boundaries and extraction sequence. Read the

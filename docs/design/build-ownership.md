@@ -24,6 +24,14 @@ preserved through a shared execution path.
 
 ## Implemented ownership
 
+Build's Unix `artifacts::candid` owns native declaration extraction orchestration
+over Host hashing and admitted execution. Tools retains Candid service/IC export
+interpretation; Text retains normalization. Consumers retain source leases,
+tools, output budgets, environment, text/grammar policy and publication. The
+producer move preserves raw evidence and source-change refusal; published
+consumer adoption remains separate under
+[#51 — Own native Candid extraction](https://github.com/dragginzgame/ic-build/issues/51).
+
 | Consumer | Shared owner and retained consumer responsibility |
 | --- | --- |
 | Canic | IC Build supplies grouping, declaration-cache transactions, captured outputs, staging, standalone input evidence and strict depfile discovery. Canic retains recipes, source custody, transforms and complete-release admission. |

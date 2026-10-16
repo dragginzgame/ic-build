@@ -1,5 +1,31 @@
 # Current handoff
 
+## Native Candid extraction owner — pending 0.11.1
+
+This additive producer move starts at published Build 0.11.0 `dff188fe` and
+moves Host 0.23.1's native extraction module/fixtures to `artifacts::candid`.
+The normal Build, Canic and IcyDB sibling checkouts are not edited by
+this isolated contribution. Host's coordinated pending 0.24 source removes the
+old API/feature/example without an alias. Build must publish this owner before
+Host's removal release; Build's exposed Host selection must then align before
+consumers upgrade their complete Host graph. Own versions and dependency
+selection remain unchanged in this contribution.
+
+Eight focused native tests pass on actual Rust 1.91 on Linux, preserving raw
+bytes, source/tool identities, pre-dispatch refusal, literal path arguments,
+truncation rejection and source-change/reinspection evidence. Strict production
+Clippy passes on 1.91; the all-target 1.91 attempt hits the existing
+`literal_string_with_formatting_args` warning at
+`crates/ic-build/src/cargo/observation/tests.rs:140`, which is unchanged here.
+Strict all-target current-toolchain Clippy, Rust 1.91 rustdoc, formatting and
+documentation links pass. Full suites, native macOS
+qualification, publication and fresh application adoption remain separate.
+The owning [#51 — Native Candid extraction](https://github.com/dragginzgame/ic-build/issues/51)
+records the producer boundary; consumer adoption remains in Canic #458 and
+IcyDB #307. Temporary source/evidence is retained at
+`/tmp/host-next-three.OIiCVP/`.
+
+
 ## Snapshot assembly, JSON scratch and Debug projections — pending 0.11.0
 
 This compatible cleanup extends the existing dirty work over `95567eb` and its
