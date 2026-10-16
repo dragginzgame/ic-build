@@ -3,6 +3,7 @@
 use std::{
     collections::BTreeSet,
     ffi::{OsStr, OsString},
+    path::{Component, Path},
 };
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -23,6 +24,23 @@ pub struct CargoSelection {
 }
 
 impl CargoSelection {
+    pub(crate) fn profile_target_dir(&self) -> Result<&str, &'static str> {
+        let profile = self.profile.as_deref().map_err(|message| *message)?;
+        let directory = match profile {
+            "dev" | "test" => "debug",
+            "bench" => "release",
+            custom => custom,
+        };
+        let mut components = Path::new(directory).components();
+        if !matches!(
+            (components.next(), components.next()),
+            (Some(Component::Normal(_)), None)
+        ) {
+            return Err("Cargo profile target directory must be one normal path component");
+        }
+        Ok(directory)
+    }
+
     pub(crate) fn parse(arguments: Vec<OsString>) -> Self {
         let mut metadata_arguments = Vec::new();
         let mut flags = BTreeSet::new();

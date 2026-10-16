@@ -129,7 +129,6 @@ fn shared_incremental_process_worker() {
         &workspace,
         &root.join(format!("cache-{worker}")),
         &["fixture"],
-        "debug",
     )
     .with_shared_incremental_target(root.join("shared-target"))
     .with_cargo_program(root.join("cargo-wrapper.sh"))
@@ -177,7 +176,6 @@ fn scheduled_shared_target_maintenance_process_worker() {
         &workspace,
         &root.join(format!("cache-{worker}")),
         &["fixture"],
-        "debug",
     )
     .with_shared_incremental_target(root.join("shared-target"));
     let outcome = maintain_shared_incremental_target_at_most_every(

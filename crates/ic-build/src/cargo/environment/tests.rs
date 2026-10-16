@@ -1,5 +1,6 @@
 use super::*;
 use crate::fs_fixture::unique_temp_directory;
+use sha2::{Digest as _, Sha256};
 
 #[test]
 fn discovery_and_environment_classification_keep_caller_selection() {

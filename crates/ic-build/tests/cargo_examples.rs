@@ -69,7 +69,6 @@ fn recipe(root: &Path) -> WasmBuildSpec {
         &workspace,
         &workspace.join("target/cargo"),
         &["example-fixture"],
-        "debug",
     )
     .with_example("probe")
     .with_cargo_profile_args(["--features", "probe", "--locked", "--offline"])
@@ -132,7 +131,6 @@ fn named_examples_build_and_reuse_without_aliasing_library_or_other_example() {
             &root.join("workspace"),
             &root.join("workspace/target/cargo"),
             &["example-fixture"],
-            "debug",
         )
         .with_cargo_profile_args(["--features", "probe", "--locked", "--offline"])
         .with_isolated_builds();
@@ -289,7 +287,6 @@ fn unsafe_or_conflicting_example_selectors_fail_before_dispatch() {
         &root.join("workspace"),
         &root.join("target"),
         &["one", "two"],
-        "debug",
     )
     .with_example("probe");
     assert!(multi.cargo_build_command().is_err());

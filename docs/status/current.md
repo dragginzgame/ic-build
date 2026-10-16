@@ -1,5 +1,40 @@
 # Current handoff
 
+## Derived Cargo profile directories — pending 0.9.0
+
+From released 0.8.0 `0a8b9667ff9e2d7927a6ca8961b7d463de396a77`, the Wasm
+specification constructor takes workspace, target directory and package selection.
+The existing Cargo argument selection derives the profile output directory;
+replacing profile arguments updates artifact paths as well. Malformed/repeated
+profiles and unsafe derived path components still refuse before tool execution
+or acquisition. Raw argument bytes, fingerprint field encoding, retained v1
+formats and cache namespaces remain unchanged for equivalent recipes.
+
+This is a breaking constructor cut, so pending notes select 0.9.0. Callers must
+remove the fourth constructor argument and keep profile selection in
+`with_cargo_profile_args`. All in-repository callers and active guide examples
+use the new API. Consumer adoption follows publication; Canic's artifact test is
+a known external constructor caller. No sibling source was changed or qualified.
+The package version and selected Host 0.21 graph remain at their incoming state.
+
+Artifact identifier and label length checks share one validator with the same
+limits and diagnostics. Configuration observations use Host's existing raw-byte
+SHA-256 API, preserving returned bytes and independent expected-hash coverage.
+
+All 102 focused selection, Wasm-cache, transaction and configuration cases pass
+on actual Rust 1.91, together with 28 example, handoff, real Wasm and process
+integration cases. Worker entrypoints remain harness-ignored and run through
+their parent cases. Strict all-target Clippy, actual MSRV all-target checking,
+Rustdoc and the crate doctest pass. Six real Cargo recipes compare frozen 0.8.0
+source with a frozen current candidate: default, dev, test, release, bench and
+custom profiles retain exact fingerprints, input/validation digests and Wasm
+bytes. Every candidate acquisition reuses its original 0.8.0 cache entry.
+
+Own manifests/lock, the index and release state remain untouched. No full suite,
+native macOS qualification or release ran here. Before-images, the frozen
+qualification workspaces and logs remain under
+`/tmp/ic-build-profile-cut-20261016.6nTpbD/`.
+
 ## Metadata, configuration and release preparation cuts — pending 0.8.0
 
 The incoming manifests/lock select registry Host 0.21.0 while IC Build's own

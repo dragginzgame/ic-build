@@ -77,7 +77,6 @@ pub struct WasmBuildSpec {
     target_dir: PathBuf,
     packages: Vec<String>,
     example: Option<String>,
-    profile_target_dir: String,
     cargo_selection: CargoSelection,
     extra_env: BTreeMap<OsString, OsString>,
     inherited_env: BTreeSet<OsString>,
@@ -867,11 +866,10 @@ pub enum WasmBuildError {
 impl WasmBuildSpec {
     /// Describe one Cargo build targeting `wasm32-unknown-unknown`.
     ///
-    /// `profile_target_dir` is Cargo's output subdirectory, such as `debug`,
-    /// `release`, or the name supplied to `--profile`. It must be one normal
-    /// path component so artifacts remain inside their target directories.
-    /// It must match the profile selected by `with_cargo_profile_args`: the
-    /// default, `dev`, and `test` use `debug`; `release` and `bench` use `release`.
+    /// The output subdirectory is derived from [`Self::with_cargo_profile_args`]:
+    /// the default, `dev`, and `test` use `debug`; `release` and `bench` use
+    /// `release`; custom profiles use their names. The derived directory must
+    /// be one normal path component so artifacts remain inside their targets.
     /// Relative `workspace_root` and exact `target_dir` paths are resolved from
     /// the caller's working directory. Shared targets are workspace-relative.
     /// Package names are sorted and deduplicated for identity, discovery,
@@ -885,12 +883,7 @@ impl WasmBuildSpec {
     /// library name: package hyphens become underscores. Artifact paths use that
     /// admitted name; genuinely renamed libraries are refused.
     #[must_use]
-    pub fn new(
-        workspace_root: &Path,
-        target_dir: &Path,
-        packages: &[&str],
-        profile_target_dir: &str,
-    ) -> Self {
+    pub fn new(workspace_root: &Path, target_dir: &Path, packages: &[&str]) -> Self {
         let mut packages = packages
             .iter()
             .map(|package| (*package).to_owned())
@@ -902,7 +895,6 @@ impl WasmBuildSpec {
             target_dir: target_dir.to_owned(),
             packages,
             example: None,
-            profile_target_dir: profile_target_dir.to_owned(),
             cargo_selection: CargoSelection::parse(Vec::new()),
             extra_env: BTreeMap::new(),
             inherited_env: BTreeSet::new(),
@@ -960,8 +952,8 @@ impl WasmBuildSpec {
     /// rejected: use Cargo's discovered configuration files or explicit
     /// environment overrides so resolution and execution share tracked inputs.
     /// Help and build-graph flags are rejected because they exit successfully
-    /// without building. The selected profile must match `profile_target_dir`;
-    /// declaring an output directory does not select a Cargo profile.
+    /// without building. These arguments also select the profile output directory;
+    /// a later call replaces both the arguments and the derived directory.
     /// Binary, example, test, bench, and all-target selectors are rejected to
     /// preserve structural library/example selection. Use [`Self::with_example`]
     /// for a named example. `--lib` is supported only for the default library.
@@ -3561,15 +3553,6 @@ fn validate_spec(spec: &WasmBuildSpec) -> Result<(), WasmBuildError> {
             message: "at least one Cargo package is required".to_owned(),
         });
     }
-    let mut profile_components = Path::new(&spec.profile_target_dir).components();
-    if !matches!(
-        (profile_components.next(), profile_components.next()),
-        (Some(Component::Normal(_)), None)
-    ) {
-        return Err(WasmBuildError::InvalidSpec {
-            message: "Cargo profile target directory must be one normal path component".to_owned(),
-        });
-    }
     if spec.target.is_empty() {
         return Err(WasmBuildError::InvalidSpec {
             message: "Cargo compilation target must not be empty".to_owned(),
@@ -3606,7 +3589,11 @@ fn validate_spec(spec: &WasmBuildSpec) -> Result<(), WasmBuildError> {
             message: "Cargo workspace, package, target, and configuration inputs are owned by the build specification; use workspace_root, packages, with_target, and discovered Cargo configuration files or with_extra_env instead of command overrides".to_owned(),
         });
     }
-    validate_cargo_profile(spec)?;
+    spec.cargo_selection
+        .profile_target_dir()
+        .map_err(|message| WasmBuildError::InvalidSpec {
+            message: message.to_owned(),
+        })?;
     if matches!(
         &spec.cache_mode,
         WasmBuildCacheMode::SharedIncremental { target_dir } if target_dir.as_os_str().is_empty()
@@ -3663,30 +3650,6 @@ fn validate_cargo_target_selection(spec: &WasmBuildSpec) -> Result<(), WasmBuild
     {
         return Err(WasmBuildError::InvalidSpec {
             message: "Cargo target selection is owned by the build specification; use with_example for a named cdylib example".to_owned(),
-        });
-    }
-    Ok(())
-}
-
-fn validate_cargo_profile(spec: &WasmBuildSpec) -> Result<(), WasmBuildError> {
-    let profile =
-        spec.cargo_selection
-            .profile
-            .as_deref()
-            .map_err(|message| WasmBuildError::InvalidSpec {
-                message: (*message).to_owned(),
-            })?;
-    let expected = match profile {
-        "dev" | "test" => "debug",
-        "bench" => "release",
-        custom => custom,
-    };
-    if spec.profile_target_dir != expected {
-        return Err(WasmBuildError::InvalidSpec {
-            message: format!(
-                "Cargo profile {profile:?} writes to {expected:?}, but profile target directory is {:?}; select matching Cargo profile arguments and output directory",
-                spec.profile_target_dir,
-            ),
         });
     }
     Ok(())
@@ -3788,7 +3751,13 @@ fn finish_build_fingerprint(
     } else {
         hasher.field("cargo-target-selection", b"lib");
     }
-    hasher.field("profile-target-dir", spec.profile_target_dir.as_bytes());
+    hasher.field(
+        "profile-target-dir",
+        spec.cargo_selection
+            .profile_target_dir()
+            .expect("Cargo profile was validated before fingerprinting")
+            .as_bytes(),
+    );
     for argument in &spec.cargo_selection.arguments {
         hasher.field("cargo-argument", &os_bytes(argument));
     }
@@ -4996,10 +4965,14 @@ fn default_library_name(package: &str) -> String {
 }
 
 fn expected_artifacts(spec: &WasmBuildSpec, target_dir: &Path) -> Vec<PathBuf> {
+    let profile = target_dir.join(&spec.target).join(
+        spec.cargo_selection
+            .profile_target_dir()
+            .expect("Cargo profile was validated before artifact discovery"),
+    );
     spec.packages
         .iter()
         .map(|package| {
-            let profile = target_dir.join(&spec.target).join(&spec.profile_target_dir);
             spec.example.as_ref().map_or_else(
                 || profile.join(format!("{}.wasm", default_library_name(package))),
                 |example| {

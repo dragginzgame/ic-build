@@ -1059,14 +1059,14 @@ fn validate_spec(spec: &ArtifactCacheSpec) -> Result<(), ArtifactCacheError> {
     }
     let mut identity_labels = BTreeSet::new();
     for identity in &spec.identities {
-        validate_label("identity", &identity.label)?;
+        validate_identifier("identity label", &identity.label)?;
         if !identity_labels.insert(&identity.label) {
             return invalid_spec(&format!("duplicate identity label `{}`", identity.label));
         }
     }
     let mut cargo_input_labels = BTreeSet::new();
     for cargo_inputs in &spec.cargo_build_inputs {
-        validate_label("Cargo build input", &cargo_inputs.label)?;
+        validate_identifier("Cargo build input label", &cargo_inputs.label)?;
         if !cargo_input_labels.insert(&cargo_inputs.label) {
             return invalid_spec(&format!(
                 "duplicate Cargo build input label `{}`",
@@ -1276,18 +1276,8 @@ fn validate_identifier(kind: &str, value: &str) -> Result<(), ArtifactCacheError
     Ok(())
 }
 
-fn validate_label(kind: &str, value: &str) -> Result<(), ArtifactCacheError> {
-    if value.is_empty() {
-        return invalid_spec(&format!("{kind} label must not be empty"));
-    }
-    if value.len() > 256 {
-        return invalid_spec(&format!("{kind} label must not exceed 256 bytes"));
-    }
-    Ok(())
-}
-
 fn validate_path_label(kind: &str, value: &str) -> Result<(), ArtifactCacheError> {
-    validate_label(kind, value)?;
+    validate_identifier(&format!("{kind} label"), value)?;
     if value
         .bytes()
         .any(|byte| !(byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'/')))

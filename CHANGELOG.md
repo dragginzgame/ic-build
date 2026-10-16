@@ -3,6 +3,20 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.9.0]
+
+- **Breaking:** remove the fourth, output-directory argument from
+  `WasmBuildSpec::new`. Cargo profile arguments now select both the build profile
+  and its artifact directory; replacing those arguments updates the directory.
+  Callers must remove the fourth argument and keep profile selection in
+  `with_cargo_profile_args`.
+- Preserve existing fingerprint encoding and cache namespaces for matching
+  recipes. Malformed profiles and unsafe derived directories still refuse
+  before tool execution or acquisition.
+- Consolidate artifact identifier/label length checks and use Host's existing
+  raw-byte SHA-256 API for configuration observations, preserving limits,
+  diagnostics and raw digest bytes.
+
 ## [0.8.0] - 2026-10-16
 
 - **Breaking:** align exposed Host types with the selected IC Host 0.21 graph.

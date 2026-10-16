@@ -1,5 +1,9 @@
 # Artifact and Wasm build APIs
 
+Examples use the pending 0.9 constructor API. Upgrade callers by removing the
+fourth argument from `WasmBuildSpec::new`; keep Cargo profile arguments in
+`with_cargo_profile_args`. This checkout has no published 0.9 release yet.
+
 These generic APIs are extracted from IC Testkit. Recipes, budgets, tool
 selection, credentials, source custody and lifecycle remain with the caller.
 The existing v1 retained formats and namespaces are unchanged.
@@ -48,7 +52,7 @@ use std::path::Path;
 
 let workspace = Path::new("/application/workspace");
 let target = workspace.join("target/canister-builds");
-let spec = WasmBuildSpec::new(workspace, &target, &["application_canister"], "release")
+let spec = WasmBuildSpec::new(workspace, &target, &["application_canister"])
     .with_cargo_profile_args(["--release", "--locked", "--offline"])
     .with_extra_env([("CARGO_PROFILE_RELEASE_LTO", "fat")]);
 ```
@@ -351,7 +355,6 @@ let spec = WasmBuildSpec::new(
     &workspace,
     &target,
     &["counter_canister"],
-    "release",
 )
 .with_cargo_profile_args(["--release", "--locked"])
 .with_inherited_env(["COUNTER_SCHEMA_MODE"])
@@ -482,11 +485,12 @@ these paths through `WasmBuildSpec`; overriding `CARGO_TARGET_DIR` through
 `with_extra_env` or passing `--target-dir` through `with_cargo_profile_args`
 returns `InvalidSpec` before acquisition.
 
-The profile output directory must match the Cargo arguments: default builds and
+The profile output directory is derived from Cargo arguments: default builds and
 `--profile dev` or `--profile test` use `debug`; `--release`, `-r`, and
-`--profile bench` use `release`; custom profiles use their own name. A mismatch
-returns `InvalidSpec` before input resolution or cache work. Setting the output
-directory alone does not select a Cargo profile.
+`--profile bench` use `release`; custom profiles use their own name. Replacing
+profile arguments also replaces the derived directory. Missing, repeated or
+unsafe profile selections return `InvalidSpec` before input resolution or cache
+work. Existing recipes retain their fingerprint encoding and cache namespaces.
 
 Wasm acquisition builds package libraries with Cargo's `--lib` flag by default.
 Use `with_example(name)` to select one named `cdylib` example from exactly one
@@ -525,7 +529,6 @@ let spec = WasmBuildSpec::new(
     &workspace,
     &exact_cache,
     &["counter_canister"],
-    "debug",
 )
 .with_shared_incremental_target(&shared_incremental)
 .with_shared_incremental_target_maintenance_at_most_every(
@@ -598,7 +601,6 @@ let spec = WasmBuildSpec::new(
     &workspace,
     &target,
     &["counter_canister"],
-    "debug",
 )
 .with_shared_incremental_target(target.join("shared"))
 .with_shared_incremental_target_maintenance(maintenance);
@@ -627,7 +629,6 @@ let spec = WasmBuildSpec::new(
     &workspace,
     &workspace.join("target/pic-wasm"),
     &["counter_canister"],
-    "debug",
 );
 let outcome = build_wasm_canisters_cached_with_progress(
     &spec,
@@ -663,11 +664,11 @@ use ic_build::artifacts::{
 let specs = [
     LabeledWasmBuildSpec::new(
         "role-a",
-        WasmBuildSpec::new(&workspace, &target, &["role_a"], "debug"),
+        WasmBuildSpec::new(&workspace, &target, &["role_a"]),
     ),
     LabeledWasmBuildSpec::new(
         "role-b",
-        WasmBuildSpec::new(&workspace, &target, &["role_b"], "debug"),
+        WasmBuildSpec::new(&workspace, &target, &["role_b"]),
     ),
 ];
 let batch = build_wasm_canisters_cached_batch(&specs)?;
@@ -891,8 +892,8 @@ resolution, execution and Git provenance belong to `ic_host_process`; Candid
 extraction and response decoding belong to `ic_host_tools`. Its pure Candid text
 APIs are portable; extraction, execution, resolution and provenance are Unix-only.
 Structural Wasm inspection does not replace PocketIC's runtime validation.
-Published IC Build 0.7 requires compatible IC Host 0.20 releases. Pending 0.8
-requires IC Host 0.21 at the public dependency boundary. Retained staging still
+IC Build 0.8 and pending 0.9 require compatible IC Host 0.21 releases at the
+public dependency boundary. Retained staging still
 uses checked native permission conversion on macOS. Align direct Host dependencies
 when passing `OutputLimits` or matching typed Host failures across the engine
 boundary. Host 0.20 and 0.21 values have different Rust crate identities even

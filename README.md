@@ -28,11 +28,12 @@ Tooling. IC Build must not depend on Canic, IcyDB, PocketIC or IC Testkit.
 
 ## Use
 
-Add the registry dependency to your host-side package:
+The examples below use the pending 0.9 API in this checkout. After 0.9 is
+published, add the registry dependency to your host-side package:
 
 ```toml
 [dependencies]
-ic-build = "0.6"
+ic-build = "0.9"
 ```
 
 Rust 1.91.0 or newer is required. Import the engine directly and keep the returned
@@ -45,7 +46,7 @@ use std::path::Path;
 
 fn build(workspace: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let target = workspace.join("target/canister-builds");
-    let spec = WasmBuildSpec::new(workspace, &target, &["counter_canister"], "release")
+    let spec = WasmBuildSpec::new(workspace, &target, &["counter_canister"])
         .with_cargo_profile_args(["--release", "--locked"]);
     let outcome = build_wasm_canisters_cached(&spec)?;
     let wasm = std::fs::read(&outcome.record().artifacts()[0])?;
@@ -54,6 +55,9 @@ fn build(workspace: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
 ```
 
 Consumers select packages, profiles, environment and maintenance policy.
+To adopt 0.9, remove the fourth argument from `WasmBuildSpec::new` and retain
+profile selection through `with_cargo_profile_args`. Output directories follow
+those arguments automatically, including when a later call replaces them.
 Published 0.6.1 adds `ic_build::cargo::environment` for read-only configuration
 discovery, include traversal, raw-byte digests and compiler-override facts. Consumers select
 effective or conservative input paths and retain compiler admission, receipt
@@ -61,8 +65,8 @@ framing and source custody. Configuration contents are excluded from returned
 facts and failure diagnostics. Observation executes no Cargo commands and does
 not establish build or release validity.
 
-Published IC Build 0.7 uses IC Host 0.20 at its public grouping/capture boundary.
-Pending 0.8 requires IC Host 0.21; align direct Host dependencies before passing
+IC Build 0.8 and pending 0.9 use IC Host 0.21 at the public grouping/capture boundary;
+align direct Host dependencies before passing
 `OutputLimits` or typed Host failures across that boundary.
 The [deployable-Wasm LTO guidance](docs/artifacts.md#deployable-wasm-lto) records
 whole-canister measurements and shows how a common adapter can apply full LTO

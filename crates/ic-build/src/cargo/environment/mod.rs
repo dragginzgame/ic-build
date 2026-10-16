@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests;
 
-use sha2::{Digest as _, Sha256};
+use ic_host_artifacts::artifact::Sha256Digest;
 use std::{
     collections::BTreeSet,
     ffi::OsStr,
@@ -235,7 +235,7 @@ fn append_configuration(
     files.push(ConfigurationFile {
         path: config.to_owned(),
         location: location.clone(),
-        sha256: Sha256::digest(contents.as_bytes()).into(),
+        sha256: *Sha256Digest::compute(contents.as_bytes()).as_bytes(),
         compiler_overrides,
     });
     if let Some(include) = configuration.get("include") {

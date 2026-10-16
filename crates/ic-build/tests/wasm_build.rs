@@ -55,8 +55,8 @@ fn hyphenated_packages_use_the_default_library_artifact_in_every_cache_mode() {
                 .success()
         );
         let target = root.join("exact");
-        let mut spec = WasmBuildSpec::new(&root, &target, &["fixture-canister"], "debug")
-            .with_isolated_builds();
+        let mut spec =
+            WasmBuildSpec::new(&root, &target, &["fixture-canister"]).with_isolated_builds();
         if shared {
             spec = spec.with_shared_incremental_target(root.join("target/shared"));
         }
@@ -119,12 +119,7 @@ fn packages_with_colliding_default_library_names_cannot_publish_one_artifact() {
             .unwrap()
             .success()
     );
-    let spec = WasmBuildSpec::new(
-        &root,
-        &root.join("exact"),
-        &["same-name", "same_name"],
-        "debug",
-    );
+    let spec = WasmBuildSpec::new(&root, &root.join("exact"), &["same-name", "same_name"]);
     resolve_cargo_build_inputs(&spec).unwrap();
     assert!(matches!(
         build_wasm_canisters_cached(&spec),
@@ -139,7 +134,7 @@ fn shared_wasm_target_rejects_library_that_no_longer_produces_wasm() {
     let workspace = root.join("workspace");
     write_independent_feature_workspace(&workspace);
     let shared = root.join("shared");
-    let spec = WasmBuildSpec::new(&workspace, &root.join("exact"), &["feature_a"], "debug")
+    let spec = WasmBuildSpec::new(&workspace, &root.join("exact"), &["feature_a"])
         .with_shared_incremental_target(&shared);
     let first = build_wasm_canisters_cached(&spec).expect("build initial canister library");
     let before = read_file(&wasm_path(&shared, "feature_a", "debug"), 128 * 1024 * 1024)
@@ -203,8 +198,7 @@ fn wasm_acquisition_builds_library_when_binary_has_the_same_output_name() {
             write_independent_feature_workspace(&workspace);
             fs::write(workspace.join("feature_a/src/main.rs"), "fn main() {}\n")
                 .expect("write same-name binary target");
-            let mut spec =
-                WasmBuildSpec::new(&workspace, &root.join("exact"), &["feature_a"], "debug");
+            let mut spec = WasmBuildSpec::new(&workspace, &root.join("exact"), &["feature_a"]);
             if shared_target {
                 spec = spec.with_shared_incremental_target(root.join("shared"));
             }
@@ -252,7 +246,7 @@ fn shared_wasm_target_rejects_binary_only_build_before_publication() {
     .expect("write unrelated binary target");
     let target = root.join("exact-target");
     let shared = root.join("shared-target");
-    let spec = WasmBuildSpec::new(&workspace, &target, &["feature_a"], "debug")
+    let spec = WasmBuildSpec::new(&workspace, &target, &["feature_a"])
         .with_shared_incremental_target(&shared)
         .with_cargo_profile_args(["--lib"]);
     let first = build_wasm_canisters_cached(&spec).expect("build initial canister Wasm");
@@ -301,13 +295,13 @@ fn shared_wasm_target_rejects_binary_only_build_before_publication() {
 }
 
 #[test]
-fn shared_wasm_target_rejects_mismatched_cargo_profile_before_publication() {
+fn shared_wasm_target_uses_updated_cargo_profile_before_publication() {
     let root = unique_temp_dir("ic-testkit-shared-profile-mismatch");
     let workspace = root.join("workspace");
     write_independent_feature_workspace(&workspace);
     let target = root.join("exact-target");
     let shared = root.join("shared-target");
-    let spec = WasmBuildSpec::new(&workspace, &target, &["feature_a"], "release")
+    let spec = WasmBuildSpec::new(&workspace, &target, &["feature_a"])
         .with_shared_incremental_target(&shared)
         .with_cargo_profile_args(["--release"]);
     let first = build_wasm_canisters_cached(&spec).expect("build initial release Wasm");
@@ -322,14 +316,14 @@ fn shared_wasm_target_rejects_mismatched_cargo_profile_before_publication() {
     )
     .expect("change source while retaining old release output");
 
-    let mismatch = spec.clone().with_cargo_profile_args(["--offline"]);
-    let result = build_wasm_canisters_cached(&mismatch);
-    assert!(
-        matches!(
-            result,
-            Err(ic_build::artifacts::WasmBuildError::InvalidSpec { .. })
-        ),
-        "a debug build must not certify the old release output: {result:?}",
+    let debug_spec = spec.clone().with_cargo_profile_args(["--offline"]);
+    let debug = build_wasm_canisters_cached(&debug_spec).expect("build changed debug Wasm");
+    assert!(matches!(debug, WasmBuildOutcome::Built(_)));
+    assert!(wasm_path(&shared, "feature_a", "debug").is_file());
+    assert!(wasm_path(&target, "feature_a", "debug").is_file());
+    assert_eq!(
+        fs::read(&debug.record().artifacts()[0]).unwrap(),
+        fs::read(wasm_path(&target, "feature_a", "debug")).unwrap(),
     );
     assert_eq!(
         read_file(
@@ -339,7 +333,6 @@ fn shared_wasm_target_rejects_mismatched_cargo_profile_before_publication() {
         .expect("read bounded Wasm"),
         before
     );
-    assert!(!wasm_path(&shared, "feature_a", "debug").exists());
 
     let rebuilt = build_wasm_canisters_cached(&spec).expect("build changed release Wasm");
     assert!(matches!(rebuilt, WasmBuildOutcome::Built(_)));
@@ -355,6 +348,12 @@ fn shared_wasm_target_rejects_mismatched_cargo_profile_before_publication() {
         build_wasm_canisters_cached(&spec).expect("reuse matching release Wasm"),
         WasmBuildOutcome::Reused(_)
     ));
+    assert!(
+        build_wasm_canisters_cached(&debug_spec)
+            .unwrap()
+            .is_reused()
+    );
+    drop(debug);
     drop(first);
     drop(rebuilt);
     fs::remove_dir_all(root).expect("remove shared profile fixture");
@@ -369,11 +368,11 @@ fn independent_wasm_batch_preserves_standalone_feature_resolution() {
     let specs = [
         LabeledWasmBuildSpec::new(
             "feature-a",
-            WasmBuildSpec::new(&workspace, &target, &["feature_a"], "debug"),
+            WasmBuildSpec::new(&workspace, &target, &["feature_a"]),
         ),
         LabeledWasmBuildSpec::new(
             "feature-b",
-            WasmBuildSpec::new(&workspace, &target, &["feature_b"], "debug"),
+            WasmBuildSpec::new(&workspace, &target, &["feature_b"]),
         ),
     ];
 
@@ -420,10 +419,7 @@ fn independent_wasm_batch_preserves_standalone_feature_resolution() {
 
     let with_invalid_middle = [
         specs[0].clone(),
-        LabeledWasmBuildSpec::new(
-            "invalid",
-            WasmBuildSpec::new(&workspace, &target, &[], "debug"),
-        ),
+        LabeledWasmBuildSpec::new("invalid", WasmBuildSpec::new(&workspace, &target, &[])),
         specs[1].clone(),
     ];
     let mut completed = Vec::new();
@@ -467,11 +463,10 @@ fn prepared_wasm_inputs_serve_concurrent_warm_readers() {
     let root = unique_temp_dir("ic-testkit-prepared-wasm-inputs");
     let workspace = root.join("workspace");
     write_independent_feature_workspace(&workspace);
-    let first_spec = WasmBuildSpec::new(&workspace, &root.join("exact-a"), &["feature_a"], "debug")
+    let first_spec = WasmBuildSpec::new(&workspace, &root.join("exact-a"), &["feature_a"])
         .with_shared_incremental_target(root.join("shared-a"));
-    let second_spec =
-        WasmBuildSpec::new(&workspace, &root.join("exact-b"), &["feature_b"], "debug")
-            .with_shared_incremental_target(root.join("shared-b"));
+    let second_spec = WasmBuildSpec::new(&workspace, &root.join("exact-b"), &["feature_b"])
+        .with_shared_incremental_target(root.join("shared-b"));
     for spec in [&first_spec, &second_spec] {
         let built = build_wasm_canisters_cached(spec).expect("warm exact Wasm entry");
         assert!(!built.is_reused());
@@ -540,12 +535,7 @@ fn prepared_wasm_inputs_serve_concurrent_warm_readers() {
 
     let undeclared = [LabeledWasmBuildSpec::new(
         "undeclared",
-        WasmBuildSpec::new(
-            &workspace,
-            &root.join("exact-undeclared"),
-            &["feature_a"],
-            "debug",
-        ),
+        WasmBuildSpec::new(&workspace, &root.join("exact-undeclared"), &["feature_a"]),
     )];
     let mut progress_events = 0;
     let error = snapshot
@@ -676,7 +666,7 @@ fn assert_reused_batch_with_failure(
 fn exact_wasm_cache_coordinates_overlapping_builds() {
     let workspace = real_wasm_workspace();
     let target_dir = unique_temp_dir("ic-testkit-overlapping-wasm-cache-target");
-    let spec = WasmBuildSpec::new(&workspace, &target_dir, &[PERF_PROBE_PACKAGE], "debug");
+    let spec = WasmBuildSpec::new(&workspace, &target_dir, &[PERF_PROBE_PACKAGE]);
     let start = Arc::new(Barrier::new(3));
 
     let workers = std::array::from_fn::<_, 2, _>(|_| {
@@ -723,7 +713,7 @@ fn shared_incremental_wasm_cache_keeps_mutable_cargo_state_outside_exact_entries
     let shared_target = unique_temp_dir("ic-testkit-shared-incremental-cargo-target");
     let marker = shared_target.join("caller-owned-marker");
     fs::write(&marker, b"preserve").expect("write caller-owned shared-target marker");
-    let spec = WasmBuildSpec::new(&workspace, &target_dir, &[PERF_PROBE_PACKAGE], "debug")
+    let spec = WasmBuildSpec::new(&workspace, &target_dir, &[PERF_PROBE_PACKAGE])
         .with_shared_incremental_target(&shared_target);
 
     let resolved = resolve_cargo_build_inputs(&spec).expect("resolve exact Cargo inputs");
@@ -810,7 +800,7 @@ fn scheduled_shared_target_maintenance_participates_in_wasm_acquisition() {
     let target_dir = root.join("exact");
     let shared_target = root.join("shared");
     assert!(!shared_target.exists());
-    let spec = WasmBuildSpec::new(&workspace, &target_dir, &[PERF_PROBE_PACKAGE], "debug")
+    let spec = WasmBuildSpec::new(&workspace, &target_dir, &[PERF_PROBE_PACKAGE])
         .with_shared_incremental_target(&shared_target)
         .with_shared_incremental_target_maintenance_at_most_every(
             SharedIncrementalTargetPrunePolicy::new().with_max_size_bytes(u64::MAX),
@@ -944,7 +934,6 @@ fn resolved_cargo_inputs_guard_transactional_artifacts_through_commit() {
         &workspace,
         &workspace.join("target/exact-wasm"),
         &["artifact_bridge_probe"],
-        "debug",
     );
     let resolved = resolve_cargo_build_inputs(&wasm_spec).expect("resolve bridge Cargo inputs");
     let destination = workspace.join("target/public/transformed.wasm");
@@ -1024,7 +1013,7 @@ fn failed_shared_incremental_build_preserves_cargo_state_without_publishing_an_e
     let shared_target = unique_temp_dir("ic-testkit-failed-shared-cargo-target");
     let marker = shared_target.join("caller-owned-marker");
     fs::write(&marker, b"preserve").expect("write failed-build marker");
-    let spec = WasmBuildSpec::new(&workspace, &target_dir, &[PERF_PROBE_PACKAGE], "debug")
+    let spec = WasmBuildSpec::new(&workspace, &target_dir, &[PERF_PROBE_PACKAGE])
         .with_shared_incremental_target(&shared_target)
         .with_cargo_profile_args(["--definitely-not-a-cargo-build-option"]);
     let fingerprint = resolve_cargo_build_inputs(&spec)
@@ -1083,25 +1072,20 @@ fn source_changes_during_shared_incremental_build_reject_exact_publication() {
     let release = root.join("release-build");
     write_blocking_cargo_wrapper(&wrapper);
     let real_cargo = std::env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo"));
-    let spec = WasmBuildSpec::new(
-        &workspace,
-        &root.join("exact-cache"),
-        &["race_probe"],
-        "debug",
-    )
-    .with_shared_incremental_target(root.join("shared-target"))
-    .with_cargo_program(&wrapper)
-    .with_extra_env([
-        (OsString::from("REAL_CARGO"), real_cargo),
-        (
-            OsString::from("IC_TESTKIT_BUILD_STARTED"),
-            started.clone().into_os_string(),
-        ),
-        (
-            OsString::from("IC_TESTKIT_RELEASE_BUILD"),
-            release.clone().into_os_string(),
-        ),
-    ]);
+    let spec = WasmBuildSpec::new(&workspace, &root.join("exact-cache"), &["race_probe"])
+        .with_shared_incremental_target(root.join("shared-target"))
+        .with_cargo_program(&wrapper)
+        .with_extra_env([
+            (OsString::from("REAL_CARGO"), real_cargo),
+            (
+                OsString::from("IC_TESTKIT_BUILD_STARTED"),
+                started.clone().into_os_string(),
+            ),
+            (
+                OsString::from("IC_TESTKIT_RELEASE_BUILD"),
+                release.clone().into_os_string(),
+            ),
+        ]);
     let fingerprint = resolve_cargo_build_inputs(&spec)
         .expect("resolve original race fingerprint")
         .fingerprint();
@@ -1190,25 +1174,20 @@ fn source_race_invalidates_every_prepared_snapshot_reader() {
     let release = root.join("release-build");
     write_blocking_cargo_wrapper(&wrapper);
     let real_cargo = std::env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo"));
-    let spec = WasmBuildSpec::new(
-        &workspace,
-        &root.join("exact-cache"),
-        &["race_probe"],
-        "debug",
-    )
-    .with_shared_incremental_target(root.join("shared-target"))
-    .with_cargo_program(&wrapper)
-    .with_extra_env([
-        (OsString::from("REAL_CARGO"), real_cargo),
-        (
-            OsString::from("IC_TESTKIT_BUILD_STARTED"),
-            started.clone().into_os_string(),
-        ),
-        (
-            OsString::from("IC_TESTKIT_RELEASE_BUILD"),
-            release.clone().into_os_string(),
-        ),
-    ]);
+    let spec = WasmBuildSpec::new(&workspace, &root.join("exact-cache"), &["race_probe"])
+        .with_shared_incremental_target(root.join("shared-target"))
+        .with_cargo_program(&wrapper)
+        .with_extra_env([
+            (OsString::from("REAL_CARGO"), real_cargo),
+            (
+                OsString::from("IC_TESTKIT_BUILD_STARTED"),
+                started.clone().into_os_string(),
+            ),
+            (
+                OsString::from("IC_TESTKIT_RELEASE_BUILD"),
+                release.clone().into_os_string(),
+            ),
+        ]);
     let fingerprint = resolve_cargo_build_inputs(&spec)
         .expect("resolve original prepared-race fingerprint")
         .fingerprint();
