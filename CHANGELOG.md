@@ -16,6 +16,8 @@ archive also includes the extracted artifact engine and Cargo grouping API.
 - Consolidate artifact identifier/label length checks and use Host's existing
   raw-byte SHA-256 API for configuration observations, preserving limits,
   diagnostics and raw digest bytes.
+- **Testing:** restore batch specification-failure coverage after the constructor
+  migration and isolate the refusal fixture from source-tree artifacts.
 
 ## [0.8.0] - 2026-10-16
 

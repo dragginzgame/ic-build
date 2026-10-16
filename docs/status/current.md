@@ -30,6 +30,17 @@ source with a frozen current candidate: default, dev, test, release, bench and
 custom profiles retain exact fingerprints, input/validation digests and Wasm
 bytes. Every candidate acquisition reuses its original 0.8.0 cache entry.
 
+The reported release-validation failure exposed a missed batch fixture migration:
+removing its invalid output-directory argument made the second specification
+valid. The fixture now selects an explicitly empty Cargo profile, retains both
+indexed specification failures and their timing/counter assertions, and uses a
+temporary workspace with a nonexistent Cargo command. It also verifies no target
+directory is created. No production implementation changed. All 12 batch cases
+pass on Rust 1.99 and actual Rust 1.91; all four related profile cases pass on
+Rust 1.91. Strict all-target Clippy and formatting pass. The failed reproduction,
+before-images and focused logs remain under
+`/tmp/ic-build-batch-refusal-fix-20261016.OzTeYD/`.
+
 Own manifests/lock, the index and release state remain untouched. No full suite,
 native macOS qualification or release ran here. Before-images, the frozen
 qualification workspaces and logs remain under

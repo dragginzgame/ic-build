@@ -99,14 +99,19 @@ fn library_output_validation_survives_batch_session_and_prepared_resolution() {
 
 #[test]
 fn batch_retains_every_indexed_failure() {
+    let root = unique_temp_directory("wasm-batch-indexed-failures");
+    let target = root.join("target");
+    let cargo = root.join("must-not-run-cargo");
     let specs = [
         LabeledWasmBuildSpec::new(
             "root",
-            WasmBuildSpec::new(Path::new("."), Path::new("target"), &[]),
+            WasmBuildSpec::new(&root, &target, &[]).with_cargo_program(&cargo),
         ),
         LabeledWasmBuildSpec::new(
             "worker",
-            WasmBuildSpec::new(Path::new("."), Path::new("target"), &["fixture"]),
+            WasmBuildSpec::new(&root, &target, &["fixture"])
+                .with_cargo_profile_args(["--profile", ""])
+                .with_cargo_program(&cargo),
         ),
     ];
 
@@ -139,6 +144,8 @@ fn batch_retains_every_indexed_failure() {
     assert_eq!(metrics.failed(), 2);
     assert_eq!(metrics.built(), 0);
     assert_eq!(metrics.reused(), 0);
+    assert!(!target.exists());
+    std::fs::remove_dir_all(root).expect("remove indexed failure fixture");
 }
 
 #[cfg(unix)]
