@@ -3,7 +3,7 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.11.1]
+## [0.11.1] - 2026-10-16
 
 - Compare retained manifests through Host's streaming matcher and one shared
   encoder, centralize batch source-lease invalidation, and format Cargo arguments
