@@ -142,7 +142,7 @@ pub struct WasmBuildRecord {
     fingerprint: InputDigest,
     input_digest: InputDigest,
     retention: RetainedCacheEntry,
-    artifacts: Vec<PathBuf>,
+    artifacts: Arc<[PathBuf]>,
     timings: WasmBuildTimings,
     maintenance: Option<ArtifactCacheMaintenance>,
     shared_incremental_maintenance: Option<SharedIncrementalTargetMaintenanceOutcome>,
@@ -1980,38 +1980,33 @@ impl<'a, 'session> WasmBuildBatchInputResolver<'a, 'session> {
         progress: &mut ProgressReporter<'_>,
     ) -> (Vec<(usize, ResolvedLocalInputs, Vec<PathBuf>)>, Duration) {
         let started = Instant::now();
-        let pending = self.groups[group].indexes.iter().copied().filter(|index| {
-            self.resolved[*index].is_none() && validate_spec(self.specs[*index]).is_ok()
-        });
-        let results = progress.run_phase(WasmBuildProgressPhase::InputDiscovery, || {
+        let indexes = &self.groups[group].indexes;
+        let specs = &self.specs;
+        let resolved = &mut self.resolved;
+        let discovered = progress.run_phase(WasmBuildProgressPhase::InputDiscovery, || {
             let canonical = crate::cargo::observation::decode_metadata(metadata);
             let parsed = canonical
                 .as_ref()
                 .map_err(ToString::to_string)
                 .and_then(|canonical| ParsedCargoMetadata::parse(canonical, metadata));
-            pending
-                .map(|index| {
-                    let spec = self.specs[index];
-                    let result = (|| {
-                        let parsed = parsed
-                            .as_ref()
-                            .map_err(|message| invalid_metadata(message))?;
-                        resolve_local_inputs(spec, parsed)
-                    })();
-                    (index, result)
-                })
-                .collect::<Vec<_>>()
-        });
-        let mut discovered = Vec::new();
-        for (index, result) in results {
-            match result {
-                Ok((inputs, exclusions)) => discovered.push((index, inputs, exclusions)),
-                Err(error) => {
-                    self.resolved[index] =
-                        Some(Err((WasmBuildFailurePhase::InputDiscovery, error)));
+            let mut discovered = Vec::new();
+            for &index in indexes {
+                if resolved[index].is_some() || validate_spec(specs[index]).is_err() {
+                    continue;
+                }
+                let result = parsed
+                    .as_ref()
+                    .map_err(|message| invalid_metadata(message))
+                    .and_then(|parsed| resolve_local_inputs(specs[index], parsed));
+                match result {
+                    Ok((inputs, exclusions)) => discovered.push((index, inputs, exclusions)),
+                    Err(error) => {
+                        resolved[index] = Some(Err((WasmBuildFailurePhase::InputDiscovery, error)));
+                    }
                 }
             }
-        }
+            discovered
+        });
         (discovered, started.elapsed())
     }
 }
@@ -2702,13 +2697,7 @@ pub(super) fn build_wasm_canisters_cached_in_batch(
     let started = Instant::now();
     let mut progress = ProgressReporter::silent();
     let result = build_wasm_canisters_cached_internal(spec, &mut progress, Some((resolver, index)));
-    if result
-        .as_ref()
-        .is_err_and(WasmBuildError::indicates_input_change)
-    {
-        resolver.invalidate_source_lease();
-    }
-    batch_result(result, &progress, started.elapsed())
+    batch_result(result, &progress, resolver, started)
 }
 
 /// Build or reuse one exact Wasm set while streaming structured progress.
@@ -2771,20 +2760,22 @@ where
     let started = Instant::now();
     let mut progress = ProgressReporter::observed(config, &mut observer);
     let result = build_wasm_canisters_cached_internal(spec, &mut progress, Some((resolver, index)));
+    batch_result(result, &progress, resolver, started)
+}
+
+fn batch_result(
+    result: Result<WasmBuildOutcome, WasmBuildError>,
+    progress: &ProgressReporter<'_>,
+    resolver: &mut WasmBuildBatchInputResolver<'_, '_>,
+    started: Instant,
+) -> WasmBuildBatchAttempt {
     if result
         .as_ref()
         .is_err_and(WasmBuildError::indicates_input_change)
     {
         resolver.invalidate_source_lease();
     }
-    batch_result(result, &progress, started.elapsed())
-}
-
-fn batch_result(
-    result: Result<WasmBuildOutcome, WasmBuildError>,
-    progress: &ProgressReporter<'_>,
-    total: Duration,
-) -> WasmBuildBatchAttempt {
+    let total = started.elapsed();
     WasmBuildBatchAttempt {
         result: result.map_err(|error| {
             let details = progress.failure_details(&error, total);
@@ -3397,7 +3388,7 @@ fn complete_build_record(
     Ok(WasmBuildRecord {
         fingerprint: input.fingerprint,
         input_digest: input.input_digest,
-        artifacts: expected_artifacts(spec, input.active_entry, input.targets),
+        artifacts: expected_artifacts(spec, input.active_entry, input.targets).into(),
         retention,
         timings: WasmBuildTimings {
             lock_wait: input.lock_wait,
@@ -4850,15 +4841,16 @@ fn shared_incremental_target_exists(
 }
 
 fn effective_environment(spec: &WasmBuildSpec) -> BTreeMap<OsString, Option<OsString>> {
-    let mut names = spec.inherited_env.clone();
-    names.extend(AUTOMATIC_ENVIRONMENT.iter().map(OsString::from));
-    let mut environment = names
-        .into_iter()
-        .map(|name| {
-            let value = std::env::var_os(&name);
-            (name, value)
-        })
+    let mut environment = spec
+        .inherited_env
+        .iter()
+        .map(|name| (name.clone(), std::env::var_os(name)))
         .collect::<BTreeMap<_, _>>();
+    for name in AUTOMATIC_ENVIRONMENT {
+        environment
+            .entry(OsString::from(name))
+            .or_insert_with(|| std::env::var_os(name));
+    }
     for (key, value) in &spec.extra_env {
         environment.insert(key.clone(), Some(value.clone()));
     }

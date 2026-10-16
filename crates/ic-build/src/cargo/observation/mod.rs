@@ -48,13 +48,14 @@ impl CargoFeatureSelection {
             command.arg("--no-default-features");
         }
         if !self.features.is_empty() {
-            command.arg("--features").arg(
-                self.features
-                    .iter()
-                    .map(String::as_str)
-                    .collect::<Vec<_>>()
-                    .join(","),
-            );
+            let mut features = String::new();
+            for (index, feature) in self.features.iter().enumerate() {
+                if index > 0 {
+                    features.push(',');
+                }
+                features.push_str(feature);
+            }
+            command.arg("--features").arg(features);
         }
     }
 }

@@ -1,13 +1,17 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     ffi::{OsStr, OsString},
-    fmt::Write as _,
     fs::{self, File},
     io,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{Duration, Instant},
 };
+
+use ic_host_artifacts::artifact::MatchingWriter;
 
 mod boundaries;
 use boundaries::CargoInputBoundaries;
@@ -94,7 +98,7 @@ pub enum ArtifactCacheOutcome {
 pub struct ArtifactCacheRecord {
     key: InputDigest,
     input_digest: InputDigest,
-    artifacts: Vec<ArtifactCacheArtifact>,
+    artifacts: Arc<[ArtifactCacheArtifact]>,
     _retention: RetainedCacheEntry,
     timings: ArtifactCacheTimings,
     maintenance: Option<ArtifactCacheMaintenance>,
@@ -779,8 +783,8 @@ impl ArtifactBuildTransaction {
     fn output_index(&self, name: &str) -> Option<usize> {
         self.spec
             .outputs
-            .iter()
-            .position(|output| output.name == name)
+            .binary_search_by(|output| output.name.as_str().cmp(name))
+            .ok()
     }
 
     fn commit_inner(&mut self) -> Result<ArtifactCacheOutcome, ArtifactCacheError> {
@@ -813,7 +817,7 @@ impl ArtifactBuildTransaction {
                 mode: ic_host_fs::durable::PublicationMode::Replace,
                 permissions: 0o666,
             },
-            manifest.as_bytes(),
+            &manifest,
         )
         .map_err(|source| ArtifactCacheError::Io {
             operation: "write artifact cache manifest",
@@ -1073,17 +1077,16 @@ fn validate_spec(spec: &ArtifactCacheSpec) -> Result<(), ArtifactCacheError> {
             }
         }
     }
-    let mut identity_labels = BTreeSet::new();
-    for identity in &spec.identities {
+    // Builders keep these lists sorted, so duplicates are adjacent.
+    for (index, identity) in spec.identities.iter().enumerate() {
         validate_identifier("identity label", &identity.label)?;
-        if !identity_labels.insert(&identity.label) {
+        if index > 0 && spec.identities[index - 1].label == identity.label {
             return invalid_spec(&format!("duplicate identity label `{}`", identity.label));
         }
     }
-    let mut cargo_input_labels = BTreeSet::new();
-    for cargo_inputs in &spec.cargo_build_inputs {
+    for (index, cargo_inputs) in spec.cargo_build_inputs.iter().enumerate() {
         validate_identifier("Cargo build input label", &cargo_inputs.label)?;
-        if !cargo_input_labels.insert(&cargo_inputs.label) {
+        if index > 0 && spec.cargo_build_inputs[index - 1].label == cargo_inputs.label {
             return invalid_spec(&format!(
                 "duplicate Cargo build input label `{}`",
                 cargo_inputs.label
@@ -1097,11 +1100,10 @@ fn validate_spec(spec: &ArtifactCacheSpec) -> Result<(), ArtifactCacheError> {
     {
         return invalid_spec("environment names must not be empty");
     }
-    let mut output_names = BTreeSet::new();
     let mut destinations = BTreeSet::new();
-    for output in &spec.outputs {
+    for (index, output) in spec.outputs.iter().enumerate() {
         validate_output_name(&output.name)?;
-        if !output_names.insert(&output.name) {
+        if index > 0 && spec.outputs[index - 1].name == output.name {
             return invalid_spec(&format!("duplicate output name `{}`", output.name));
         }
         if output.destination.as_os_str().is_empty() {
@@ -1441,10 +1443,15 @@ fn validated_cache_outputs(
     let Some(output_info) = inspect_cached_output_set(spec, entry)? else {
         return Ok(None);
     };
-    Ok(
-        (manifest == manifest_contents(key, spec, output_info.iter().copied()).as_bytes())
-            .then_some(output_info),
-    )
+    let mut comparison = MatchingWriter::new(&manifest);
+    write_manifest(&mut comparison, key, spec, output_info.iter().copied()).map_err(|source| {
+        ArtifactCacheError::Io {
+            operation: "compare artifact cache manifest",
+            path: entry.join(MANIFEST_FILE),
+            source,
+        }
+    })?;
+    Ok(comparison.is_complete_match().then_some(output_info))
 }
 
 fn inspect_complete_output_set(
@@ -1656,20 +1663,31 @@ fn manifest_contents(
     key: InputDigest,
     spec: &ArtifactCacheSpec,
     output_info: impl IntoIterator<Item = FileDigest>,
-) -> String {
-    let mut manifest = manifest_header(key);
+) -> Vec<u8> {
+    let mut manifest = Vec::new();
+    write_manifest(&mut manifest, key, spec, output_info)
+        .expect("writing an artifact manifest to a Vec cannot fail");
+    manifest
+}
+
+fn write_manifest(
+    writer: &mut impl io::Write,
+    key: InputDigest,
+    spec: &ArtifactCacheSpec,
+    output_info: impl IntoIterator<Item = FileDigest>,
+) -> io::Result<()> {
+    writer.write_all(manifest_header(key).as_bytes())?;
     for ((index, output), info) in spec.outputs.iter().enumerate().zip(output_info) {
         writeln!(
-            manifest,
+            writer,
             "output:{index}:{}:{}:{}:{}",
             output.name,
             output.validation.cache_token(),
             info.bytes,
             info.digest,
-        )
-        .expect("writing an artifact manifest to a String cannot fail");
+        )?;
     }
-    manifest
+    Ok(())
 }
 
 fn materialize_outputs(

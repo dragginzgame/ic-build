@@ -8,39 +8,26 @@ const CASE_ENV: &str = "IC_BUILD_FLAGS_TEST_CASE";
 #[test]
 fn caller_flags_and_release_remaps_reach_cargo() {
     let Ok(case) = env::var(CASE_ENV) else {
-        for case in ["encoded", "empty", "ordinary", "absent", "no_additions"] {
-            let mut child = Command::new(env::current_exe().unwrap());
-            child
-                .args([
-                    "--exact",
-                    "cargo::flags::tests::caller_flags_and_release_remaps_reach_cargo",
-                    "--nocapture",
-                ])
-                .env(CASE_ENV, case)
-                .env_remove("RUSTFLAGS")
-                .env_remove("CARGO_ENCODED_RUSTFLAGS");
-            if case != "absent" {
-                child.env("RUSTFLAGS", "--cfg caller_ordinary");
-            }
-            match case {
-                "encoded" | "no_additions" => {
-                    child.env("CARGO_ENCODED_RUSTFLAGS", "--cfg\x1fcaller_encoded");
-                }
-                "empty" => {
-                    child.env("CARGO_ENCODED_RUSTFLAGS", "");
-                }
-                _ => {}
-            }
-            let output = child.output().unwrap();
-            assert!(
-                output.status.success(),
-                "{case}: {}\n{}",
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
+        run_cargo_flag_cases();
         return;
     };
+
+    let inherited = match case.as_str() {
+        "encoded" | "no_additions" => "--cfg\x1fcaller_encoded",
+        "ordinary" | "whitespace" => "--cfg\x1fcaller_ordinary",
+        _ => "",
+    };
+    let expected = if inherited.is_empty() {
+        "--cfg\x1fextra\x1f".to_owned()
+    } else {
+        format!("{inherited}\x1f\x1f--cfg\x1fextra\x1f")
+    };
+    assert_eq!(
+        combined_encoded_rustflags(
+            &[String::new(), "--cfg".into(), "extra".into(), String::new(),]
+        ),
+        Some(expected)
+    );
 
     // Spaces must remain inside the remap argument, not become new rustc tokens.
     let root = ic_host_fs::testing::create_fixture_directory(
@@ -100,8 +87,52 @@ fn caller_flags_and_release_remaps_reach_cargo() {
         format!(
             "{path}|{}|{}",
             matches!(case.as_str(), "encoded" | "no_additions"),
-            case == "ordinary"
+            matches!(case.as_str(), "ordinary" | "whitespace")
         )
     );
     fs::remove_dir_all(&root).unwrap();
+}
+
+fn run_cargo_flag_cases() {
+    for case in [
+        "encoded",
+        "empty",
+        "ordinary",
+        "whitespace",
+        "absent",
+        "no_additions",
+    ] {
+        let mut child = Command::new(env::current_exe().unwrap());
+        child
+            .args([
+                "--exact",
+                "cargo::flags::tests::caller_flags_and_release_remaps_reach_cargo",
+                "--nocapture",
+            ])
+            .env(CASE_ENV, case)
+            .env_remove("RUSTFLAGS")
+            .env_remove("CARGO_ENCODED_RUSTFLAGS");
+        if case != "absent" {
+            child.env("RUSTFLAGS", "--cfg caller_ordinary");
+        }
+        match case {
+            "encoded" | "no_additions" => {
+                child.env("CARGO_ENCODED_RUSTFLAGS", "--cfg\x1fcaller_encoded");
+            }
+            "empty" => {
+                child.env("CARGO_ENCODED_RUSTFLAGS", "");
+            }
+            "whitespace" => {
+                child.env("RUSTFLAGS", "\t--cfg  caller_ordinary\n");
+            }
+            _ => {}
+        }
+        let output = child.output().unwrap();
+        assert!(
+            output.status.success(),
+            "{case}: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 }

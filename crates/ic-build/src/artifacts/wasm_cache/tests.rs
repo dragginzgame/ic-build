@@ -443,8 +443,8 @@ fn compact_feature_arguments_watch_enabled_optional_dependencies() {
 fn builders_preserve_os_native_values() {
     let spec = WasmBuildSpec::new(Path::new("."), Path::new("target"), &["fixture"])
         .with_cargo_profile_args([OsString::from("--locked")])
-        .with_extra_env([(OsString::from("MODE"), OsString::from("exact"))])
-        .with_inherited_env([OsString::from("RUSTFLAGS")])
+        .with_extra_env([("MODE", "exact"), ("RUSTFLAGS", "")])
+        .with_inherited_env(["RUSTFLAGS", "PATH", "IC_BUILD_TEST_ABSENT_38D9C64"])
         .with_additional_inputs([PathBuf::from("schema")]);
 
     assert_eq!(spec.cargo_selection.arguments, [OsString::from("--locked")]);
@@ -454,6 +454,30 @@ fn builders_preserve_os_native_values() {
     );
     assert!(spec.inherited_env.contains(&OsString::from("RUSTFLAGS")));
     assert_eq!(spec.additional_inputs, [PathBuf::from("schema")]);
+    let environment = super::effective_environment(&spec);
+    assert_eq!(environment[&OsString::from("MODE")], Some("exact".into()));
+    assert_eq!(environment[&OsString::from("RUSTFLAGS")], Some("".into()));
+    assert_eq!(
+        environment[&OsString::from("PATH")],
+        std::env::var_os("PATH")
+    );
+    assert_eq!(
+        environment[&OsString::from("IC_BUILD_TEST_ABSENT_38D9C64")],
+        None
+    );
+    for name in super::AUTOMATIC_ENVIRONMENT {
+        if *name != "RUSTFLAGS" {
+            assert_eq!(environment[&OsString::from(name)], std::env::var_os(name));
+        }
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStringExt as _;
+        let name = OsString::from_vec(b"NATIVE_\xff".to_vec());
+        let value = OsString::from_vec(b"value_\xff".to_vec());
+        let spec = spec.with_extra_env([(name.clone(), value.clone())]);
+        assert_eq!(super::effective_environment(&spec)[&name], Some(value));
+    }
 }
 
 #[test]

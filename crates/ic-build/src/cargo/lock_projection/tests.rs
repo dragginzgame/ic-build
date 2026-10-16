@@ -105,19 +105,58 @@ fn missing_duplicate_and_wrong_prior_workspace_records_refuse() {
 
 #[test]
 fn projects_a_coherent_multi_package_family() {
-    let before = "version=4\n[[package]]\nname=\"one\"\nversion=\"0.1.0\"\n[[package]]\nname=\"two\"\nversion=\"0.1.0\"\n";
+    let before = "version=4\n[[package]]\nname=\"one\"\nversion=\"0.1.0\"\n[[package]]\nname=\"one\"\nversion=\"9.0.0\"\nsource=\"registry+test\"\n[[package]]\nname=\"two\"\nversion=\"0.1.0\"\n";
     let changes = [
         WorkspaceVersionProjection {
-            package: "one",
+            package: "two",
             ..projection()
         },
         WorkspaceVersionProjection {
-            package: "two",
+            package: "one",
             ..projection()
         },
     ];
     verify_workspace_version_projection(before, &before.replace("0.1.0", "0.1.1"), &changes)
         .unwrap();
+}
+
+#[test]
+fn projection_refusals_preserve_caller_order_and_prior_version_precedence() {
+    let app = projection();
+    let missing = WorkspaceVersionProjection {
+        package: "missing",
+        ..app
+    };
+    let wrong_prior = WorkspaceVersionProjection {
+        previous: "wrong",
+        ..app
+    };
+    assert!(matches!(
+        verify_workspace_version_projection(BEFORE, "invalid [", &[missing, wrong_prior]),
+        Err(LockProjectionError::PackageSelection { package, matches: 0 }) if package == "missing"
+    ));
+    assert!(matches!(
+        verify_workspace_version_projection(BEFORE, "invalid [", &[wrong_prior, missing]),
+        Err(LockProjectionError::PreviousVersion { package }) if package == "app"
+    ));
+    for versions in [["0.1.0", "wrong"], ["wrong", "0.1.0"]] {
+        let before = versions
+            .map(|version| format!("[[package]]\nname='app'\nversion='{version}'\n"))
+            .concat();
+        assert!(matches!(
+            verify_workspace_version_projection(&before, "invalid [", &[app]),
+            Err(LockProjectionError::PreviousVersion { .. })
+        ));
+    }
+    for invalid in [
+        vec![app, app],
+        vec![WorkspaceVersionProjection { next: "", ..app }],
+    ] {
+        assert!(matches!(
+            verify_workspace_version_projection("invalid [", "invalid [", &invalid),
+            Err(LockProjectionError::InvalidSelection)
+        ));
+    }
 }
 
 #[test]

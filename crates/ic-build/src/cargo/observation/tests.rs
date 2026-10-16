@@ -210,6 +210,26 @@ fn shell(script: &str) -> Command {
 #[test]
 #[cfg(unix)]
 fn caller_command_and_environment_are_preserved() {
+    for (names, expected) in [
+        (vec![], vec!["--no-default-features"]),
+        (
+            vec!["z", "a", "a"],
+            vec!["--no-default-features", "--features", "a,z"],
+        ),
+        (
+            vec!["a", ""],
+            vec!["--no-default-features", "--features", ",a"],
+        ),
+        (vec![""], vec!["--no-default-features", "--features", ""]),
+    ] {
+        let selection = CargoFeatureSelection {
+            features: names.into_iter().map(str::to_owned).collect(),
+            default_features: false,
+        };
+        let mut command = Command::new("unused");
+        selection.configure(&mut command);
+        assert_eq!(command.get_args().collect::<Vec<_>>(), expected);
+    }
     let root = fixture();
     let manifest = root.join("Cargo.toml");
     let args = root.join("observed-args");

@@ -6,6 +6,7 @@ mod support;
 use ic_build::cargo::packages::{
     PackageArchiveSpec, PackageQualificationLimits, qualify_package_archives,
 };
+use ic_host_artifacts::artifact::Sha256Digest;
 use ic_host_process::tool::{OutputLimit, OutputLimits};
 use std::{fs, os::unix::fs::PermissionsExt as _, process::Command};
 
@@ -65,13 +66,21 @@ fn real_package_qualification_retains_exact_graph_and_source_inventory() {
     )
     .unwrap();
     assert_eq!(fs::read(root.join("Cargo.lock")).unwrap(), entry_lock);
+    let archive = fs::read(root.join("target/package/qualification-fixture-0.1.0.crate")).unwrap();
+    assert_eq!(
+        fs::read(evidence.join("archive.sha256")).unwrap(),
+        format!("{}\n", Sha256Digest::compute(&archive)).as_bytes()
+    );
     let original = fs::read(evidence.join("entry-sources.json")).unwrap();
     assert_eq!(
         original,
         fs::read(evidence.join("final-sources.json")).unwrap()
     );
     let inventory: serde_json::Value = serde_json::from_slice(&original).unwrap();
-    assert!(inventory["qualification-fixture-0.1.0/src/lib.rs"]["sha256"].is_string());
+    assert_eq!(
+        inventory["qualification-fixture-0.1.0/src/lib.rs"]["sha256"],
+        Sha256Digest::compute(&fs::read(root.join("src/lib.rs")).unwrap()).to_string()
+    );
     assert!(inventory["qualification-fixture-0.1.0/src/lib.rs"]["mode"].is_number());
     for name in ["test-targets.json", "test-docs.json", "admitted-Cargo.lock"] {
         assert!(evidence.join(name).is_file());

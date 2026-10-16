@@ -74,6 +74,9 @@ fn isolated_build_records_retain_cold_and_warm_artifacts() {
     let reused = build_wasm_canisters_cached(&isolated_wasm_spec(&root, "A")).unwrap();
     assert!(reused.is_reused());
     let record = reused.record().clone();
+    assert_eq!(&record, reused.record());
+    assert!(format!("{record:?}").contains(&format!("artifacts: {:?},", record.artifacts())));
+    assert!(format!("{record:#?}").contains("artifacts: [\n"));
     assert_eq!(record.exact_cache_path(), entry);
     let path = record.artifacts()[0].clone();
     drop(first);

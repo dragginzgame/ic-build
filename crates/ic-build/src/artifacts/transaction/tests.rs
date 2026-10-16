@@ -181,7 +181,8 @@ fn cargo_snapshot_keys_semantic_identity_and_guards_raw_workspace_inputs() {
     assert_eq!(before_key, resolve_key(&reordered).unwrap().key);
     let duplicate = before_spec
         .clone()
-        .with_cargo_build_inputs("canister", &build_spec, &before);
+        .with_cargo_build_inputs("canister", &build_spec, &before)
+        .with_cargo_build_inputs("aaa", &build_spec, &before);
     expect_invalid_spec(prepare_artifact_cache(&duplicate));
     assert!(
         !root.join("cache").exists(),
@@ -413,6 +414,12 @@ fn multi_output_commit_is_complete_and_name_order_independent() {
         resolve_key(&reordered).unwrap().key
     );
     let transaction = expect_build(prepare_artifact_cache(&spec).expect("prepare miss"));
+    for name in ["aaa", "role-c.wasm", "zzz"] {
+        assert!(matches!(
+            transaction.output_path(name),
+            Err(ArtifactCacheError::UnknownOutput { name: unknown }) if unknown == name
+        ));
+    }
     for (name, contents) in [
         ("root.wasm", b"root".as_slice()),
         ("role-b.wasm", b"role-b".as_slice()),
@@ -673,6 +680,18 @@ fn manifest_read_bound_preserves_writer_widths_and_byte_lengths() {
             }
         }
     }
+    let mut insufficient = &mut [0_u8; 1][..];
+    let error = super::write_manifest(
+        &mut insufficient,
+        key,
+        &spec,
+        std::iter::repeat(FileDigest {
+            bytes: 0,
+            digest: key,
+        }),
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), std::io::ErrorKind::WriteZero);
 }
 
 #[test]
@@ -699,6 +718,7 @@ fn malformed_manifests_and_nondirectory_entries_are_rebuilt() {
     );
     let invalid_manifests = [
         vec![0xff, 0xfe],
+        manifest.as_bytes()[..manifest.len() - 1].to_vec(),
         manifest
             .replace("ic-testkit-artifact-set-v1", "invalid-format")
             .into_bytes(),
@@ -1214,12 +1234,14 @@ fn invalid_specifications_are_rejected_before_acquisition() {
         ArtifactCacheSpec::new(&cache, "namespace", "recipe/v1")
             .with_identity_bytes("identity", b"one")
             .with_identity_bytes("identity", b"two")
+            .with_identity_bytes("aaa", b"earlier")
             .with_output("output", &output),
         ArtifactCacheSpec::new(&cache, "namespace", "recipe/v1")
             .with_environment([("", "value")])
             .with_output("output", &output),
         ArtifactCacheSpec::new(&cache, "namespace", "recipe/v1")
             .with_output("same", &output)
+            .with_output("aaa", &root.join("earlier"))
             .with_output("same", &root.join("other")),
         ArtifactCacheSpec::new(&cache, "namespace", "recipe/v1")
             .with_output("first", &output)
@@ -1470,6 +1492,11 @@ fn retained_corrupt_entry_fails_closed_until_consumer_releases_it() {
         .with_output("output", &root.join("output"));
     let outcome = build_output(&spec, b"valid");
     let retained = outcome.record().clone();
+    assert_eq!(&retained, outcome.record());
+    for debug in [format!("{retained:?}"), format!("{retained:#?}")] {
+        assert!(debug.contains("artifacts: ["));
+        assert!(debug.contains("ArtifactCacheArtifact {"));
+    }
     let path = retained.artifacts()[0].path().to_owned();
     drop(outcome);
     // Simulate external corruption: recovery must not replace a live entry.

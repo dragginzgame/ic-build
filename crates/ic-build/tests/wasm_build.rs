@@ -1218,7 +1218,12 @@ fn source_race_invalidates_every_prepared_snapshot_reader() {
     let report = thread::scope(|scope| {
         let worker = scope.spawn(|| {
             snapshot
-                .build_batch(&specs, WasmBuildBatchConfig::new())
+                .build_batch_with_progress(
+                    &specs,
+                    WasmBuildBatchConfig::new(),
+                    WasmBuildProgressConfig::new(),
+                    |_| {},
+                )
                 .expect("valid prepared race-test batch")
         });
         wait_for_path(&started, "build start", Duration::from_secs(10)).expect("build start");

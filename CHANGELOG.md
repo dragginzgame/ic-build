@@ -3,6 +3,24 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.11.1]
+
+- Compare retained manifests through Host's streaming matcher and one shared
+  encoder, centralize batch source-lease invalidation, and format Cargo arguments
+  without temporary join vectors. Preserve retained bytes, failure timing and
+  empty-argument/environment precedence.
+- Collect batch discovery results directly, retain binary archive digests until
+  evidence formatting, and index lockfile projection selections once. Preserve
+  indexed failures, evidence bytes and refusal ordering.
+- Correct consumer setup guidance to use published Build 0.11 and the aligned
+  Host 0.23 family, distinguishing producer CI from consumer qualification
+  ([#9 — Qualify consumers against the current exposed Host boundary](https://github.com/dragginzgame/ic-build/issues/9)).
+- Use canonical label ordering for transaction duplicate checks and output lookup,
+  and collect effective environment values without an intermediate name set.
+  Preserve validation order, diagnostics and build fingerprints.
+- Share immutable artifact inventories across acquisition record clones while
+  preserving slice accessors, Debug output and last-owner retention.
+
 ## [0.11.0] - 2026-10-16
 
 - **Breaking:** align exposed Host types with the incoming Host 0.23.1 selection.

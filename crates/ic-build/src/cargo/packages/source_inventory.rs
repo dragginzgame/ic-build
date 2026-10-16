@@ -128,7 +128,7 @@ fn inventory(
         let mode = metadata.permissions().readonly();
         files.insert(
             path.strip_prefix(root)?.to_owned(),
-            serde_json::json!({"sha256": super::hash(path, limits.file_bytes)?, "mode": mode}),
+            serde_json::json!({"sha256": super::hash(path, limits.file_bytes)?.to_string(), "mode": mode}),
         );
     } else {
         return Err(format!("unsupported extracted source entry: {}", path.display()).into());

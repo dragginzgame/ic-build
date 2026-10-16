@@ -1,8 +1,9 @@
 # Artifact and Wasm build APIs
 
-Examples use the pending 0.9 constructor API. Upgrade callers by removing the
+Examples use the published 0.11 API. When upgrading from before 0.9, remove the
 fourth argument from `WasmBuildSpec::new`; keep Cargo profile arguments in
-`with_cargo_profile_args`. This checkout has no published 0.9 release yet.
+`with_cargo_profile_args`. Align direct Host dependencies with the 0.23 family
+when passing Host values through Build's public APIs.
 
 These generic APIs are extracted from IC Testkit. Recipes, budgets, tool
 selection, credentials, source custody and lifecycle remain with the caller.
@@ -128,8 +129,8 @@ or lowercase file SHA-256. Capture preserves native paths; this particular diges
 encoding refuses non-UTF-8 paths. Existing cache domains and field encoding remain
 unchanged. Consumers keep their record formats and namespaces.
 
-Pending 0.7.0 adds `digest_relative_to(root)` for descriptive source fingerprints
-that survive checkout relocation. It projects the same captured facts using
+IC Build 0.7.0 and newer provide `digest_relative_to(root)` for descriptive source
+fingerprints that survive checkout relocation. It projects the same captured facts using
 sorted UTF-8 relative labels with `/` separators and the existing field framing.
 The root must be absolute; parent traversal, outside inputs and non-UTF-8 relative
 names refuse. Standard path-component normalization applies. Projection reads no
@@ -203,8 +204,8 @@ admits the destination and owns replacement policy, subsequent custody and
 cleanup. `CaptureRetentionError` preserves the native I/O cause, the actual
 retained file path and the staging directory: rename refusal leaves the original
 capture, while cleanup refusal leaves the final file and any extra evidence.
-Neither failure retries or deletes retained bytes. The API is additive pending
-0.3.3; Jobs adoption follows publication at
+Neither failure retries or deletes retained bytes. The API is published since
+0.3.3; Jobs owns its consumer adoption at
 [#26 — Capture finalization](https://github.com/dragginzgame/ic-build/issues/26).
 
 These temporary owners create no cache entry, cache hit or release admission.
@@ -261,7 +262,8 @@ establish Query adoption or native smoke qualification.
 
 ## Strict Cargo lockfile version projections
 
-Pending 0.7.0 provides `cargo::lock_projection::verify_workspace_version_projection`.
+IC Build 0.7.0 and newer provide
+`cargo::lock_projection::verify_workspace_version_projection`.
 Pass saved before/after TOML and explicit `WorkspaceVersionProjection` entries
 containing each unsourced package name, expected prior version and permitted next
 version. The verifier compares the complete parsed lockfiles after projecting only
@@ -278,7 +280,7 @@ that broader transformation is deliberately refused by this strict contract.
 
 ## Inherited Cargo Rust flags
 
-Pending 0.7.0 provides `cargo::flags::combined_encoded_rustflags(&extra_flags)`.
+IC Build 0.7.0 and newer provide `cargo::flags::combined_encoded_rustflags(&extra_flags)`.
 Pass each additional argument as a separate `String`; when it returns `Some`,
 set that value as `CARGO_ENCODED_RUSTFLAGS` on the Cargo command. An empty slice
 returns `None`, so leave the command's inherited flags unchanged.
@@ -881,7 +883,7 @@ drop(build); // Retain the cache entry until consumption finishes.
 ```
 
 The caller chooses the byte limit; failures are typed rather than panics.
-The pending 0.4 API removes `wasm_path` and `wasm_artifacts_ready`. Consumers
+The 0.4 API removed `wasm_path` and `wasm_artifacts_ready`. Consumers
 obtain verified outputs from retained records. Path construction needed only
 by fixtures stays in consumer test support.
 Paths must be caller-controlled; symbolic links are allowed. Reading bytes does
@@ -892,11 +894,11 @@ resolution, execution and Git provenance belong to `ic_host_process`; Candid
 extraction and response decoding belong to `ic_host_tools`. Its pure Candid text
 APIs are portable; extraction, execution, resolution and provenance are Unix-only.
 Structural Wasm inspection does not replace PocketIC's runtime validation.
-IC Build 0.8 and pending 0.9 require compatible IC Host 0.21 releases at the
-public dependency boundary. Retained staging still
-uses checked native permission conversion on macOS. Align direct Host dependencies
-when passing `OutputLimits` or matching typed Host failures across the engine
-boundary. Host 0.20 and 0.21 values have different Rust crate identities even
+IC Build 0.11 requires compatible IC Host 0.23 releases at the
+public dependency boundary; release 0.11.0 qualifies Host 0.23.1. Retained staging
+still uses checked native permission conversion on macOS. Align direct Host
+dependencies when passing `OutputLimits`, `CleanupPolicy` or matching typed Host
+failures across the engine boundary. Host 0.22 and 0.23 values have different Rust crate identities even
 when their fields match. The earlier IC Build 0.2.0 boundary also means an
 `ic-build = "0.1"` requirement does not select this engine. Process execution returns completed
 results even for nonzero exits: call `require_success()` before admitting or

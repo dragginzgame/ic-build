@@ -1,5 +1,103 @@
 # Current handoff
 
+## Manifest comparison, batch finalization and argument formatting — pending 0.11.1
+
+This compatible batch extends incoming changes over released 0.11.0 `dff188f`.
+Cold publication and cache-hit comparison share one byte encoder; the latter uses
+Host's published MatchingWriter instead of allocating another full manifest.
+Bounded reads and the early header check remain before output inspection. Short,
+altered and trailing retained bytes refuse, and encoder sink errors propagate.
+The existing batch finalizer owns source-change invalidation for silent and
+observed acquisitions, sampling total elapsed time after invalidation as before.
+Cargo feature and ordinary Rust-flag strings are built without temporary join
+vectors; canonical order, empty names/arguments and environment precedence remain.
+
+On actual Rust 1.91, 51 focused units and three integration parents pass, including
+the explicitly dispatched process workers and six isolated Cargo flag scenarios.
+Evidence covers retained manifest bytes/bounds, truncation, encoder write failure,
+cross-process cache reuse, silent session invalidation and observed prepared-reader
+invalidation during actual Wasm compilation. Synthetic Wasm batch producers remain
+separate from those actual Cargo/Wasm cases. Actual MSRV all-target checking and
+strict all-target Clippy pass after splitting the expanded flag fixture's parent
+driver and correcting its test-only lint findings. Formatting and links pass.
+Full release/native macOS gates remain unrun for these unpublished changes.
+Own versions, selected graph, Git index/refs, unrelated edits and artifacts are
+preserved. Task before-images remain under
+`/tmp/ic-build-manifest-finalizer-20261016.BjWKCT/before/`.
+
+## Batch discovery, archive identities and projection indexing — pending 0.11.1
+
+This compatible batch extends the incoming working changes over released 0.11.0
+`dff188f`. Batch discovery populates its success list and indexed failure slots
+directly within the existing discovery phase, removing the intermediate result
+vector while retaining collect-all order, independent failures and timing ownership.
+Archive verification retains Host's binary digest until writing evidence; archive
+hash lines and source-inventory JSON keep their original hexadecimal representation.
+Lockfile version projection indexes selected names and unsourced package rows once,
+then applies changes in caller order and checks matching rows in original order.
+Missing/ambiguous selection, prior-version and parse refusal precedence is preserved.
+
+On actual Rust 1.91, 31 focused units and the real Cargo archive qualification
+integration pass. Coverage includes malformed/shared metadata, mixed batch results,
+session/prepared reuse, complete fresh/batched snapshot parity, retained fingerprint
+bytes, lockfile error precedence and exact archive/source evidence. Package and
+lockfile fixtures execute native Cargo; synthetic Wasm producers qualify batch
+mechanics without establishing native Wasm compiler coverage. Strict all-target
+Clippy, actual MSRV all-target checking, formatting and links pass on Linux.
+Full release and native macOS gates remain unrun for these unpublished changes.
+Own versions, dependency selection, index/refs, unrelated edits and artifacts are
+preserved. Task before-images remain at
+`/tmp/ic-build-batch-lock-digests-20261016.rdgLxg/before/`.
+
+## Delivered issue/PR reconciliation and consumer guidance — pending 0.11.1
+
+Registry 0.11.0 is verified from `dff188fe27136054a91044900ae1cd607669d870`:
+the sparse index and downloaded archive agree on SHA-256
+`260e3b9871c838623dfd6b85554274289a981d1c11e1087752560349c679d122`, and its
+VCS receipt names that source. The exact
+[release CI](https://github.com/dragginzgame/ic-build/actions/runs/38916316699)
+passes Linux, native macOS 15 Intel/Apple Silicon and lint/security. The maintained
+producer implementations and tests satisfy issues
+[#22 — Caller-bounded input probes](https://github.com/dragginzgame/ic-build/issues/22),
+[#28 — Strict lockfile projections](https://github.com/dragginzgame/ic-build/issues/28),
+[#30 — Native Cargo executable selection](https://github.com/dragginzgame/ic-build/issues/30),
+[#39 — Shared release preflight](https://github.com/dragginzgame/ic-build/issues/39) and
+[#40 — Relocatable source fingerprints](https://github.com/dragginzgame/ic-build/issues/40); they are closed with
+release-bound evidence and separate consumer trackers. Conflicting PRs
+[#31](https://github.com/dragginzgame/ic-build/pull/31) and
+[#48](https://github.com/dragginzgame/ic-build/pull/48) are closed as superseded,
+without merging or deleting their branches.
+
+README and the artifact guide now select published Build 0.11/Host 0.23 and
+distinguish this delivered producer matrix from consumer/application acceptance.
+The current unpublished 0.11.1 source below retains only its focused Linux proof.
+This documentation/issue pass preserves those incoming Rust edits, own versions,
+the selected dependency graph, index/refs and artifacts. Documentation links and
+diff checks pass; no compilation or release runs for these prose-only changes.
+
+## Canonical labels, environment collection and shared inventories — pending 0.11.1
+
+This compatible batch starts from clean release commit `dff188f` (0.11.0).
+Transaction validation checks adjacent canonical labels instead of building three
+temporary sets; output lookup uses binary search over the admitted sorted list.
+Input/tool labels and destination uniqueness retain their separate checks, and
+per-entry validation/error ordering is preserved. Effective environment collection
+populates its final ordered map directly, observing each unique ambient name once
+and retaining explicit override precedence, unset and OS-native values.
+Acquisition record clones share immutable artifact inventories through Arc slices;
+public slice accessors, equality, Debug lists and last-owner retention remain intact.
+
+On actual Rust 1.91, 40 distinct focused units and four process handoff integration
+parents pass, including their dispatched consumer workers. Evidence covers sorted
+duplicate admission, known/unknown output lookup, environment identity, retained
+fingerprints, corruption refusal, clone equality/Debug and cross-process pruning
+through final drop or consumer termination. Synthetic Wasm producers exercise
+native process/filesystem mechanics, not native Wasm compiler qualification.
+Actual MSRV all-target checking, strict all-target Clippy, formatting and links
+pass on Linux. Full release gates and native macOS qualification remain unrun.
+The compatible draft is 0.11.1; package versions, dependency graph, Git index/refs
+and retained artifacts are unchanged.
+
 ## Snapshot assembly, JSON scratch and Debug projections — pending 0.11.0
 
 This compatible cleanup extends the existing dirty work over `95567eb` and its

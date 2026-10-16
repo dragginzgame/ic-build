@@ -23,11 +23,14 @@ pub fn combined_encoded_rustflags(extra_flags: &[String]) -> Option<String> {
     }
 
     let mut combined = env::var("CARGO_ENCODED_RUSTFLAGS").unwrap_or_else(|_| {
-        env::var("RUSTFLAGS")
-            .unwrap_or_default()
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join("\x1f")
+        let mut encoded = String::new();
+        for flag in env::var("RUSTFLAGS").unwrap_or_default().split_whitespace() {
+            if !encoded.is_empty() {
+                encoded.push('\x1f');
+            }
+            encoded.push_str(flag);
+        }
+        encoded
     });
     for flag in extra_flags {
         if !combined.is_empty() {

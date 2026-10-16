@@ -323,12 +323,8 @@ fn identifier(value: &str) -> bool {
 fn read(path: &Path, limit: usize) -> Result<Vec<u8>, Cause> {
     Ok(ic_host_fs::read::read_file_no_follow(path, limit)?)
 }
-fn hash(path: &Path, limit: usize) -> Result<String, Cause> {
-    Ok(
-        ic_host_fs::read::hash_file_no_follow(path, u64::try_from(limit)?)?
-            .sha256
-            .to_string(),
-    )
+fn hash(path: &Path, limit: usize) -> Result<Sha256Digest, Cause> {
+    Ok(ic_host_fs::read::hash_file_no_follow(path, u64::try_from(limit)?)?.sha256)
 }
 
 fn execute(
