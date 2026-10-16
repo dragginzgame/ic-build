@@ -1,5 +1,23 @@
 # Current handoff
 
+## Published Host 0.22.1 boundary — pending 0.10.0
+
+The public Cargo/artifact capture boundary now selects Host 0.22.1 instead of
+0.21. This is a minor hard cut for callers passing Host limits or matching typed
+Host errors; package metadata remains 0.9.0 until the maintainer releases it.
+All byte publications explicitly retain Replace and umask-filtered 0o666 staging.
+Cache formats, publication/recovery semantics and build deadlines are unchanged.
+This supplies the prerequisite for Testkit’s direct published Host HTTP adoption.
+
+Against the actual registry family, all 168 focused artifact cases and six
+Cargo-observation cases pass, with strict all-target Clippy, actual Rust 1.91
+all-target checks, warning-denied Rustdoc and formatting. Source and logs are at
+`/tmp/testkit-049-http-command-startup-hmcq9x34/build-host022/` and its parent.
+Only the three Host packages change in the lock selection. Native macOS, full
+CI and consumer publication remain separate owner acceptance. The controlled
+probe deletion remains a separately prepared patch until Host PR #99 is published.
+Normal sibling checkouts and retained caches are untouched.
+
 ## Derived Cargo profile directories — pending 0.9.0
 
 From released 0.8.0 `0a8b9667ff9e2d7927a6ca8961b7d463de396a77`, the Wasm

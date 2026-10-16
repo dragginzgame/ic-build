@@ -5058,12 +5058,18 @@ fn write_artifact_stamp(
     if preserve_matching && destination_matches_bytes(&stamp_path, stamp.as_bytes()) {
         return Ok(());
     }
-    ic_host_fs::durable::write_bytes(&stamp_path, stamp.as_bytes()).map_err(|source| {
-        WasmBuildError::Io {
-            operation: "publish Wasm build stamp",
-            path: stamp_path,
-            source: io::Error::other(source),
-        }
+    ic_host_fs::durable::write_bytes(
+        &stamp_path,
+        ic_host_fs::durable::WriteOptions {
+            mode: ic_host_fs::durable::PublicationMode::Replace,
+            permissions: 0o666,
+        },
+        stamp.as_bytes(),
+    )
+    .map_err(|source| WasmBuildError::Io {
+        operation: "publish Wasm build stamp",
+        path: stamp_path,
+        source: io::Error::other(source),
     })
 }
 

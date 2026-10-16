@@ -797,6 +797,10 @@ impl ArtifactBuildTransaction {
             manifest_contents(self.resolved.key, &self.spec, output_info.iter().copied());
         ic_host_fs::durable::write_bytes(
             &self.staging_directory.path().join(MANIFEST_FILE),
+            ic_host_fs::durable::WriteOptions {
+                mode: ic_host_fs::durable::PublicationMode::Replace,
+                permissions: 0o666,
+            },
             manifest.as_bytes(),
         )
         .map_err(|source| ArtifactCacheError::Io {

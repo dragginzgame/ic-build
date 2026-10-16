@@ -65,8 +65,8 @@ framing and source custody. Configuration contents are excluded from returned
 facts and failure diagnostics. Observation executes no Cargo commands and does
 not establish build or release validity.
 
-IC Build 0.8 and pending 0.9 use IC Host 0.21 at the public grouping/capture boundary;
-align direct Host dependencies before passing
+Pending IC Build 0.10 uses published IC Host 0.22.1 at the public grouping/capture
+boundary; released 0.9 uses Host 0.21. Align direct Host dependencies before passing
 `OutputLimits` or typed Host failures across that boundary.
 The [deployable-Wasm LTO guidance](docs/artifacts.md#deployable-wasm-lto) records
 whole-canister measurements and shows how a common adapter can apply full LTO

@@ -3,6 +3,16 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.10.0]
+
+- **Breaking:** align public Host limits and failures with published IC Host 0.22.1.
+  Consumers passing Host values across the build boundary must select the same
+  minor family and rebuild. This enables Testkit’s direct Host HTTP-fixture adoption
+  ([#9 — Qualify consumers against the current exposed Host boundary](https://github.com/dragginzgame/ic-build/issues/9)).
+- Preserve cache publication modes, umask-filtered permissions and retained v1
+  formats while selecting explicit Host byte-write options. No retained-cache
+  reset is required.
+
 ## [0.9.0] - 2026-10-16
 
 - **Breaking:** remove the fourth, output-directory argument from

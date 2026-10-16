@@ -874,7 +874,15 @@ mod tests {
             assert_eq!(streamed.digest, digest_bytes("streaming-test-v1", data));
         }
 
-        ic_host_fs::durable::write_bytes(&destination, b"old").expect("write original destination");
+        ic_host_fs::durable::write_bytes(
+            &destination,
+            ic_host_fs::durable::WriteOptions {
+                mode: ic_host_fs::durable::PublicationMode::Replace,
+                permissions: 0o666,
+            },
+            b"old",
+        )
+        .expect("write original destination");
         assert_eq!(
             copy_file_atomic(&source, &destination).expect("copy source atomically"),
             u64::try_from(contents.len()).expect("fixture length must fit in u64")
