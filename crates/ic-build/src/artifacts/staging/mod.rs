@@ -14,60 +14,12 @@ use std::{
 use ic_host_artifacts::artifact::{ArtifactError, CopyError, copy_reader};
 use ic_host_fs::{
     durable::{NamedWriteError, PublicationMode, WriteOptions, write_with},
+    owned_directory::{OwnedDirectory, remove_path_if_present},
     read::open_regular_file,
 };
 
-use super::cache_fs::remove_path_if_present;
-
 const STAGE_ATTEMPTS: usize = 64;
 static STAGE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
-
-#[derive(Debug)]
-pub(super) struct OwnedDirectory {
-    path: PathBuf,
-    armed: bool,
-}
-
-impl OwnedDirectory {
-    pub(super) const fn new(path: PathBuf) -> Self {
-        Self { path, armed: true }
-    }
-
-    pub(super) fn path(&self) -> &Path {
-        &self.path
-    }
-
-    pub(super) const fn is_armed(&self) -> bool {
-        self.armed
-    }
-
-    pub(super) const fn disarm(&mut self) {
-        self.armed = false;
-    }
-
-    pub(super) fn preserve(mut self) {
-        self.disarm();
-    }
-
-    pub(super) fn try_cleanup(&mut self) -> io::Result<()> {
-        remove_path_if_present(&self.path)?;
-        self.disarm();
-        Ok(())
-    }
-
-    pub(super) fn cleanup(mut self) -> io::Result<()> {
-        self.try_cleanup()
-    }
-}
-
-impl Drop for OwnedDirectory {
-    fn drop(&mut self) {
-        if self.armed {
-            let _ = remove_path_if_present(&self.path);
-            self.disarm();
-        }
-    }
-}
 
 /// Temporary artifact directory retained until its owner is closed or dropped.
 ///

@@ -24,6 +24,14 @@ preserved through a shared execution path.
 
 ## Implemented ownership
 
+Pending Build 0.12's Unix `artifacts::candid` moves native extraction
+orchestration out of Host Tools, over Host hashing and admitted execution.
+Host 0.24 removes the former extraction owner without an alias. Tools retains
+Candid/IC interpretation; Text retains normalization. Consumers retain source
+leases, tools, budgets, environment, text/grammar policy and publication.
+Producer and consumer acceptance remain separate under
+[#51](https://github.com/dragginzgame/ic-build/issues/51).
+
 | Consumer | Shared owner and retained consumer responsibility |
 | --- | --- |
 | Canic | IC Build supplies grouping, declaration-cache transactions, captured outputs, staging, standalone input evidence and strict depfile discovery. Canic retains recipes, source custody, transforms and complete-release admission. |
@@ -73,7 +81,8 @@ have a separate implementation with additional release-specific guarantees.
 | Hashing, bounded streams, gzip and raw Wasm structural facts | ic-host-artifacts |
 | Filesystem admission, durable writes and lock primitives | ic-host-fs |
 | Process execution, output capture, cancellation and cleanup | ic-host-process |
-| Candid extraction and common IC artifact interpretation | ic-host-tools; generic service interpretation is a proposed contract expansion |
+| Native Candid extraction orchestration | IC Build (pending 0.12); consumers retain tool and source admission |
+| Common IC artifact interpretation | ic-host-tools |
 | Common executable installation, storage and portable repository tooling | Shared Tooling |
 | Role selection, declaration/runtime build choices, generated infrastructure, release IDs and release manifests | Canic |
 | PocketIC, test lifecycle and fixture-specific requirements | IC Testkit |

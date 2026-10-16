@@ -1,5 +1,6 @@
-use super::{ArtifactStagingDirectory, CapturedArtifact, OwnedDirectory};
+use super::{ArtifactStagingDirectory, CapturedArtifact};
 use crate::fs_fixture::unique_temp_directory;
+use ic_host_fs::owned_directory::OwnedDirectory;
 use std::{fs, io};
 
 #[test]

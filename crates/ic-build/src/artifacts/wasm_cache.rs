@@ -3,6 +3,7 @@ use crate::cargo::{
     observation::schema,
     selection::{CargoSelection, SelectionFlag},
 };
+use ic_host_fs::owned_directory::{OwnedDirectory, remove_path_if_present};
 use ic_host_process::{
     child::{CleanupPolicy, OwnedChild},
     tool::{
@@ -41,14 +42,13 @@ use super::{
         ensure_cache_directory_tag as ensure_cache_tag, is_sha256_directory, lock_cache_file,
         lock_cache_file_with_wait_observer, perform_scheduled_cache_maintenance,
         prune_direct_child_directories, record_cache_entry_use as record_entry_use,
-        record_cache_maintenance, remove_path_if_present, remove_unretained_entry,
+        record_cache_maintenance, remove_unretained_entry,
     },
     digest::{
         FileDigest, InputDigest, InputHasher, LabeledPathDigestCache, copy_file_atomic,
         destination_matches_bytes, digest_bytes, digest_file, digest_labeled_paths_composable,
         materialize_verified_output, os_bytes, read_stamp_with_limit,
     },
-    staging::OwnedDirectory,
 };
 
 const CACHE_FORMAT_VERSION: &str = "ic-testkit-wasm-build-v1";

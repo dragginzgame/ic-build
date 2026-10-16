@@ -7,6 +7,7 @@ use std::{
 };
 
 use super::digest::read_stamp_with_limit;
+use ic_host_fs::owned_directory::remove_path_if_present;
 
 /// Resolve existing components through symlinks and normalize a missing suffix.
 /// Parent traversal can return from a missing suffix to existing components.
@@ -583,19 +584,6 @@ pub(super) fn is_sha256_directory(path: &Path) -> bool {
         let bytes = name.as_encoded_bytes();
         bytes.len() == 64 && bytes.iter().all(u8::is_ascii_hexdigit)
     })
-}
-
-pub(super) fn remove_path_if_present(path: &Path) -> io::Result<()> {
-    let metadata = match fs::symlink_metadata(path) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => return Err(error),
-    };
-    if metadata.file_type().is_dir() {
-        fs::remove_dir_all(path)
-    } else {
-        fs::remove_file(path)
-    }
 }
 
 struct CacheEntry {

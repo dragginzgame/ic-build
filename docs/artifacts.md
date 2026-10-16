@@ -891,14 +891,25 @@ not validate Wasm; use `ic_host_artifacts::wasm::inspect` for structural facts.
 Stream identities, archives and Wasm inspection belong to `ic_host_artifacts`;
 pathname reads and durable publication belong to `ic_host_fs`; executable
 resolution, execution and Git provenance belong to `ic_host_process`; Candid
-extraction and response decoding belong to `ic_host_tools`. Its pure Candid text
-APIs are portable; extraction, execution, resolution and provenance are Unix-only.
+service interpretation and response decoding belong to `ic_host_tools`.
+Bounded line normalization belongs to `ic_host_text`. Pending Build 0.12 owns
+native extraction through Unix-only `artifacts::candid::extract`: supply an
+admitted tool, absolute source path, execution context, source-byte allowance
+and output limits. It returns source/tool identities and complete raw successful
+process evidence. Changed or unreadable sources after invocation reject while
+retaining output. Extraction does not normalize, parse, cache or publish.
+Callers exclude source/tool writers, choose optional deadlines and admit
+text/grammar separately; before/after digests cannot rule out transient writes.
+Host 0.24 has removed its extraction module/feature; adopt the new Build owner
+when upgrading that graph ([#51](https://github.com/dragginzgame/ic-build/issues/51)).
 Structural Wasm inspection does not replace PocketIC's runtime validation.
 IC Build 0.11 requires compatible IC Host 0.23 releases at the
-public dependency boundary; release 0.11.0 qualifies Host 0.23.1. Retained staging
+public dependency boundary; release 0.11.0 qualifies Host 0.23.1. Pending Build
+0.12 selects registry Host 0.24.0 and changes that public type boundary.
+Retained staging
 still uses checked native permission conversion on macOS. Align direct Host
 dependencies when passing `OutputLimits`, `CleanupPolicy` or matching typed Host
-failures across the engine boundary. Host 0.22 and 0.23 values have different Rust crate identities even
+failures across the engine boundary. Different Host minor families have distinct Rust crate identities even
 when their fields match. The earlier IC Build 0.2.0 boundary also means an
 `ic-build = "0.1"` requirement does not select this engine. Process execution returns completed
 results even for nonzero exits: call `require_success()` before admitting or

@@ -58,6 +58,9 @@
 //! }
 //! ```
 
+#[cfg(unix)]
+pub mod candid;
+
 mod cache_fs;
 mod digest;
 mod inputs;

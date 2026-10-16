@@ -3,6 +3,20 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.12.0]
+
+- **Breaking:** align exposed Host types with registry Host 0.24.0. Consumers
+  passing Host values must select the same Host minor family.
+- Move native Candid extraction from Host Tools into `artifacts::candid`,
+  preserving raw bounded evidence, caller-admitted tools and source-change
+  refusal. Tools, normalization, grammar, custody and publication remain local
+  ([#51](https://github.com/dragginzgame/ic-build/issues/51)).
+- Use Host's owned-directory cleanup and fixed-buffer digest encoding directly;
+  remove the local directory guard/remover and per-file evidence hex allocation
+  without changing cleanup policy or retained fingerprint bytes
+  ([#49](https://github.com/dragginzgame/ic-build/issues/49),
+  [#50](https://github.com/dragginzgame/ic-build/issues/50)).
+
 ## [0.11.1] - 2026-10-16
 
 - Compare retained manifests through Host's streaming matcher and one shared

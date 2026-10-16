@@ -1,5 +1,51 @@
 # Current handoff
 
+## Host 0.24 and native Candid extraction — pending 0.12.0
+
+This batch starts at released 0.11.1 `4fa4fc0`, preserving the incoming
+Host 0.24.0 manifest/lock selection byte-for-byte. The exposed Host type change
+requires a 0.12 boundary; own package versions remain unchanged. Build now calls
+published Host directory custody/removal and fixed-buffer digest encoding
+directly, removing its local guard/remover and per-file evidence hex allocation.
+Retained fingerprints, cleanup policy, source leases and publication stay intact.
+
+The native Candid implementation and eight tests from
+[PR #52](https://github.com/dragginzgame/ic-build/pull/52), head `c2322a5`, are
+reconciled into this working tree over Host 0.24. Host has already removed its
+former extraction module/feature. Build retains raw bounded output, admitted
+source/tool identities and post-success source-change/reinspection failures.
+Consumers retain tools, budgets, environment, normalization, grammar and custody.
+The original PR's green Linux/both-macOS CI qualifies its original head only;
+its branch remains conflicting and unmerged. This local reconciliation is not
+a PR merge or a published API.
+
+On Linux, actual Rust 1.91 passes 139 focused units and six integration parents
+(including explicitly dispatched process workers), covering native extraction,
+staging, transaction cleanup, Wasm-cache cleanup, retained cache handoff and
+real Cargo depfile evidence. All-target MSRV checking, strict all-target current
+Clippy, warning-denied MSRV rustdoc, formatting and documentation links pass.
+Synthetic Wasm producers do not establish native Wasm compiler qualification.
+
+Disposable consumer snapshots use this frozen Build source and registry Host
+0.24, preserving all unrelated external package selections. IcyDB `27035c5`
+passes build-helper all-target checking, strict lint and its real-extractor
+artifact/publication test after the import/feature move. Testkit `34eb530`
+passes its `canister_benchmark` caller check; Query `69881eb` passes its
+`governance_smoke` example check. These last two are compile-only evidence;
+no PocketIC or IC lifecycle ran. Canic `53f1f22` (including its incoming Host
+0.24 selection) fails first in Core's unchanged Memory 0.45 pool/policy/diagnostic
+calls; no Canic acceptance or dependency substitution is claimed.
+
+Publish Build's aligned owner before consumers switch to it. Full release and
+combined-source native macOS gates remain unrun. GitHub
+[#49](https://github.com/dragginzgame/ic-build/issues/49),
+[#50](https://github.com/dragginzgame/ic-build/issues/50),
+[#51](https://github.com/dragginzgame/ic-build/issues/51) and
+[#9](https://github.com/dragginzgame/ic-build/issues/9) retain delivery/acceptance.
+Before-images, frozen source, exact consumer lock deltas, focused logs and the
+IcyDB import/feature patch are under `/tmp/ic-build-host024.Fasjsb/`.
+Sibling source/index/refs and this repository's index/refs are untouched.
+
 ## Manifest comparison, batch finalization and argument formatting — pending 0.11.1
 
 This compatible batch extends incoming changes over released 0.11.0 `dff188f`.

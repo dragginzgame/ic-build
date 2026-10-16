@@ -14,6 +14,14 @@ and build dependency trees match isolated resolution. Consumers own recipes,
 tools, output budgets, source custody, release identities and lifecycle.
 PocketIC stays in Testkit; complete-release admission stays in Canic.
 
+Pending 0.12 moves native Candid extraction from Host Tools into Unix-only
+`artifacts::candid::extract`, over the registry Host 0.24 family. It retains raw
+bounded process evidence and source/tool identities; callers own tool admission,
+limits, environment, normalization, grammar and publication. Before/after hashes
+cannot detect transient writes: callers must retain their source lease. See
+[#51](https://github.com/dragginzgame/ic-build/issues/51) and
+[PR #52](https://github.com/dragginzgame/ic-build/pull/52).
+
 Start with [Build ownership and extraction](docs/design/build-ownership.md).
 It records the inspected build paths, duplicated responsibilities, intended
 owners, retained safety boundaries and extraction sequence. Read the
@@ -77,6 +85,9 @@ probe and capture boundary; release 0.11.0 qualifies Host 0.23.1. Align direct
 Host dependencies before passing `OutputLimits`, `CleanupPolicy` or typed Host
 failures across that boundary. Upgrading Build alone while retaining a different
 Host minor family leaves nominally incompatible Rust types.
+The pending 0.12 source selects Host 0.24.0, including its exposed process types;
+upgrade Build and direct Host requirements together after publication. The
+published dependency example above continues to select the 0.11/Host 0.23 API.
 The [deployable-Wasm LTO guidance](docs/artifacts.md#deployable-wasm-lto) records
 whole-canister measurements and shows how a common adapter can apply full LTO
 through the existing API, with complete-application qualification before adopting

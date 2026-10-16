@@ -1,8 +1,9 @@
+use ic_host_fs::owned_directory::OwnedDirectory;
 #[cfg(unix)]
 use ic_host_process::testing::write_executable_script;
 
 use super::{
-    MetadataPackage, OwnedDirectory, ProgressReporter, SharedIncrementalTargetMaintenanceConfig,
+    MetadataPackage, ProgressReporter, SharedIncrementalTargetMaintenanceConfig,
     SharedIncrementalTargetMaintenanceFailureMode, SharedIncrementalTargetMaintenanceOutcome,
     SharedIncrementalTargetPrunePolicy, WasmBuildBatchInputResolver, WasmBuildError,
     WasmBuildOutcome, WasmBuildOutputStream, WasmBuildProgressConfig, WasmBuildProgressEvent,

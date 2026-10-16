@@ -10,6 +10,7 @@ use crate::artifacts::{
     cache_fs::canonicalize_allow_missing,
     digest::{InputDigest, InputPathError, InputTreeEntry, InputTreeWalk},
 };
+use ic_host_artifacts::artifact::Sha256Digest;
 use sha2::{Digest as _, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -386,7 +387,8 @@ fn digest_values<K: AsRef<str>>(
             InputEvidenceValue::Missing => framed_field(&mut digest, b"absent"),
             InputEvidenceValue::Directory => framed_field(&mut digest, b"directory"),
             InputEvidenceValue::File { sha256 } => {
-                framed_field(&mut digest, sha256.to_hex().as_bytes());
+                let encoded = Sha256Digest::from_bytes(*sha256.as_bytes()).hex_bytes();
+                framed_field(&mut digest, &encoded);
             }
         }
     }

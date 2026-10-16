@@ -12,6 +12,7 @@ use std::{
 };
 
 use ic_host_artifacts::artifact::MatchingWriter;
+use ic_host_fs::owned_directory::{OwnedDirectory, remove_path_if_present};
 
 mod boundaries;
 use boundaries::CargoInputBoundaries;
@@ -22,14 +23,12 @@ use super::{
         LAST_USED_FILE, RetainedCacheEntry, canonicalize_allow_missing, directory_logical_size,
         ensure_cache_directory_tag, is_sha256_directory, lock_cache_file,
         perform_scheduled_cache_maintenance, prune_direct_child_directories,
-        record_cache_entry_use, remove_path_if_present, remove_unretained_entry,
-        try_lock_cache_file,
+        record_cache_entry_use, remove_unretained_entry, try_lock_cache_file,
     },
     digest::{
         FileDigest, InputDigest, InputHasher, copy_file_atomic, digest_bytes, digest_file,
         digest_labeled_paths, materialize_verified_output, os_bytes, read_file_with_limit,
     },
-    staging::OwnedDirectory,
     wasm_cache::{
         ResolvedCargoBuildInputs, WasmBuildError, WasmBuildSpec, resolve_cargo_build_inputs,
     },
