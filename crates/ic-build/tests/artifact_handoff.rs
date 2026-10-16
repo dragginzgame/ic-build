@@ -32,17 +32,16 @@ fn fixture() -> PathBuf {
     .unwrap();
     // Use real Cargo metadata but synthetic variant-specific build bytes. No
     // Wasm toolchain or canister runtime is needed to exercise cache ownership.
-    write_executable_script(
-        &root.join("cargo.sh"),
-        br#"#!/bin/sh
+    let message = support::cargo::wasm_artifact_message_script(&root.join("workspace"), "output");
+    let script = r#"#!/bin/sh
 if [ "$1" != build ]; then exec "$REAL_CARGO" "$@"; fi
 if [ "$VARIANT" = failure ]; then exit 23; fi
 output="$CARGO_TARGET_DIR"
 mkdir -p "$output/wasm32-unknown-unknown/debug"
 printf '%s' "$VARIANT" > "$output/wasm32-unknown-unknown/debug/fixture.wasm"
-"#,
-    )
-    .expect("write executable test script");
+"#;
+    write_executable_script(&root.join("cargo.sh"), format!("{script}{message}"))
+        .expect("write executable test script");
     root
 }
 

@@ -1,4 +1,8 @@
-use crate::cargo::selection::{CargoSelection, SelectionFlag};
+use crate::cargo::{
+    messages::{MessageDecoder, artifact_matches},
+    observation::schema,
+    selection::{CargoSelection, SelectionFlag},
+};
 use ic_host_process::{
     child::{CleanupPolicy, OwnedChild},
     tool::{
@@ -84,6 +88,7 @@ pub struct WasmBuildSpec {
     target: String,
     cargo_program: OsString,
     rustc_program: OsString,
+    cargo_message_bytes: usize,
     cache_mode: WasmBuildCacheMode,
     prune_policy: Option<ArtifactCachePrunePolicy>,
     prune_interval: Option<Duration>,
@@ -235,6 +240,7 @@ pub struct ResolvedCargoBuildInputs {
     inputs: Arc<[CargoBuildInput]>,
     exclusions: Arc<[PathBuf]>,
     wasm_artifact_error: Option<String>,
+    wasm_targets: Arc<[WasmArtifactTarget]>,
     artifact_paths: Arc<[PathBuf]>,
     timings: WasmInputResolutionTimings,
 }
@@ -278,10 +284,18 @@ struct BatchResolutionGroup {
     indexes: Vec<usize>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct WasmArtifactTarget {
+    package_id: String,
+    name: String,
+    kind: schema::TargetKind,
+}
+
 struct ResolvedLocalInputs {
     validation_inputs: Vec<(PathBuf, PathBuf)>,
     workspace_projection: Option<InputDigest>,
     wasm_artifact_error: Option<String>,
+    wasm_targets: Vec<WasmArtifactTarget>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -864,6 +878,17 @@ pub enum WasmBuildError {
 }
 
 impl WasmBuildSpec {
+    /// Set the maximum bytes in one Cargo build message, including its newline.
+    ///
+    /// The default is 16 MiB. This decoding budget does not affect fingerprints
+    /// or impose a build deadline. Overflow refuses publication after Cargo
+    /// finishes; diagnostics continue streaming and the child is not terminated.
+    #[must_use]
+    pub const fn with_cargo_message_bytes(mut self, maximum: usize) -> Self {
+        self.cargo_message_bytes = maximum;
+        self
+    }
+
     /// Describe one Cargo build targeting `wasm32-unknown-unknown`.
     ///
     /// The output subdirectory is derived from [`Self::with_cargo_profile_args`]:
@@ -902,6 +927,7 @@ impl WasmBuildSpec {
             target: DEFAULT_TARGET.to_owned(),
             cargo_program: std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()),
             rustc_program: std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()),
+            cargo_message_bytes: CARGO_METADATA_BYTES,
             cache_mode: WasmBuildCacheMode::SharedIncremental {
                 target_dir: PathBuf::from("target/ic-testkit-incremental"),
             },
@@ -1479,7 +1505,7 @@ impl ResolvedCargoBuildInputs {
     /// Generic snapshots for non-Wasm packages remain useful independently.
     ///
     /// # Errors
-    /// Returns missing/non-cdylib/renamed targets or colliding artifact names.
+    /// Returns missing/non-cdylib targets or colliding retained artifact names.
     pub fn artifact_paths(&self) -> Result<&[PathBuf], WasmBuildError> {
         if let Some(message) = &self.wasm_artifact_error {
             return Err(WasmBuildError::InvalidSpec {
@@ -1872,13 +1898,7 @@ impl<'a, 'session> WasmBuildBatchInputResolver<'a, 'session> {
                         "hash batched semantic Wasm build inputs",
                     )
                     .map(|(input_digest, validation_digest)| {
-                        (
-                            inputs.validation_inputs,
-                            exclusions,
-                            input_digest,
-                            validation_digest,
-                            inputs.wasm_artifact_error,
-                        )
+                        (inputs, exclusions, input_digest, validation_digest)
                     });
                     (index, result)
                 })
@@ -1904,15 +1924,14 @@ impl<'a, 'session> WasmBuildBatchInputResolver<'a, 'session> {
             .or_else(|| resolved_inputs.iter().find(|(_, result)| result.is_ok()))
             .map(|(index, _)| *index);
         for (index, result) in resolved_inputs {
-            let (inputs, exclusions, input_digest, validation_digest, wasm_artifact_error) =
-                match result {
-                    Ok(resolved) => resolved,
-                    Err(error) => {
-                        self.resolved[index] =
-                            Some(Err((WasmBuildFailurePhase::ContentHashing, error)));
-                        continue;
-                    }
-                };
+            let (inputs, exclusions, input_digest, validation_digest) = match result {
+                Ok(resolved) => resolved,
+                Err(error) => {
+                    self.resolved[index] =
+                        Some(Err((WasmBuildFailurePhase::ContentHashing, error)));
+                    continue;
+                }
+            };
             let spec = self.specs[index];
             let resolved = ResolvedCargoBuildInputs {
                 fingerprint: finish_build_fingerprint(
@@ -1923,10 +1942,12 @@ impl<'a, 'session> WasmBuildBatchInputResolver<'a, 'session> {
                 ),
                 input_digest,
                 validation_digest,
-                inputs: cargo_build_inputs(inputs),
+                inputs: cargo_build_inputs(inputs.validation_inputs),
                 exclusions: exclusions.into(),
-                wasm_artifact_error,
-                artifact_paths: expected_artifacts(spec, &spec.target_dir).into(),
+                wasm_artifact_error: inputs.wasm_artifact_error,
+                artifact_paths: expected_artifacts(spec, &spec.target_dir, &inputs.wasm_targets)
+                    .into(),
+                wasm_targets: inputs.wasm_targets.into(),
                 timings: if Some(index) == timing_index {
                     timings
                 } else {
@@ -2862,7 +2883,7 @@ fn build_wasm_with_shared_incremental(
     let current = if assumes_sources_immutable {
         resolved
     } else {
-        let mut current = resolve_inputs_with_progress(spec, progress)?;
+        let mut current = resolve_initial_inputs(spec, None, progress)?;
         current.timings.include(resolved.timings);
         current
     };
@@ -3008,20 +3029,6 @@ fn integrated_shared_maintenance_result(
     }
 }
 
-fn resolve_inputs_with_progress(
-    spec: &WasmBuildSpec,
-    progress: &mut ProgressReporter<'_>,
-) -> Result<ResolvedCargoBuildInputs, WasmBuildError> {
-    let resolved = build_fingerprint_with_progress(spec, progress)?;
-    validate_wasm_library_outputs(&resolved, progress)?;
-    progress.emit(WasmBuildProgressEvent::InputsResolved {
-        fingerprint: resolved.fingerprint,
-        input_digest: resolved.input_digest,
-        elapsed: resolved.timings.total,
-    });
-    Ok(resolved)
-}
-
 fn resolve_initial_inputs(
     spec: &WasmBuildSpec,
     batch_resolution: Option<(&mut WasmBuildBatchInputResolver<'_, '_>, usize)>,
@@ -3129,9 +3136,9 @@ fn try_reuse_wasm_artifacts(
 ) -> Result<Option<WasmBuildOutcome>, WasmBuildError> {
     let _publication_guard = shared_incremental.lock_prepared_publication()?;
     let fingerprint = resolved.fingerprint;
-    let artifacts = expected_artifacts(spec, &spec.target_dir);
+    let artifacts = expected_artifacts(spec, &spec.target_dir, &resolved.wasm_targets);
     let cache_entry = cache_entry_directory(spec, fingerprint);
-    let cached_artifacts = expected_artifacts(spec, &cache_entry);
+    let cached_artifacts = expected_artifacts(spec, &cache_entry, &resolved.wasm_targets);
     let cached_info = progress.run_phase(WasmBuildProgressPhase::ArtifactPublication, || {
         validated_artifact_set(&cached_artifacts, fingerprint)
     });
@@ -3147,7 +3154,14 @@ fn try_reuse_wasm_artifacts(
         if !public_is_current {
             return Ok(None);
         }
-        reconstruct_exact_cache_entry(spec, &artifacts, &cache_entry, fingerprint, progress)?
+        reconstruct_exact_cache_entry(
+            spec,
+            &artifacts,
+            &cache_entry,
+            fingerprint,
+            &resolved.wasm_targets,
+            progress,
+        )?
     };
     progress.run_phase(WasmBuildProgressPhase::ArtifactPublication, || {
         materialize_artifacts(
@@ -3170,6 +3184,7 @@ fn try_reuse_wasm_artifacts(
             input_resolution,
             cargo_build: None,
             active_entry: &cache_entry,
+            targets: &resolved.wasm_targets,
         },
         total_started,
         progress,
@@ -3195,7 +3210,7 @@ fn verify_resolved_inputs(
     resolved: &ResolvedCargoBuildInputs,
     progress: &mut ProgressReporter<'_>,
 ) -> Result<ResolvedCargoBuildInputs, WasmBuildError> {
-    let verified = resolve_inputs_with_progress(spec, progress)?;
+    let verified = resolve_initial_inputs(spec, None, progress)?;
     for (before, after) in [
         (resolved.validation_digest, verified.validation_digest),
         (resolved.fingerprint, verified.fingerprint),
@@ -3212,9 +3227,10 @@ fn reconstruct_exact_cache_entry(
     artifacts: &[PathBuf],
     cache_entry: &Path,
     fingerprint: InputDigest,
+    targets: &[WasmArtifactTarget],
     progress: &mut ProgressReporter<'_>,
 ) -> Result<Vec<FileDigest>, WasmBuildError> {
-    let cached_artifacts = expected_artifacts(spec, cache_entry);
+    let cached_artifacts = expected_artifacts(spec, cache_entry, targets);
     let incomplete = progress.run_phase(WasmBuildProgressPhase::ArtifactPublication, || {
         prepare_exact_cache_entry(cache_entry)
     })?;
@@ -3242,7 +3258,7 @@ fn build_wasm_cache_miss(
 ) -> Result<WasmBuildOutcome, WasmBuildError> {
     let fingerprint = resolved.fingerprint;
     let mut input_resolution = resolved.timings;
-    let artifacts = expected_artifacts(spec, &spec.target_dir);
+    let artifacts = expected_artifacts(spec, &spec.target_dir, &resolved.wasm_targets);
     let cache_entry = cache_entry_directory(spec, fingerprint);
     let preparation_started = Instant::now();
     progress.begin_phase(WasmBuildFailurePhase::ArtifactPublication);
@@ -3261,11 +3277,11 @@ fn build_wasm_cache_miss(
         }
         let build_started = Instant::now();
         progress.begin_phase(WasmBuildFailurePhase::CargoBuild);
-        let cargo_result = run_cargo_build(spec, cargo_target_dir, progress);
+        let cargo_result =
+            run_cargo_build(spec, cargo_target_dir, &resolved.wasm_targets, progress);
         let cargo_build = build_started.elapsed();
         progress.record_phase(WasmBuildFailurePhase::CargoBuild, cargo_build);
-        cargo_result?;
-        let built_artifacts = expected_artifacts(spec, cargo_target_dir);
+        let built_artifacts = cargo_result?;
         let validation_started = Instant::now();
         progress.begin_phase(WasmBuildFailurePhase::ArtifactPublication);
         let missing = missing_artifacts(&built_artifacts);
@@ -3286,9 +3302,9 @@ fn build_wasm_cache_miss(
         // reader without racing a successful stamp into existence.
         let publication_guard = shared_incremental.lock_prepared_publication()?;
 
-        let cached_artifacts = expected_artifacts(spec, &cache_entry);
+        let cached_artifacts = expected_artifacts(spec, &cache_entry, &resolved.wasm_targets);
         progress.run_phase(WasmBuildProgressPhase::ArtifactPublication, || {
-            if cargo_target_dir != cache_entry {
+            if built_artifacts != cached_artifacts {
                 copy_wasm_artifacts(&built_artifacts, &cached_artifacts)?;
             }
             let info = publish_artifact_stamps(&cached_artifacts, fingerprint)?;
@@ -3307,6 +3323,7 @@ fn build_wasm_cache_miss(
                 input_resolution,
                 cargo_build: Some(cargo_build),
                 active_entry: &cache_entry,
+                targets: &resolved.wasm_targets,
             },
             total_started,
             progress,
@@ -3344,6 +3361,7 @@ struct BuildRecordInput<'a> {
     input_resolution: WasmInputResolutionTimings,
     cargo_build: Option<Duration>,
     active_entry: &'a Path,
+    targets: &'a [WasmArtifactTarget],
 }
 
 fn complete_build_record(
@@ -3368,7 +3386,7 @@ fn complete_build_record(
     Ok(WasmBuildRecord {
         fingerprint: input.fingerprint,
         input_digest: input.input_digest,
-        artifacts: expected_artifacts(spec, input.active_entry),
+        artifacts: expected_artifacts(spec, input.active_entry, input.targets),
         retention,
         timings: WasmBuildTimings {
             lock_wait: input.lock_wait,
@@ -3548,6 +3566,11 @@ fn wasm_cache_fs_error(error: CacheFsError) -> WasmBuildError {
 }
 
 fn validate_spec(spec: &WasmBuildSpec) -> Result<(), WasmBuildError> {
+    if spec.cargo_message_bytes == 0 {
+        return Err(WasmBuildError::InvalidSpec {
+            message: "Cargo message allowance must be nonzero".to_owned(),
+        });
+    }
     if spec.packages.is_empty() {
         return Err(WasmBuildError::InvalidSpec {
             message: "at least one Cargo package is required".to_owned(),
@@ -3618,6 +3641,15 @@ fn validate_spec(spec: &WasmBuildSpec) -> Result<(), WasmBuildError> {
 }
 
 fn validate_cargo_target_selection(spec: &WasmBuildSpec) -> Result<(), WasmBuildError> {
+    if spec
+        .cargo_selection
+        .flags
+        .contains(&SelectionFlag::MessageFormat)
+    {
+        return Err(WasmBuildError::InvalidSpec {
+            message: "Cargo message format is owned by artifact selection".to_owned(),
+        });
+    }
     if let Some(example) = &spec.example {
         let mut components = Path::new(example).components();
         if spec.packages.len() != 1
@@ -3716,7 +3748,8 @@ fn build_fingerprint_with_policy(
         inputs: cargo_build_inputs(inputs.validation_inputs),
         exclusions: exclusions.into(),
         wasm_artifact_error: inputs.wasm_artifact_error,
-        artifact_paths: expected_artifacts(spec, &spec.target_dir).into(),
+        artifact_paths: expected_artifacts(spec, &spec.target_dir, &inputs.wasm_targets).into(),
+        wasm_targets: inputs.wasm_targets.into(),
         timings: WasmInputResolutionTimings {
             tool_identity,
             cargo_metadata,
@@ -4036,26 +4069,50 @@ fn resolve_local_inputs(
     // Cargo snapshots also serve generic transactions; defer this acquisition
     // constraint until the resolved snapshot is used to acquire Wasm artifacts.
     let mut artifact_names = BTreeSet::new();
+    let mut wasm_targets = Vec::new();
     let wasm_artifact_error = selected_ids.iter().find_map(|id| {
         let package = metadata.packages[id].package;
-        if let Some(example) = &spec.example {
-            return (!package.targets.iter().any(|target| {
-                target.name == *example && target.is_example() && target.crate_types.contains(&crate::cargo::observation::schema::CrateType::CDyLib)
-            })).then(|| {
-                format!("Cargo package `{}` must declare the cdylib example `{example}`", package.name)
-            });
+        let mut matching = package.targets.iter().filter(|target| {
+            target.crate_types.contains(&schema::CrateType::CDyLib)
+                && spec.example.as_ref().map_or_else(
+                    || target.is_cdylib(),
+                    |example| target.name == *example && target.is_example(),
+                )
+        });
+        let Some(target) = matching.next() else {
+            return Some(format!(
+                "Cargo package `{}` must declare the selected cdylib target",
+                package.name
+            ));
+        };
+        let mut components = Path::new(&target.name).components();
+        if matching.next().is_some()
+            || !matches!(
+                (components.next(), components.next()),
+                (Some(Component::Normal(_)), None)
+            )
+        {
+            return Some(format!(
+                "Cargo package `{}` has an ambiguous or unsafe cdylib target",
+                package.name
+            ));
         }
-        let library = default_library_name(package.name.as_str());
-        if package.targets.iter().find(|target| target.is_cdylib()).is_none_or(|target| target.name != library) {
-            Some(format!(
-                "Cargo package `{}` must declare a cdylib library named `{}` to produce its expected Wasm artifact",
-                package.name, library,
-            ))
-        } else if !artifact_names.insert(library.clone()) {
-            Some(format!("selected Cargo packages share the Wasm artifact name `{library}`"))
-        } else {
-            None
+        let cache_name = target.name.replace('-', "_");
+        if !artifact_names.insert(cache_name.clone()) {
+            return Some(format!(
+                "selected Cargo packages share the Wasm artifact name `{cache_name}`"
+            ));
         }
+        wasm_targets.push(WasmArtifactTarget {
+            package_id: package.id.repr.clone(),
+            name: target.name.clone(),
+            kind: if spec.example.is_some() {
+                schema::TargetKind::Example
+            } else {
+                schema::TargetKind::CDyLib
+            },
+        });
+        None
     });
     let mut closure = BTreeSet::new();
     while let Some(id) = selected_ids.pop_front() {
@@ -4089,6 +4146,7 @@ fn resolve_local_inputs(
             validation_inputs,
             workspace_projection,
             wasm_artifact_error,
+            wasm_targets,
         },
         exclusions,
     ))
@@ -4222,6 +4280,7 @@ fn semantic_workspace_projection(
 fn locked_package_identities(
     workspace_root: &Path,
 ) -> Result<Vec<LockedPackageIdentity>, WasmBuildError> {
+    use crate::cargo::lockfile::{external_package, optional_string, required_string};
     let lockfile = workspace_root.join("Cargo.lock");
     let contents = match fs::read_to_string(&lockfile) {
         Ok(contents) => contents,
@@ -4245,62 +4304,43 @@ fn locked_package_identities(
     packages
         .iter()
         .filter_map(|package| {
-            let Some(table) = package.as_table() else {
-                return Some(Err(invalid_metadata(
-                    "Cargo lockfile package entry is not a table",
-                )));
+            let table = match external_package(package) {
+                Ok(Some(table)) => table,
+                Ok(None) => return None,
+                Err(message) => {
+                    return Some(Err(invalid_metadata(&format!("Cargo lockfile {message}"))));
+                }
             };
-            let source = table.get("source")?.as_str().map(str::to_owned);
+            let text = |field| {
+                required_string(table, field)
+                    .map(str::to_owned)
+                    .map_err(|_| {
+                        invalid_metadata(&format!(
+                            "Cargo lockfile package `{field}` is missing or not a string"
+                        ))
+                    })
+            };
+            let source = required_string(table, "source").map(str::to_owned);
             Some(
                 source
-                    .ok_or_else(|| {
-                        invalid_metadata("Cargo lockfile package source is not a string")
-                    })
+                    .map_err(|_| invalid_metadata("Cargo lockfile package source is not a string"))
                     .and_then(|source| {
                         Ok(LockedPackageIdentity {
-                            name: required_toml_string(table, "name", "Cargo lockfile package")?,
-                            version: required_toml_string(
-                                table,
-                                "version",
-                                "Cargo lockfile package",
-                            )?,
+                            name: text("name")?,
+                            version: text("version")?,
                             source,
-                            checksum: optional_toml_string(
-                                table,
-                                "checksum",
-                                "Cargo lockfile package",
-                            )?,
+                            checksum: optional_string(table, "checksum")
+                                .map_err(|_| {
+                                    invalid_metadata(
+                                        "Cargo lockfile package `checksum` is not a string",
+                                    )
+                                })?
+                                .map(str::to_owned),
                         })
                     }),
             )
         })
         .collect()
-}
-
-fn required_toml_string(
-    table: &toml::Table,
-    field: &str,
-    context: &str,
-) -> Result<String, WasmBuildError> {
-    table
-        .get(field)
-        .and_then(TomlValue::as_str)
-        .map(str::to_owned)
-        .ok_or_else(|| invalid_metadata(&format!("{context} `{field}` is missing or not a string")))
-}
-
-fn optional_toml_string(
-    table: &toml::Table,
-    field: &str,
-    context: &str,
-) -> Result<Option<String>, WasmBuildError> {
-    match table.get(field) {
-        None => Ok(None),
-        Some(TomlValue::String(value)) => Ok(Some(value.clone())),
-        Some(_) => Err(invalid_metadata(&format!(
-            "{context} `{field}` is not a string"
-        ))),
-    }
 }
 
 fn semantic_package_identity(
@@ -4801,10 +4841,11 @@ fn apply_command_environment(command: &mut Command, spec: &WasmBuildSpec) {
 fn run_cargo_build(
     spec: &WasmBuildSpec,
     build_target_dir: &Path,
+    targets: &[WasmArtifactTarget],
     progress: &mut ProgressReporter<'_>,
-) -> Result<(), WasmBuildError> {
+) -> Result<Vec<PathBuf>, WasmBuildError> {
     let command = cargo_build_command(spec, build_target_dir)?;
-    communicate_cargo_build(spec, build_target_dir, command, progress)
+    communicate_cargo_build(spec, build_target_dir, targets, command, progress)
 }
 
 fn cargo_build_command(
@@ -4821,7 +4862,7 @@ fn cargo_build_command(
     command
         .current_dir(&spec.workspace_root)
         .env("CARGO_TARGET_DIR", absolute_target_dir)
-        .arg("build");
+        .args(["build", "--message-format=json"]);
     if let Some(example) = &spec.example {
         command.args(["--example", example]);
     } else {
@@ -4844,9 +4885,10 @@ fn cargo_build_command(
 fn communicate_cargo_build(
     spec: &WasmBuildSpec,
     build_target_dir: &Path,
+    targets: &[WasmArtifactTarget],
     mut command: Command,
     progress: &mut ProgressReporter<'_>,
-) -> Result<(), WasmBuildError> {
+) -> Result<Vec<PathBuf>, WasmBuildError> {
     // Preserve foreground group membership for silent builds; observed builds
     // already own a compiler group so observer unwind can stop descendants.
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
@@ -4870,6 +4912,10 @@ fn communicate_cargo_build(
         target_dir: build_target_dir.to_owned(),
     });
     let progress = RefCell::new(progress);
+    let mut decoder = MessageDecoder::new(spec.cargo_message_bytes, true);
+    let mut artifacts = vec![None; targets.len()];
+    let mut protocol_error = None;
+    let mut collect = |message| collect_wasm_artifact(message, targets, &mut artifacts);
     let result = communicate_child_with_observer(
         &mut child,
         None,
@@ -4888,6 +4934,11 @@ fn communicate_cargo_build(
             false
         },
         |stream, bytes| {
+            // A protocol refusal does not terminate Cargo. Keep observing and
+            // draining all output, then refuse publication after child completion.
+            if stream == OutputStream::Stdout && protocol_error.is_none() {
+                protocol_error = decoder.feed(bytes, &mut collect).err();
+            }
             let mut progress = progress.borrow_mut();
             if progress.config.emit_cargo_output {
                 progress.emit(WasmBuildProgressEvent::CargoOutput {
@@ -4914,20 +4965,27 @@ fn communicate_cargo_build(
                 elapsed: started.elapsed(),
             });
     }
-    let evidence = match result {
-        Ok(evidence) => evidence,
-        Err(error) => {
-            return Err(WasmBuildError::Io {
-                operation: "communicate with cargo build",
-                path: PathBuf::from(&spec.cargo_program),
-                // Retain typed Host evidence and secondary cleanup failures.
-                source: io::Error::other(error),
-            });
-        }
-    };
+    let evidence = result.map_err(|error| WasmBuildError::Io {
+        operation: "communicate with cargo build",
+        path: PathBuf::from(&spec.cargo_program),
+        // Retain typed Host evidence and secondary cleanup failures.
+        source: io::Error::other(error),
+    })?;
     let status = evidence.status;
     if status.success() {
-        return Ok(());
+        protocol_error
+            .map_or_else(|| decoder.finish(&mut collect), Err)
+            .map_err(|source| WasmBuildError::Io {
+                operation: "decode Cargo build artifacts",
+                path: PathBuf::from(&spec.cargo_program),
+                source,
+            })?;
+        return artifacts
+            .into_iter()
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| WasmBuildError::MissingArtifacts {
+                paths: expected_artifacts(spec, build_target_dir, targets),
+            });
     }
     Err(WasmBuildError::CommandFailed {
         phase: WasmBuildPhase::CargoBuild,
@@ -4935,6 +4993,52 @@ fn communicate_cargo_build(
         stdout: cargo_diagnostic(&evidence.stdout, evidence.stdout_truncated),
         stderr: cargo_diagnostic(&evidence.stderr, evidence.stderr_truncated),
     })
+}
+
+fn collect_wasm_artifact(
+    message: schema::Message,
+    targets: &[WasmArtifactTarget],
+    artifacts: &mut [Option<PathBuf>],
+) -> io::Result<()> {
+    let schema::Message::CompilerArtifact(artifact) = message else {
+        return Ok(());
+    };
+    for (target, selected) in targets.iter().zip(artifacts) {
+        if !artifact_matches(&artifact, &target.package_id, &target.name, &target.kind) {
+            continue;
+        }
+        if !artifact
+            .target
+            .crate_types
+            .contains(&schema::CrateType::CDyLib)
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Cargo reported a non-cdylib Wasm target",
+            ));
+        }
+        let mut matching = artifact
+            .filenames
+            .iter()
+            .filter(|path| path.extension() == Some("wasm"));
+        let path = matching
+            .next()
+            .filter(|path| path.is_absolute())
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Cargo omitted absolute Wasm artifact path",
+                )
+            })?;
+        if matching.next().is_some() || selected.replace(path.clone().into_std_path_buf()).is_some()
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Cargo reported ambiguous Wasm artifacts",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn cargo_diagnostic(bytes: &[u8], truncated: bool) -> String {
@@ -4960,27 +5064,25 @@ fn ensure_command_success(
     })
 }
 
-fn default_library_name(package: &str) -> String {
-    package.replace('-', "_")
-}
-
-fn expected_artifacts(spec: &WasmBuildSpec, target_dir: &Path) -> Vec<PathBuf> {
+fn expected_artifacts(
+    spec: &WasmBuildSpec,
+    target_dir: &Path,
+    targets: &[WasmArtifactTarget],
+) -> Vec<PathBuf> {
     let profile = target_dir.join(&spec.target).join(
         spec.cargo_selection
             .profile_target_dir()
             .expect("Cargo profile was validated before artifact discovery"),
     );
-    spec.packages
+    targets
         .iter()
-        .map(|package| {
-            spec.example.as_ref().map_or_else(
-                || profile.join(format!("{}.wasm", default_library_name(package))),
-                |example| {
-                    profile
-                        .join("examples")
-                        .join(format!("{}.wasm", default_library_name(example)))
-                },
-            )
+        .map(|target| {
+            let directory = if spec.example.is_some() {
+                profile.join("examples")
+            } else {
+                profile.clone()
+            };
+            directory.join(format!("{}.wasm", target.name.replace('-', "_")))
         })
         .collect()
 }
@@ -5058,12 +5160,18 @@ fn write_artifact_stamp(
     if preserve_matching && destination_matches_bytes(&stamp_path, stamp.as_bytes()) {
         return Ok(());
     }
-    ic_host_fs::durable::write_bytes(&stamp_path, stamp.as_bytes()).map_err(|source| {
-        WasmBuildError::Io {
-            operation: "publish Wasm build stamp",
-            path: stamp_path,
-            source: io::Error::other(source),
-        }
+    ic_host_fs::durable::write_bytes(
+        &stamp_path,
+        ic_host_fs::durable::WriteOptions {
+            mode: ic_host_fs::durable::PublicationMode::Replace,
+            permissions: 0o666,
+        },
+        stamp.as_bytes(),
+    )
+    .map_err(|source| WasmBuildError::Io {
+        operation: "publish Wasm build stamp",
+        path: stamp_path,
+        source: io::Error::other(source),
     })
 }
 
@@ -5118,6 +5226,9 @@ fn copy_wasm_artifacts(
     cached_artifacts: &[PathBuf],
 ) -> Result<(), WasmBuildError> {
     for (source, cached) in source_artifacts.iter().zip(cached_artifacts) {
+        if source == cached {
+            continue;
+        }
         copy_file_atomic(source, cached).map_err(|source_error| WasmBuildError::Io {
             operation: "cache shared-incremental Wasm artifact",
             path: cached.clone(),

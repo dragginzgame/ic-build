@@ -83,15 +83,31 @@ fn hyphenated_packages_use_the_default_library_artifact_in_every_cache_mode() {
             original.replace("[lib]", "[lib]\nname=\"renamed\""),
         )
         .unwrap();
-        resolve_cargo_build_inputs(&spec).unwrap();
-        assert!(matches!(
-            build_wasm_canisters_cached(&spec),
-            Err(WasmBuildError::InvalidSpec { .. })
-        ));
+        let renamed_inputs = resolve_cargo_build_inputs(&spec).unwrap();
+        assert_eq!(
+            renamed_inputs.artifact_paths().unwrap()[0]
+                .file_name()
+                .unwrap(),
+            "renamed.wasm"
+        );
+        let renamed =
+            build_wasm_canisters_cached(&spec).expect("capture Cargo-reported custom library");
+        assert!(!renamed.is_reused());
+        assert_ne!(first.record().fingerprint(), renamed.record().fingerprint());
+        assert_eq!(
+            renamed.record().artifacts()[0].file_name().unwrap(),
+            "renamed.wasm"
+        );
+        assert!(
+            fs::read(&renamed.record().artifacts()[0])
+                .unwrap()
+                .starts_with(b"\0asm")
+        );
+        assert!(build_wasm_canisters_cached(&spec).unwrap().is_reused());
         assert_eq!(fs::read(&first.record().artifacts()[0]).unwrap(), bytes);
         fs::write(&manifest, original).unwrap();
         assert!(build_wasm_canisters_cached(&spec).unwrap().is_reused());
-        drop(first);
+        drop((first, renamed));
         fs::remove_dir_all(root).unwrap();
     }
 }
@@ -141,10 +157,7 @@ fn shared_wasm_target_rejects_library_that_no_longer_produces_wasm() {
         .expect("read bounded Wasm");
     let manifest = workspace.join("feature_a/Cargo.toml");
     let contents = fs::read_to_string(&manifest).expect("read canister manifest");
-    for changed in [
-        contents.replace("cdylib", "rlib"),
-        contents.replace("[lib]", "[lib]\nname = \"renamed\""),
-    ] {
+    for changed in [contents.replace("cdylib", "rlib")] {
         fs::write(&manifest, changed).expect("change the declared library output");
         // Cargo input snapshots remain useful for generic transactional builds.
         resolve_cargo_build_inputs(&spec).expect("resolve changed library inputs");
@@ -1261,4 +1274,47 @@ fn real_wasm_workspace() -> std::path::PathBuf {
     let root = unique_temp_dir("ic-build-real-wasm-source");
     support::wasm::write_workspace(&root).expect("prepare real Wasm workspace");
     root
+}
+
+#[test]
+fn custom_library_names_do_not_overwrite_another_packages_outputs() {
+    for shared in [false, true] {
+        let root = unique_temp_dir("custom-library-layout");
+        fs::write(root.join("Cargo.toml"), "[workspace]\nmembers=[\"left\",\"right\"]\nresolver=\"3\"\n[profile.custom]\ninherits=\"release\"\n").unwrap();
+        for (directory, package, library, value) in
+            [("left", "alpha", "beta", 7), ("right", "beta", "alpha", 9)]
+        {
+            let path = root.join(directory);
+            fs::create_dir_all(path.join("src")).unwrap();
+            fs::write(path.join("Cargo.toml"), format!("[package]\nname=\"{package}\"\nversion=\"0.0.0\"\nedition=\"2024\"\n[lib]\nname=\"{library}\"\ncrate-type=[\"cdylib\"]\n")).unwrap();
+            fs::write(
+                path.join("src/lib.rs"),
+                format!("#[unsafe(no_mangle)] pub extern \"C\" fn value() -> u32 {{ {value} }}\n"),
+            )
+            .unwrap();
+        }
+        let mut spec =
+            WasmBuildSpec::new(&root, &root.join("exact with spaces"), &["alpha", "beta"])
+                .with_isolated_builds()
+                .with_cargo_profile_args(["--offline", "--profile=custom"]);
+        if shared {
+            spec = spec.with_shared_incremental_target(root.join("shared with spaces"));
+        }
+        let first = build_wasm_canisters_cached(&spec).unwrap();
+        let paths = first.record().artifacts();
+        assert_eq!(paths[0].file_name().unwrap(), "beta.wasm");
+        assert_eq!(paths[1].file_name().unwrap(), "alpha.wasm");
+        let bytes = paths
+            .iter()
+            .map(|path| fs::read(path).unwrap())
+            .collect::<Vec<_>>();
+        assert_ne!(bytes[0], bytes[1]);
+        let reused = build_wasm_canisters_cached(&spec).unwrap();
+        assert!(reused.is_reused());
+        for (path, expected) in reused.record().artifacts().iter().zip(bytes) {
+            assert_eq!(fs::read(path).unwrap(), expected);
+        }
+        drop((first, reused));
+        fs::remove_dir_all(root).unwrap();
+    }
 }

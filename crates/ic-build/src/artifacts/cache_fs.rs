@@ -291,12 +291,18 @@ pub(super) fn ensure_cache_directory_tag(cache_root: &Path) -> Result<(), CacheF
     {
         return Ok(());
     }
-    ic_host_fs::durable::write_bytes(&path, CACHE_DIRECTORY_TAG.as_bytes()).map_err(|source| {
-        CacheFsError {
-            operation: "write cache directory tag",
-            path,
-            source: io::Error::other(source),
-        }
+    ic_host_fs::durable::write_bytes(
+        &path,
+        ic_host_fs::durable::WriteOptions {
+            mode: ic_host_fs::durable::PublicationMode::Replace,
+            permissions: 0o666,
+        },
+        CACHE_DIRECTORY_TAG.as_bytes(),
+    )
+    .map_err(|source| CacheFsError {
+        operation: "write cache directory tag",
+        path,
+        source: io::Error::other(source),
     })
 }
 
@@ -401,7 +407,15 @@ pub(super) fn record_cache_maintenance(
     let marker = path.join(LAST_MAINTENANCE_FILE);
     let elapsed = encode_system_time(&marker, SystemTime::now())?;
     let contents = format!("{}\n{maintenance_identity}\n", elapsed.as_nanos());
-    ic_host_fs::durable::write_bytes(&marker, contents.as_bytes()).map_err(|source| CacheFsError {
+    ic_host_fs::durable::write_bytes(
+        &marker,
+        ic_host_fs::durable::WriteOptions {
+            mode: ic_host_fs::durable::PublicationMode::Replace,
+            permissions: 0o666,
+        },
+        contents.as_bytes(),
+    )
+    .map_err(|source| CacheFsError {
         operation: "record cache maintenance time",
         path: marker,
         source: io::Error::other(source),
@@ -456,13 +470,19 @@ fn write_system_time(
     operation: &'static str,
 ) -> Result<(), CacheFsError> {
     let elapsed = encode_system_time(path, timestamp)?;
-    ic_host_fs::durable::write_bytes(path, elapsed.as_nanos().to_string().as_bytes()).map_err(
-        |source| CacheFsError {
-            operation,
-            path: path.to_owned(),
-            source: io::Error::other(source),
+    ic_host_fs::durable::write_bytes(
+        path,
+        ic_host_fs::durable::WriteOptions {
+            mode: ic_host_fs::durable::PublicationMode::Replace,
+            permissions: 0o666,
         },
+        elapsed.as_nanos().to_string().as_bytes(),
     )
+    .map_err(|source| CacheFsError {
+        operation,
+        path: path.to_owned(),
+        source: io::Error::other(source),
+    })
 }
 
 fn encode_system_time(path: &Path, timestamp: SystemTime) -> Result<Duration, CacheFsError> {

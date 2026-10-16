@@ -8,8 +8,8 @@ use super::{
     WasmBuildOutcome, WasmBuildOutputStream, WasmBuildProgressConfig, WasmBuildProgressEvent,
     WasmBuildProgressPhase, WasmBuildSpec, append_cargo_configuration_inputs, artifact_stamp_path,
     build_wasm_canisters_cached, build_wasm_canisters_cached_with_progress,
-    ensure_cache_directory_tag, expected_artifacts, finish_fingerprint_build,
-    inspect_shared_incremental_target, integrated_shared_maintenance_result, lock_wasm_build_cache,
+    ensure_cache_directory_tag, finish_fingerprint_build, inspect_shared_incremental_target,
+    integrated_shared_maintenance_result, lock_wasm_build_cache,
     lock_wasm_build_cache_with_progress, locked_package_identities,
     maintain_shared_incremental_target, maintain_shared_incremental_target_at_most_every,
     materialize_artifacts, perform_configured_shared_incremental_target_maintenance,
@@ -202,7 +202,7 @@ fn package_selection_agrees_across_identity_artifacts_and_cargo_invocation() {
     assert_eq!(redundant_inputs.fingerprint(), ordered_inputs.fingerprint());
     assert_eq!(redundant_inputs.inputs(), ordered_inputs.inputs());
     assert_eq!(
-        super::expected_artifacts(&redundant, &target),
+        expected_artifacts(&redundant, &target),
         ["alpha.wasm", "zeta.wasm"]
             .map(|name| target.join("wasm32-unknown-unknown/debug").join(name)),
     );
@@ -228,10 +228,10 @@ fn package_selection_agrees_across_identity_artifacts_and_cargo_invocation() {
         } else {
             ProgressReporter::silent()
         };
-        run_cargo_build(&spec, &root.join("cargo-target"), &mut progress).unwrap();
+        run_cargo_build(&spec, &root.join("cargo-target"), &[], &mut progress).unwrap();
         assert_eq!(
             fs::read_to_string(&arguments).unwrap(),
-            "--lib\n--target\nwasm32-unknown-unknown\n-p\nalpha\n-p\nzeta\n",
+            "--message-format=json\n--lib\n--target\nwasm32-unknown-unknown\n-p\nalpha\n-p\nzeta\n",
         );
         fs::remove_file(&arguments).unwrap();
     }
@@ -568,6 +568,16 @@ fn relative_exact_target_is_shared_by_cargo_and_cache_operations() {
     .expect("move workspace manifest");
     fs::rename(root.join("fixture"), spec.workspace_root.join("fixture"))
         .expect("move workspace package");
+    let wrapper = root.join("cargo.sh");
+    let script = fs::read_to_string(&wrapper).unwrap();
+    fs::write(
+        &wrapper,
+        script.replace(
+            root.to_str().unwrap(),
+            spec.workspace_root.to_str().unwrap(),
+        ),
+    )
+    .unwrap();
     // Reach an owned /tmp target using a relative path without changing the
     // process-wide working directory or creating test output in the checkout.
     spec.target_dir = caller_dir
@@ -968,7 +978,7 @@ fn profile_output_directory_is_confined_before_resolution_or_acquisition() {
         let spec = WasmBuildSpec::new(&root, &target, &["fixture"])
             .with_cargo_profile_args(["--profile", profile]);
         validate_spec(&spec).expect("accept a normal profile output directory");
-        assert!(super::expected_artifacts(&spec, &target)[0].starts_with(&target));
+        assert!(expected_artifacts(&spec, &target)[0].starts_with(&target));
     }
     fs::remove_dir_all(root).unwrap();
 }
@@ -1004,7 +1014,7 @@ fn cargo_profile_arguments_match_output_directories() {
         validate_spec(&spec)
             .unwrap_or_else(|error| panic!("{arguments:?} should write to {directory}: {error}"));
         assert_eq!(
-            super::expected_artifacts(&spec, Path::new("target")),
+            expected_artifacts(&spec, Path::new("target")),
             [Path::new("target")
                 .join("wasm32-unknown-unknown")
                 .join(directory)
@@ -1069,6 +1079,8 @@ fn cargo_target_selectors_fail_before_resolution_or_acquisition() {
         vec!["--bench=helper"],
         vec!["--benches"],
         vec!["--all-targets"],
+        vec!["--message-format", "human"],
+        vec!["--message-format=json"],
         vec!["--lib", "--bin=helper"],
     ] {
         let spec = WasmBuildSpec::new(&root, &target, &["fixture"])
@@ -1129,6 +1141,12 @@ fn malformed_cargo_profiles_fail_before_resolution_or_acquisition() {
 
 #[test]
 fn build_spec_requires_at_least_one_package() {
+    let zero_messages = WasmBuildSpec::new(Path::new("."), Path::new("target"), &["fixture"])
+        .with_cargo_message_bytes(0);
+    assert!(matches!(
+        validate_spec(&zero_messages),
+        Err(WasmBuildError::InvalidSpec { .. })
+    ));
     let spec = WasmBuildSpec::new(Path::new("."), Path::new("target"), &[]);
     assert!(matches!(
         validate_spec(&spec),
@@ -1608,7 +1626,7 @@ done
             &mut observer,
         );
 
-        run_cargo_build(&spec, &root.join("cargo-target"), &mut progress)
+        run_cargo_build(&spec, &root.join("cargo-target"), &[], &mut progress)
             .expect("run observed Cargo fixture");
     }
 
@@ -1672,7 +1690,7 @@ fn observed_cargo_parallel_streams_preserve_raw_bytes() {
             .with_cargo_output(true),
         &mut observer,
     );
-    run_cargo_build(&spec, &root.join("cargo-target"), &mut progress).unwrap();
+    run_cargo_build(&spec, &root.join("cargo-target"), &[], &mut progress).unwrap();
     assert_eq!(forwarded_stdout, stdout);
     assert_eq!(forwarded_stderr, stderr);
     fs::remove_dir_all(root).unwrap();
@@ -1706,7 +1724,7 @@ fn observed_cargo_leader_exit_cleans_descendant_held_pipes_without_eof() {
                     .with_cargo_output(true),
                 &mut observer,
             );
-            run_cargo_build(&spec, &root.join("cargo-target"), &mut progress).unwrap();
+            run_cargo_build(&spec, &root.join("cargo-target"), &[], &mut progress).unwrap();
             assert_eq!(output, b"leader-exited");
             done.send(()).unwrap();
         });
@@ -1749,7 +1767,7 @@ fn observed_cargo_failure_retains_captured_diagnostics_and_exit_event() {
                 )
             });
 
-            run_cargo_build(&spec, &root.join("cargo-target"), &mut progress)
+            run_cargo_build(&spec, &root.join("cargo-target"), &[], &mut progress)
                 .expect_err("Cargo fixture must fail")
         };
 
@@ -1822,7 +1840,7 @@ fn overflowing_cargo_diagnostics_are_bounded_without_losing_forwarded_output() {
         } else {
             ProgressReporter::silent()
         };
-        let error = run_cargo_build(&spec, &root.join("target"), &mut progress).unwrap_err();
+        let error = run_cargo_build(&spec, &root.join("target"), &[], &mut progress).unwrap_err();
         let WasmBuildError::CommandFailed {
             status,
             stdout: diagnostic,
@@ -2125,6 +2143,7 @@ fn reconstructed_wasm_stamps_describe_the_bytes_actually_copied() {
         &sources,
         &entry,
         fingerprint,
+        &fixture_targets(&spec),
         &mut ProgressReporter::silent(),
     )
     .unwrap();
@@ -2149,8 +2168,15 @@ fn reconstruction_rejects_empty_copies_and_removes_the_incomplete_entry() {
     let entry = root.join("entry");
     let cached = expected_artifacts(&spec, &entry);
     let mut progress = ProgressReporter::silent();
-    let error = reconstruct_exact_cache_entry(&spec, &sources, &entry, fingerprint, &mut progress)
-        .expect_err("a copied Wasm must remain nonempty");
+    let error = reconstruct_exact_cache_entry(
+        &spec,
+        &sources,
+        &entry,
+        fingerprint,
+        &fixture_targets(&spec),
+        &mut progress,
+    )
+    .expect_err("a copied Wasm must remain nonempty");
     assert!(matches!(error, WasmBuildError::MissingArtifacts { paths } if paths == cached));
     assert!(progress.failure_timings.cleanup().is_some());
     assert!(!entry.exists());
@@ -2170,6 +2196,7 @@ fn failed_exact_entry_reconstruction_removes_partial_outputs() {
         &sources,
         &entry,
         digest_bytes("wasm-artifact-v1", b"reconstruction-fixture"),
+        &fixture_targets(&spec),
         &mut progress,
     )
     .expect_err("a missing second source must fail after the first copy");
@@ -2427,7 +2454,7 @@ fn warm_caller_artifacts_reconstruct_a_missing_exact_entry() {
         }
     ));
     assert_eq!(
-        fs::read(&super::expected_artifacts(&spec, &spec.target_dir)[0]).unwrap(),
+        fs::read(&expected_artifacts(&spec, &spec.target_dir)[0]).unwrap(),
         expected
     );
     drop(reused);
@@ -2789,7 +2816,7 @@ fn warm_hits_reject_source_mutation_for_active_and_materialized_artifacts() {
                     .is_reused()
             );
             if !active_artifact {
-                fs::remove_file(&super::expected_artifacts(&spec, &spec.target_dir)[0])
+                fs::remove_file(&expected_artifacts(&spec, &spec.target_dir)[0])
                     .expect("remove caller artifact");
             }
             let mut mutated = false;
@@ -2843,7 +2870,7 @@ fn observed_cargo_panic_stops_compiler_descendants() {
             WasmBuildProgressConfig::new().with_cargo_output(true),
             &mut observer,
         );
-        run_cargo_build(&spec, &root.join("cargo-target"), &mut progress).unwrap();
+        run_cargo_build(&spec, &root.join("cargo-target"), &[], &mut progress).unwrap();
     }));
     assert!(result.is_err(), "observer must panic");
     for pid in fs::read_to_string(pids).unwrap().split_whitespace() {
@@ -2911,4 +2938,104 @@ fn optional_duration_addition_preserves_absence_and_saturates() {
             [expected; 3]
         );
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn cargo_artifact_protocol_refuses_bad_evidence_after_child_completion() {
+    for case in [
+        "missing",
+        "package",
+        "kind",
+        "relative",
+        "duplicate",
+        "malformed",
+        "oversized",
+        "failed",
+    ] {
+        let (root, mut spec) = fake_wasm_build_spec(&format!("cargo-message-{case}"));
+        let resolved = resolve_cargo_build_inputs(&spec).unwrap();
+        let wrapper = root.join("cargo.sh");
+        let original = fs::read_to_string(&wrapper).unwrap();
+        let record = original
+            .lines()
+            .find(|line| line.contains("compiler-artifact"))
+            .unwrap();
+        let changed = match case {
+            "missing" => original.replace(record, ""),
+            "package" => {
+                original.replace(&resolved.wasm_targets[0].package_id, "unrelated-package")
+            }
+            "kind" => original.replace("\"kind\":[\"cdylib\"]", "\"kind\":[\"lib\"]"),
+            "relative" => original.replace("'\"$target\"'", "relative"),
+            "duplicate" => original.replace(record, &format!("{record}\n{record}")),
+            "malformed" => original.replace(record, "printf '%s\\n' '{invalid}'"),
+            _ => original.clone(),
+        };
+        let exit = if case == "failed" { 23 } else { 0 };
+        let changed = changed.replace(
+            "exit 0",
+            &format!("printf completed > completed\n    exit {exit}"),
+        );
+        fs::write(&wrapper, changed).unwrap();
+        if matches!(case, "oversized" | "failed") {
+            spec = spec.with_cargo_message_bytes(8);
+        }
+        let error = build_wasm_canisters_cached(&spec).unwrap_err();
+        match case {
+            "missing" | "package" | "kind" => assert!(
+                matches!(error, WasmBuildError::MissingArtifacts { .. }),
+                "{case}: {error}"
+            ),
+            "failed" => assert!(
+                matches!(error, WasmBuildError::CommandFailed { status, .. } if status.code() == Some(23))
+            ),
+            _ => assert!(
+                matches!(
+                    error,
+                    WasmBuildError::Io {
+                        operation: "decode Cargo build artifacts",
+                        ..
+                    }
+                ),
+                "{case}: {error}"
+            ),
+        }
+        assert!(
+            root.join("completed").is_file(),
+            "{case}: Cargo must finish even after protocol refusal"
+        );
+        let entry = super::cache_entry_directory(
+            &spec,
+            resolve_cargo_build_inputs(&spec).unwrap().fingerprint(),
+        );
+        assert!(
+            !entry.exists(),
+            "{case}: incomplete exact entry must be cleaned up"
+        );
+        assert!(!expected_artifacts(&spec, &spec.target_dir)[0].exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+}
+
+// Path-only cases declare the fixture's default targets without executing Cargo.
+fn fixture_targets(spec: &WasmBuildSpec) -> Vec<super::WasmArtifactTarget> {
+    spec.packages
+        .iter()
+        .map(|package| super::WasmArtifactTarget {
+            package_id: String::new(),
+            name: spec
+                .example
+                .clone()
+                .unwrap_or_else(|| package.replace('-', "_")),
+            kind: if spec.example.is_some() {
+                crate::cargo::observation::schema::TargetKind::Example
+            } else {
+                crate::cargo::observation::schema::TargetKind::CDyLib
+            },
+        })
+        .collect()
+}
+fn expected_artifacts(spec: &WasmBuildSpec, target_dir: &Path) -> Vec<PathBuf> {
+    super::expected_artifacts(spec, target_dir, &fixture_targets(spec))
 }

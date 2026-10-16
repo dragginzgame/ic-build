@@ -18,6 +18,7 @@ pub(super) fn fake_wasm_build_spec(label: &str) -> (PathBuf, super::wasm_cache::
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let quoted_cargo = format!("'{}'", cargo.to_string_lossy().replace('\'', "'\"'\"'"));
     let wrapper = root.join("cargo.sh");
+    let artifact_message = crate::cargo_fixture::wasm_artifact_message_script(&root, "target");
     write_executable_script(
         &wrapper,
         format!(
@@ -27,6 +28,7 @@ if [ "$1" = build ]; then
     target="$CARGO_TARGET_DIR"
     mkdir -p "$target/wasm32-unknown-unknown/debug"
     printf '\000asm\001\000\000\000' > "$target/wasm32-unknown-unknown/debug/fixture.wasm"
+    {artifact_message}
     exit 0
 fi
 exec {quoted_cargo} "$@"

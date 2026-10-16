@@ -405,6 +405,7 @@ fn admit_graph(
 }
 
 fn external_rows(bytes: &[u8]) -> Result<BTreeMap<(String, String, String), String>, Cause> {
+    use super::lockfile::{external_package, required_string};
     let lock: toml::Value = toml::from_str(std::str::from_utf8(bytes)?)?;
     let mut rows = BTreeMap::new();
     for package in lock
@@ -412,16 +413,14 @@ fn external_rows(bytes: &[u8]) -> Result<BTreeMap<(String, String, String), Stri
         .and_then(toml::Value::as_array)
         .ok_or("missing lock packages")?
     {
-        let Some(source) = package.get("source") else {
+        // Unsourced entries are outside this subset policy, including unknown
+        // entries without a source. The fingerprint reader is stricter there.
+        if package.get("source").is_none() {
             continue;
-        };
-        let text = |key| {
-            package
-                .get(key)
-                .and_then(toml::Value::as_str)
-                .ok_or_else(|| format!("missing lock {key}"))
-        };
-        let source = source.as_str().ok_or("invalid lock source")?;
+        }
+        let table = external_package(package)?.ok_or("missing lock source")?;
+        let text = |key| required_string(table, key).map_err(|_| format!("missing lock {key}"));
+        let source = required_string(table, "source").map_err(|_| "invalid lock source")?;
         let checksum = if source.starts_with("registry+") {
             let checksum = text("checksum")?;
             checksum

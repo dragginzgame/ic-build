@@ -422,13 +422,34 @@ fn incomplete_output_set_fails_and_removes_staging() {
     ));
     fs::write(transaction.output_path("first").unwrap(), b"first")
         .expect("write only first output");
+    let missing = transaction.output_path("second").unwrap();
     let staging = transaction.staging_directory().to_owned();
+    let undeclared = [
+        staging.join("outputs/extra-a"),
+        staging.join("outputs/extra-b"),
+        staging.join("build-a.log"),
+        staging.join("build-b.log"),
+    ];
+    for path in &undeclared {
+        fs::write(path, b"unexpected").unwrap();
+    }
 
     let error = transaction
         .commit()
         .expect_err("partial transaction must fail");
 
-    assert!(matches!(error, ArtifactCacheError::InvalidOutputs { .. }));
+    let ArtifactCacheError::InvalidOutputs { outputs } = error else {
+        panic!("expected complete invalid-output diagnostics: {error}");
+    };
+    assert_eq!(outputs.len(), 5);
+    assert_eq!(
+        outputs
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>(),
+        std::iter::once(("second".to_owned(), missing))
+            .chain(undeclared.map(|path| ("<undeclared>".to_owned(), path)))
+            .collect(),
+    );
     assert!(!staging.exists());
     assert!(matches!(
         prepare_artifact_cache(&spec).unwrap(),
@@ -587,6 +608,38 @@ fn tampered_cache_entry_is_rebuilt_instead_of_reused() {
 
     assert!(matches!(rebuilt, ArtifactCachePreparation::Build(_)));
     fs::remove_dir_all(root).expect("remove tampered-entry test directory");
+}
+
+#[test]
+fn manifest_read_bound_preserves_writer_widths_and_byte_lengths() {
+    use crate::artifacts::digest::{FileDigest, digest_bytes};
+    let key = digest_bytes("manifest-bound-test", b"identity");
+    let mut spec = ArtifactCacheSpec::new(Path::new("cache"), "bound", "recipe");
+    for count in [0, 1, 9, 10, 11, 99, 100, 101, 999, 1000, 1001] {
+        spec.outputs = (0..count)
+            .map(|index| super::OutputSpec {
+                name: format!("{index}-{}", "λ".repeat(index % 128)),
+                destination: Path::new("unused").to_owned(),
+                validation: if index % 2 == 0 {
+                    ArtifactOutputValidation::RegularFile
+                } else {
+                    ArtifactOutputValidation::NonEmptyFile
+                },
+            })
+            .collect();
+        let maximum = super::maximum_manifest_len(&spec).unwrap();
+        for bytes in [0, 9, 10, 99, 100, u64::MAX] {
+            let encoded = super::manifest_contents(
+                key,
+                &spec,
+                std::iter::repeat(FileDigest { bytes, digest: key }),
+            );
+            assert!(encoded.len() <= maximum, "{count} outputs, {bytes} bytes");
+            if bytes == u64::MAX {
+                assert_eq!(encoded.len(), maximum);
+            }
+        }
+    }
 }
 
 #[test]
@@ -1229,6 +1282,32 @@ fn filesystem_boundaries_reject_cache_inputs_and_destination_aliases() {
         .expect("abort ancestor input transaction");
 
     fs::remove_dir_all(root).expect("remove filesystem-boundary test directory");
+}
+
+#[test]
+#[cfg(unix)]
+fn cargo_boundary_observations_are_lazy_and_scoped_to_one_validation() {
+    let (root, build) =
+        crate::artifacts::test_support::fake_wasm_build_spec("boundary-observations");
+    let resolved = resolve_cargo_build_inputs(&build).unwrap();
+    let outside = root.join("published");
+    let mut observations = super::CargoInputBoundaries::default();
+    assert!(!observations.watches(&resolved, &outside).unwrap());
+    fs::remove_file(root.join("Cargo.toml")).unwrap();
+    assert!(!observations.watches(&resolved, &outside).unwrap());
+
+    // Generated-state exclusions must still avoid inspecting missing inputs.
+    let mut fresh = super::CargoInputBoundaries::default();
+    assert!(
+        !fresh
+            .watches(&resolved, &resolved.exclusions()[0].join("output"))
+            .unwrap()
+    );
+    assert!(matches!(
+        fresh.watches(&resolved, &outside),
+        Err(ArtifactCacheError::Io { source, .. }) if source.kind() == std::io::ErrorKind::NotFound
+    ));
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[cfg(unix)]

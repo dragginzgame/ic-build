@@ -2,7 +2,7 @@
 
 IC Build provides common Cargo/Wasm builds and retained artifact caches, moved
 from IC Testkit, and feature-safe Cargo grouping from Canic.
-The [published 0.6 family is available on crates.io](https://crates.io/crates/ic-build/0.6.0).
+The [published 0.9 family is available on crates.io](https://crates.io/crates/ic-build/0.9.0).
 The owning
 [extraction issue](https://github.com/dragginzgame/ic-build/issues/1) tracks
 producer and consumer acceptance.
@@ -28,8 +28,8 @@ Tooling. IC Build must not depend on Canic, IcyDB, PocketIC or IC Testkit.
 
 ## Use
 
-The examples below use the pending 0.9 API in this checkout. After 0.9 is
-published, add the registry dependency to your host-side package:
+The examples below use the published 0.9 API. Add the registry dependency to
+your host-side package:
 
 ```toml
 [dependencies]
@@ -55,6 +55,13 @@ fn build(workspace: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
 ```
 
 Consumers select packages, profiles, environment and maintenance policy.
+Pending 0.10 selects compiled Wasm through Cargo's exact package/target messages,
+including custom cdylib names. Existing recipes keep their cache paths and keys.
+The engine owns `--message-format=json`; wrappers must report artifact records.
+`with_cargo_message_bytes` adjusts the default 16 MiB per-message allowance.
+Overflow refuses publication after Cargo completes while diagnostics keep flowing.
+This adds no elapsed-time deadline. Metadata-derived declared paths remain
+available for caller-owned external builds.
 To adopt 0.9, remove the fourth argument from `WasmBuildSpec::new` and retain
 profile selection through `with_cargo_profile_args`. Output directories follow
 those arguments automatically, including when a later call replaces them.
@@ -65,9 +72,10 @@ framing and source custody. Configuration contents are excluded from returned
 facts and failure diagnostics. Observation executes no Cargo commands and does
 not establish build or release validity.
 
-IC Build 0.8 and pending 0.9 use IC Host 0.21 at the public grouping/capture boundary;
+IC Build 0.8 and 0.9 use IC Host 0.21 at the public grouping/capture boundary;
 align direct Host dependencies before passing
 `OutputLimits` or typed Host failures across that boundary.
+Pending 0.10 aligns that public boundary with registry Host 0.22.1.
 The [deployable-Wasm LTO guidance](docs/artifacts.md#deployable-wasm-lto) records
 whole-canister measurements and shows how a common adapter can apply full LTO
 through the existing API, with complete-application qualification before adopting
@@ -76,6 +84,40 @@ Publication makes the engine available; [#1](https://github.com/dragginzgame/ic-
 still tracks consumer acceptance, Canic production convergence and required native
 macOS qualification. See the artifact guide for source custody and retained-cache
 contracts.
+
+## Native executables
+
+Pending 0.10 adds `cargo::native::build_native_executable` on Unix. It builds an
+explicit package's binary or example and returns Cargo's reported executable and
+target root, without reconstructing paths for custom profiles or target directories.
+The caller supplies its Cargo command factory, profile/features, diagnostics writer
+and per-message JSON allowance. Set shared manifest/configuration/target paths in
+the factory so metadata and build use the same recipe; build-only selection and
+path overrides are refused. Compiler diagnostics stream without a default deadline.
+
+```rust,no_run
+use ic_build::cargo::native::{NativeExecutableSpec, build_native_executable};
+use std::process::Command;
+
+let spec = NativeExecutableSpec {
+    package: "my-package",
+    target_name: "worker",
+    target_kind: "example",
+    build_args: &[],
+    max_message_bytes: 16 * 1024 * 1024,
+};
+let built = build_native_executable(&spec, || {
+    let mut cargo = Command::new("cargo");
+    cargo.current_dir("/checkout");
+    cargo
+}, std::io::stderr(), || Ok(()))?;
+# Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
+```
+
+Admission runs before each dispatch; commands already running complete through
+Host's direct-child owner. Source/configuration/tool exclusion, in-flight signal
+policy and artifact lifetime stay with the caller. This result does not establish
+immutable artifact custody or release admission.
 
 ## Development
 

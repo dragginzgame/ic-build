@@ -133,6 +133,10 @@ fn standalone_file_directory_absence_and_consumer_encoding_are_preserved() {
     );
     // The prior consumer uses a String-keyed map. Path ordering is different for
     // `a.sibling` and `a/child`, so this checks the actual retained encoding.
+    let child = directory.join("child");
+    let sibling = root.join("a.sibling");
+    assert!(child < sibling);
+    assert!(child.to_str().unwrap() > sibling.to_str().unwrap());
     let mut fields = evidence
         .entries()
         .iter()

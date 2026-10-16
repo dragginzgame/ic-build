@@ -3,6 +3,41 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.10.0]
+
+- **Breaking:** align exposed Host types with the incoming registry Host 0.22.1
+  selection; callers passing Host values must align their direct dependencies
+  ([#48](https://github.com/dragginzgame/ic-build/issues/48)). Preserve byte
+  publication's former Replace/umask-filtered 0666 policy explicitly.
+- **Breaking:** reserve Cargo's JSON message format for artifact selection;
+  profile arguments may no longer override `--message-format`. Cargo wrappers
+  must emit exact package/target artifact records for successful builds.
+- Capture Wasm from Cargo-reported artifact paths and admit custom cdylib names.
+  Preserve existing recipes' fingerprints, cache paths and stamp bytes. Share
+  message decoding/matching with native executable selection. A caller-adjustable
+  16 MiB per-message allowance refuses publication after completion on overflow,
+  without terminating Cargo or adding a build deadline
+  ([#49](https://github.com/dragginzgame/ic-build/issues/49)).
+- Consolidate fresh/batched resolution completion while retaining fresh
+  post-build verification and progress/failure phases.
+
+- Avoid retaining undeclared-path lists for cache-validity checks and allocating
+  a placeholder manifest for its read bound. Keep complete staged diagnostics,
+  directory-read errors, exact manifest bounds and existing cache bytes.
+
+- Reuse successful Cargo input-boundary observations within each transaction
+  validation call, preserving lazy exclusion checks and fresh-call admission
+  ([#47 — Consolidate boundary observations, lock decoding and native framing](https://github.com/dragginzgame/ic-build/issues/47)).
+- Share external Cargo.lock field decoding between fingerprinting and archive
+  qualification, preserving raw fingerprint bytes and each caller's refusal policy
+  ([#47 — Consolidate boundary observations, lock decoding and native framing](https://github.com/dragginzgame/ic-build/issues/47)).
+
+- Build selected native binaries/examples from Cargo's exact package and
+  executable messages, including custom profiles and target directories.
+  Diagnostics stream without a default elapsed-time deadline; callers retain
+  tool, source and artifact custody
+  ([#30 — Select native Cargo executables](https://github.com/dragginzgame/ic-build/issues/30)).
+
 ## [0.9.0] - 2026-10-16
 
 - **Breaking:** remove the fourth, output-directory argument from

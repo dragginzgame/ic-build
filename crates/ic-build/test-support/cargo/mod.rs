@@ -30,3 +30,53 @@ pub fn write_fixture_package(
     )?;
     fs::write(directory.join("src/lib.rs"), source)
 }
+
+/// Synthetic Cargo artifact record using the fixture's actual package/target ID.
+/// The shell variable must contain a JSON-safe generated fixture output directory.
+pub fn wasm_artifact_message_script(root: &Path, variable: &str) -> String {
+    let output =
+        std::process::Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+            .current_dir(root)
+            .args([
+                "metadata",
+                "--offline",
+                "--no-deps",
+                "--format-version",
+                "1",
+            ])
+            .output()
+            .expect("observe fixture Cargo metadata");
+    assert!(
+        output.status.success(),
+        "fixture metadata: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let metadata: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let package = metadata["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|package| package["name"] == "fixture")
+        .unwrap();
+    let target = package["targets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|target| {
+            target["kind"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|kind| kind == "cdylib")
+        })
+        .unwrap();
+    let message = serde_json::json!({
+        "reason": "compiler-artifact", "package_id": package["id"], "target": target,
+        "profile": {"opt_level": "0", "debug_assertions": true, "overflow_checks": true, "test": false},
+        "features": [], "fresh": false, "executable": null,
+        "filenames": ["@TARGET@/wasm32-unknown-unknown/debug/fixture.wasm"]
+    }).to_string();
+    let quoted = format!("'{}'", message.replace('\'', "'\"'\"'"));
+    let quoted = quoted.replace("@TARGET@", &format!("'\"${variable}\"'"));
+    format!("printf '%s\\n' {quoted}\n")
+}

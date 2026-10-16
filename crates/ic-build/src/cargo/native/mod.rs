@@ -1,0 +1,253 @@
+//! Selected native executables from Cargo's own package and artifact messages.
+
+use super::{
+    messages::{MessageDecoder, artifact_matches},
+    observation::schema,
+    selection::CargoSelection,
+};
+use ic_host_process::{
+    child::OwnedChild,
+    tool::{
+        OutputLimit, OutputLimits, OutputStream, SuccessfulExit, communicate_child_with_observer,
+    },
+};
+use std::{
+    error::Error,
+    ffi::OsString,
+    io::{self, Write},
+    path::PathBuf,
+    process::{Command, Stdio},
+};
+
+#[cfg(test)]
+mod tests;
+
+/// Exact native target and caller-selected build arguments and decoding allowance.
+pub struct NativeExecutableSpec<'a> {
+    /// Unique package name in the selected Cargo metadata graph.
+    pub package: &'a str,
+    /// Cargo target name, without guessing an output filename.
+    pub target_name: &'a str,
+    /// `bin` or `example`, selecting Cargo's corresponding build target.
+    pub target_kind: &'a str,
+    /// Additional build arguments, such as profile and features. Package, target,
+    /// manifest, target-directory and configuration overrides are refused; select
+    /// shared configuration and paths in the command factory instead.
+    /// Cargo's JSON message format is owned by this operation.
+    pub build_args: &'a [OsString],
+    /// Maximum metadata bytes or bytes in one Cargo JSON message, including LF.
+    /// Total streamed diagnostic output and build duration have no default limit.
+    pub max_message_bytes: usize,
+}
+
+/// Cargo-reported paths; mutable build-directory custody remains caller-owned.
+#[derive(Debug)]
+pub struct NativeExecutable {
+    /// Absolute executable reported for the exact selected package and target.
+    pub executable: PathBuf,
+    /// Absolute target root reported by the same Cargo command's metadata.
+    pub target_directory: PathBuf,
+}
+
+/// Build a selected native target and return Cargo's reported executable.
+///
+/// The factory supplies the same Cargo prefix, working directory, environment
+/// and network/tool policy for metadata and build. Commands add `--locked`, exact
+/// package/target selection and Cargo's JSON diagnostics format. Stdout is a
+/// bounded-per-message protocol; rendered compiler diagnostics and piped stderr
+/// stream to `diagnostics`. Other stderr configurations remain intact. Stdin is
+/// null. This owns direct-child completion, not process-group or signal policy.
+/// `admit` runs before each command factory, so caller interruption can refuse
+/// another dispatch after metadata. In-flight commands still run to completion.
+///
+/// Callers exclude source/config/tool mutation and retain artifact custody. No
+/// cache, installation, release admission, retry or elapsed-time default is added.
+/// Interrupted or rejected capture uses Host's direct-child cleanup evidence.
+///
+/// # Errors
+/// Refuses invalid selection before command effects, missing/ambiguous metadata
+/// or artifacts, malformed/oversized messages, sink failures and command failures.
+/// Original Host execution/status/cleanup causes remain downcastable.
+pub fn build_native_executable(
+    spec: &NativeExecutableSpec<'_>,
+    mut cargo: impl FnMut() -> Command,
+    mut diagnostics: impl Write,
+    mut admit: impl FnMut() -> io::Result<()>,
+) -> Result<NativeExecutable, Box<dyn Error + Send + Sync>> {
+    let selector = match spec.target_kind {
+        "bin" => "--bin",
+        "example" => "--example",
+        _ => return Err(protocol("native target kind must be bin or example").into()),
+    };
+    if spec.package.is_empty() || spec.target_name.is_empty() || spec.max_message_bytes == 0 {
+        return Err(protocol("empty native target selection or message allowance").into());
+    }
+    let arguments = CargoSelection::parse(spec.build_args.to_vec());
+    if !arguments.flags.is_empty() {
+        return Err(protocol("native build arguments override the selected recipe").into());
+    }
+    arguments
+        .profile
+        .as_ref()
+        .map_err(|message| protocol(message))?;
+    admit()?;
+    let mut command = cargo();
+    command.args(["metadata", "--locked", "--no-deps", "--format-version", "1"]);
+    command.args(&arguments.metadata_arguments);
+    let mut bytes = Vec::new();
+    execute(&mut command, |stream, chunk| match stream {
+        OutputStream::Stdout => append(&mut bytes, chunk, spec.max_message_bytes),
+        OutputStream::Stderr => diagnostics.write_all(chunk),
+    })?;
+    let (package_id, target_directory) = selection(&serde_json::from_slice(&bytes)?, spec)?;
+    admit()?;
+    let mut command = cargo();
+    command.args([
+        "build",
+        "--locked",
+        "--message-format=json",
+        "-p",
+        spec.package,
+        selector,
+        spec.target_name,
+    ]);
+    command.args(spec.build_args);
+    let mut decoder = MessageDecoder::new(spec.max_message_bytes, false);
+    let mut executable = None;
+    execute(&mut command, |stream, chunk| {
+        if stream == OutputStream::Stderr {
+            return diagnostics.write_all(chunk);
+        }
+        decoder.feed(chunk, |decoded| {
+            selected_message(
+                decoded,
+                &package_id,
+                spec,
+                &mut executable,
+                &mut diagnostics,
+            )
+        })
+    })?;
+    decoder.finish(|decoded| {
+        selected_message(
+            decoded,
+            &package_id,
+            spec,
+            &mut executable,
+            &mut diagnostics,
+        )
+    })?;
+    Ok(NativeExecutable {
+        executable: executable.ok_or_else(|| protocol("Cargo omitted the selected executable"))?,
+        target_directory,
+    })
+}
+
+fn selection(
+    metadata: &schema::Metadata,
+    spec: &NativeExecutableSpec<'_>,
+) -> io::Result<(String, PathBuf)> {
+    let mut matching = metadata
+        .packages
+        .iter()
+        .filter(|package| package.name.as_str() == spec.package);
+    let package = matching
+        .next()
+        .ok_or_else(|| protocol("Cargo omitted selected package"))?;
+    if matching.next().is_some() {
+        return Err(protocol("Cargo package name is ambiguous"));
+    }
+    if package
+        .targets
+        .iter()
+        .filter(|target| matches_target(target, spec))
+        .count()
+        != 1
+    {
+        return Err(protocol("Cargo target is missing or ambiguous"));
+    }
+    if package.id.repr.is_empty() {
+        return Err(protocol("Cargo omitted package identity"));
+    }
+    if !metadata.target_directory.is_absolute() {
+        return Err(protocol("Cargo omitted absolute target directory"));
+    }
+    Ok((
+        package.id.repr.clone(),
+        metadata.target_directory.clone().into_std_path_buf(),
+    ))
+}
+
+fn matches_target(target: &schema::Target, spec: &NativeExecutableSpec<'_>) -> bool {
+    target.name == spec.target_name && target.kind.contains(&spec.target_kind.into())
+}
+
+fn selected_message(
+    message: schema::Message,
+    package_id: &str,
+    spec: &NativeExecutableSpec<'_>,
+    executable: &mut Option<PathBuf>,
+    diagnostics: &mut impl Write,
+) -> io::Result<()> {
+    match message {
+        schema::Message::CompilerMessage(message) => {
+            if let Some(rendered) = message.message.rendered {
+                diagnostics.write_all(rendered.as_bytes())?;
+            }
+        }
+        schema::Message::CompilerArtifact(artifact)
+            if artifact_matches(
+                &artifact,
+                package_id,
+                spec.target_name,
+                &spec.target_kind.into(),
+            ) =>
+        {
+            let path = artifact
+                .executable
+                .filter(|path| path.is_absolute())
+                .ok_or_else(|| protocol("Cargo omitted absolute executable path"))?
+                .into_std_path_buf();
+            if executable.replace(path).is_some() {
+                return Err(protocol("Cargo reported multiple selected executables"));
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn execute(
+    command: &mut Command,
+    output: impl FnMut(OutputStream, &[u8]) -> io::Result<()>,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    command.stdin(Stdio::null()).stdout(Stdio::piped());
+    let mut child = OwnedChild::spawn_direct(command)?;
+    communicate_child_with_observer(
+        &mut child,
+        None,
+        OutputLimits {
+            stdout: OutputLimit::Truncate(0),
+            stderr: OutputLimit::Truncate(0),
+            timeout: None,
+        },
+        SuccessfulExit::Cleanup,
+        || false,
+        output,
+    )?
+    .require_success()?;
+    Ok(())
+}
+
+fn append(buffer: &mut Vec<u8>, bytes: &[u8], maximum: usize) -> io::Result<()> {
+    if bytes.len() > maximum.saturating_sub(buffer.len()) {
+        return Err(protocol("Cargo JSON message exceeds caller allowance"));
+    }
+    buffer.try_reserve(bytes.len()).map_err(io::Error::other)?;
+    buffer.extend_from_slice(bytes);
+    Ok(())
+}
+
+fn protocol(message: &'static str) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, message)
+}

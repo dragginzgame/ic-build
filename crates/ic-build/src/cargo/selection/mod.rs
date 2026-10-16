@@ -13,6 +13,7 @@ pub enum SelectionFlag {
     InputSelection,
     TargetSelection,
     Library,
+    MessageFormat,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -138,6 +139,9 @@ impl CargoSelection {
 fn selection_flag(argument: &OsStr, short: Option<(u8, usize)>) -> Option<SelectionFlag> {
     let bytes = argument.as_encoded_bytes();
     let option = bytes.split(|byte| *byte == b'=').next().unwrap_or_default();
+    if option == b"--message-format" {
+        return Some(SelectionFlag::MessageFormat);
+    }
     // Refusals historically inspect every raw token, including option
     // values. Keep that conservative admission independent of projection.
     if matches!(argument.to_str(), Some("--help" | "--unit-graph"))

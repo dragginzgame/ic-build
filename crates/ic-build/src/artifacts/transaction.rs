@@ -9,6 +9,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod boundaries;
+use boundaries::CargoInputBoundaries;
+
 use super::{
     cache_fs::{
         ArtifactCacheMaintenance, ArtifactCachePrunePolicy, ArtifactCachePruneReport, CacheFsError,
@@ -797,6 +800,10 @@ impl ArtifactBuildTransaction {
             manifest_contents(self.resolved.key, &self.spec, output_info.iter().copied());
         ic_host_fs::durable::write_bytes(
             &self.staging_directory.path().join(MANIFEST_FILE),
+            ic_host_fs::durable::WriteOptions {
+                mode: ic_host_fs::durable::PublicationMode::Replace,
+                permissions: 0o666,
+            },
             manifest.as_bytes(),
         )
         .map_err(|source| ArtifactCacheError::Io {
@@ -1105,6 +1112,7 @@ fn validate_spec(spec: &ArtifactCacheSpec) -> Result<(), ArtifactCacheError> {
 }
 
 fn validate_filesystem_boundaries(spec: &ArtifactCacheSpec) -> Result<(), ArtifactCacheError> {
+    let mut cargo_boundaries = CargoInputBoundaries::default();
     let cache_root =
         canonicalize_allow_missing(&spec.cache_root).map_err(|source| ArtifactCacheError::Io {
             operation: "resolve artifact cache root",
@@ -1138,7 +1146,7 @@ fn validate_filesystem_boundaries(spec: &ArtifactCacheSpec) -> Result<(), Artifa
         }
     }
     for cargo_inputs in &spec.cargo_build_inputs {
-        if resolved_cargo_inputs_watch_path(&cargo_inputs.resolved, &cache_root)? {
+        if cargo_boundaries.watches(&cargo_inputs.resolved, &cache_root)? {
             return invalid_spec(&format!(
                 "artifact cache root must be outside resolved Cargo build inputs `{}` or inside one of their generated-state exclusions",
                 cargo_inputs.label
@@ -1174,7 +1182,7 @@ fn validate_filesystem_boundaries(spec: &ArtifactCacheSpec) -> Result<(), Artifa
             }
         }
         for cargo_inputs in &spec.cargo_build_inputs {
-            if resolved_cargo_inputs_watch_path(&cargo_inputs.resolved, &destination)? {
+            if cargo_boundaries.watches(&cargo_inputs.resolved, &destination)? {
                 return invalid_spec(&format!(
                     "output `{}` destination must be outside resolved Cargo build inputs `{}` or inside one of their generated-state exclusions",
                     output.name, cargo_inputs.label
@@ -1223,38 +1231,6 @@ fn resolve_file_entry(path: &Path, operation: &'static str) -> Result<PathBuf, A
         path: path.to_owned(),
         source,
     })
-}
-
-fn resolved_cargo_inputs_watch_path(
-    resolved: &ResolvedCargoBuildInputs,
-    candidate: &Path,
-) -> Result<bool, ArtifactCacheError> {
-    for exclusion in resolved.exclusions() {
-        let exclusion =
-            canonicalize_allow_missing(exclusion).map_err(|source| ArtifactCacheError::Io {
-                operation: "resolve Cargo build input exclusion",
-                path: exclusion.clone(),
-                source,
-            })?;
-        if candidate.starts_with(exclusion) {
-            return Ok(false);
-        }
-    }
-
-    for input in resolved.inputs() {
-        let path = canonicalize_path(input.path(), "canonicalize resolved Cargo build input")?;
-        let is_directory = fs::metadata(&path)
-            .map_err(|source| ArtifactCacheError::Io {
-                operation: "inspect resolved Cargo build input",
-                path: path.clone(),
-                source,
-            })?
-            .is_dir();
-        if candidate == path || (is_directory && candidate.starts_with(path)) {
-            return Ok(true);
-        }
-    }
-    Ok(false)
 }
 
 fn canonicalize_path(path: &Path, operation: &'static str) -> Result<PathBuf, ArtifactCacheError> {
@@ -1435,18 +1411,11 @@ fn validated_cache_outputs(
     if !manifest_metadata.file_type().is_file() {
         return Ok(None);
     }
-    // The writer owns the layout. Fixed-width digests and the largest byte count
-    // bound every valid manifest for this declared output set, without inspecting
-    // cached output bytes or allocating a placeholder output-info vector.
-    let maximum_len = manifest_contents(
-        key,
-        spec,
-        std::iter::repeat(FileDigest {
-            bytes: u64::MAX,
-            digest: key,
-        }),
-    )
-    .len();
+    // Reject oversized manifests before inspecting cached output bytes. No
+    // manifest can be represented if its checked length bound overflows.
+    let Some(maximum_len) = maximum_manifest_len(spec) else {
+        return Ok(None);
+    };
     let Some(manifest) = read_file_with_limit(&manifest_path, maximum_len).map_err(|source| {
         ArtifactCacheError::Io {
             operation: "read artifact cache manifest",
@@ -1498,20 +1467,15 @@ fn inspect_complete_output_set(
             }
         }
     }
-    invalid.extend(
-        undeclared_output_paths(root, outputs.len())?
-            .into_iter()
-            .map(|path| ("<undeclared>".to_owned(), path)),
-    );
-    invalid.extend(
-        undeclared_child_paths(
-            root,
-            |name| name == "outputs",
-            "read artifact staging directory",
-        )?
-        .into_iter()
-        .map(|path| ("<undeclared>".to_owned(), path)),
-    );
+    visit_undeclared_outputs(root, outputs.len(), |entry| {
+        invalid.push(("<undeclared>".to_owned(), entry.path()));
+    })?;
+    visit_undeclared_children(
+        root,
+        |name| name == "outputs",
+        "read artifact staging directory",
+        |entry| invalid.push(("<undeclared>".to_owned(), entry.path())),
+    )?;
     if invalid.is_empty() {
         Ok(info)
     } else {
@@ -1539,18 +1503,19 @@ fn inspect_cached_output_set(
             }
         }
     }
-    if !undeclared_output_paths(root, outputs.len())?.is_empty() {
+    if visit_undeclared_outputs(root, outputs.len(), |_| {})? {
         return Ok(None);
     }
     Ok(Some(info))
 }
 
-fn undeclared_output_paths(
+fn visit_undeclared_outputs(
     root: &Path,
     output_count: usize,
-) -> Result<Vec<PathBuf>, ArtifactCacheError> {
+    visit: impl FnMut(fs::DirEntry),
+) -> Result<bool, ArtifactCacheError> {
     let output_directory = root.join("outputs");
-    undeclared_child_paths(
+    visit_undeclared_children(
         &output_directory,
         |name| {
             let Some(name) = name.to_str() else {
@@ -1561,20 +1526,24 @@ fn undeclared_output_paths(
                 .is_some_and(|index| index < output_count && name == format_output_index(index))
         },
         "read artifact output directory",
+        visit,
     )
 }
 
-fn undeclared_child_paths(
+fn visit_undeclared_children(
     directory: &Path,
     is_expected: impl Fn(&OsStr) -> bool,
     operation: &'static str,
-) -> Result<Vec<PathBuf>, ArtifactCacheError> {
+    mut visit: impl FnMut(fs::DirEntry),
+) -> Result<bool, ArtifactCacheError> {
     let entries = fs::read_dir(directory).map_err(|source| ArtifactCacheError::Io {
         operation,
         path: directory.to_owned(),
         source,
     })?;
-    let mut undeclared = Vec::new();
+    let mut undeclared = false;
+    // Scan to completion even for boolean-only callers: a later directory-read
+    // error must remain an error rather than becoming a cache miss.
     for entry in entries {
         let entry = entry.map_err(|source| ArtifactCacheError::Io {
             operation,
@@ -1582,7 +1551,8 @@ fn undeclared_child_paths(
             source,
         })?;
         if !is_expected(&entry.file_name()) {
-            undeclared.push(entry.path());
+            undeclared = true;
+            visit(entry);
         }
     }
     Ok(undeclared)
@@ -1595,13 +1565,12 @@ fn cache_entry_root_is_valid(root: &Path) -> Result<bool, ArtifactCacheError> {
         LAST_USED_FILE,
         super::cache_fs::RETENTION_LOCK_FILE,
     ];
-    if !undeclared_child_paths(
+    if visit_undeclared_children(
         root,
         |name| expected.iter().any(|expected| name == *expected),
         "read artifact cache entry",
-    )?
-    .is_empty()
-    {
+        |_| {},
+    )? {
         return Ok(false);
     }
     if !is_plain_directory(
@@ -1654,6 +1623,24 @@ fn inspect_artifact(
 
 fn manifest_header(key: InputDigest) -> String {
     format!("{ARTIFACT_CACHE_FORMAT}\nkey:{key}\n")
+}
+
+fn maximum_manifest_len(spec: &ArtifactCacheSpec) -> Option<usize> {
+    // Exact writer layout with maximum-width u64 byte counts and SHA-256 hex.
+    // Keep dynamic names/tokens in bytes, including any multibyte UTF-8.
+    let header_len = ARTIFACT_CACHE_FORMAT.len() + "\nkey:\n".len() + 64;
+    let row_overhead = "output:".len() + "::::\n".len() + 20 + 64;
+    spec.outputs
+        .iter()
+        .enumerate()
+        .try_fold(header_len, |length, (index, output)| {
+            let index_digits = usize::try_from(index.checked_ilog10().unwrap_or(0) + 1).ok()?;
+            length
+                .checked_add(row_overhead)?
+                .checked_add(index_digits)?
+                .checked_add(output.name.len())?
+                .checked_add(output.validation.cache_token().len())
+        })
 }
 
 fn manifest_contents(
