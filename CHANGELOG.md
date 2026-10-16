@@ -3,7 +3,7 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.8.0]
+## [0.8.0] - 2026-10-16
 
 - **Breaking:** align exposed Host types with the selected IC Host 0.21 graph.
   Consumers passing Host limits or typed errors across this boundary must align
