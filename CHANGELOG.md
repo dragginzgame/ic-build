@@ -3,7 +3,7 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.10.0]
+## [0.10.0] - 2026-10-16
 
 - **Breaking:** align exposed Host types with the incoming registry Host 0.22.1
   selection; callers passing Host values must align their direct dependencies
