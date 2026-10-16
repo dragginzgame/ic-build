@@ -3,7 +3,7 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.9.0]
+## [0.9.0] - 2026-10-16
 
 - **Breaking:** remove the fourth, output-directory argument from
   `WasmBuildSpec::new`. Cargo profile arguments now select both the build profile
