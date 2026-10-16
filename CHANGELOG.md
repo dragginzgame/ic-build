@@ -3,6 +3,39 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.11.0]
+
+- **Breaking:** align exposed Host types with the incoming Host 0.23.1 selection.
+  Callers passing Host values must align their direct Host dependencies.
+- Preserve the former unbounded missing-target symlink allowance, nonblocking
+  lock admission and child cleanup policies through Host's current APIs.
+- Move owned Cargo artifact paths into results, stream error lists directly to
+  their formatter and avoid retaining generated-root lists for boundary decisions.
+  Preserve ambiguity checks, exact diagnostics and complete boundary observation.
+- Share fresh/batched snapshot assembly and reuse package-field JSON scratch
+  space, preserving exact fingerprints, fresh verification and timing attribution.
+- Format redacted cache Debug lists from borrowed iterators while preserving
+  ordinary and pretty output.
+
+- Move isolated dependency trees and borrow candidate package names during
+  feature-safe grouping, preserving greedy order and exact tree comparisons
+  ([#50](https://github.com/dragginzgame/ic-build/issues/50)).
+- Simplify atomic snapshot reader counting while preserving matching-only
+  increments, concurrency, saturation and relaxed ordering.
+- Index external lock identities once per semantic projection and remove
+  temporary path allocations from boundary-cache hits and relative evidence
+  encoding. Preserve first-match lock selection, lazy validation and digest bytes.
+- Index batch resolution contexts while preserving first-seen groups, distinct
+  feature selections and independent failure results.
+- Collect depfile inputs directly into the discovery set and compute Wasm stamp
+  read bounds without rendering a dummy stamp. Preserve refusals and retained bytes.
+- Index workspace package selection per metadata context and move native
+  identities/paths out of consumed metadata. Check archive-package uniqueness
+  without collecting matches, preserving selection errors and fingerprints.
+- Borrow configuration include paths and tree-root names, and select each Wasm
+  artifact directory once per output set. Preserve include-validation order,
+  normalized dependency trees and exact artifact paths.
+
 ## [0.10.0] - 2026-10-16
 
 - **Breaking:** align exposed Host types with the incoming registry Host 0.22.1

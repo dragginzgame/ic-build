@@ -52,6 +52,7 @@ use super::{
 };
 
 const CACHE_FORMAT_VERSION: &str = "ic-testkit-wasm-build-v1";
+const ARTIFACT_STAMP_DIGEST_LABEL: &str = "artifact-sha256:";
 // Consumer policy: diagnostic prefixes, complete probe output, and no deadline.
 const CARGO_DIAGNOSTIC_BYTES: usize = 1024 * 1024;
 const TOOL_IDENTITY_BYTES: usize = 64 * 1024;
@@ -306,7 +307,7 @@ pub(super) struct WasmBuildBatchInputMetrics {
     pub(super) prepared_reuses: usize,
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, Hash, PartialEq)]
 struct BatchResolutionKey<'a> {
     workspace_root: &'a Path,
     cargo_program: &'a OsStr,
@@ -1497,6 +1498,29 @@ pub struct CargoInputProbePolicy<'a> {
 }
 
 impl ResolvedCargoBuildInputs {
+    fn assemble(
+        spec: &WasmBuildSpec,
+        inputs: ResolvedLocalInputs,
+        exclusions: Vec<PathBuf>,
+        input_digest: InputDigest,
+        validation_digest: InputDigest,
+        fingerprint: InputDigest,
+        timings: impl FnOnce() -> WasmInputResolutionTimings,
+    ) -> Self {
+        Self {
+            fingerprint,
+            input_digest,
+            validation_digest,
+            inputs: cargo_build_inputs(inputs.validation_inputs),
+            exclusions: exclusions.into(),
+            wasm_artifact_error: inputs.wasm_artifact_error,
+            artifact_paths: expected_artifacts(spec, &spec.target_dir, &inputs.wasm_targets).into(),
+            wasm_targets: inputs.wasm_targets.into(),
+            // Fresh-resolution totals include path conversion and assembly.
+            timings: timings(),
+        }
+    }
+
     /// Borrow declared output paths after metadata admits the selected targets.
     ///
     /// These are paths under the specification's `target_dir`, not retained or
@@ -1704,18 +1728,12 @@ impl WasmBuildInputSnapshotState {
             .snapshots
             .iter()
             .find(|(candidate, _)| candidate == spec)?;
-        let mut current = self.reader_reuses.load(Ordering::Relaxed);
-        loop {
-            match self.reader_reuses.compare_exchange_weak(
-                current,
-                current.saturating_add(1),
-                Ordering::Relaxed,
-                Ordering::Relaxed,
-            ) {
-                Ok(_) => break,
-                Err(observed) => current = observed,
-            }
-        }
+        #[allow(deprecated, reason = "try_update is unstable at the Rust 1.91 MSRV")]
+        let _ = self
+            .reader_reuses
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                Some(current.saturating_add(1))
+            });
         Some(snapshot.clone())
     }
 
@@ -1760,16 +1778,13 @@ impl<'a, 'session> WasmBuildBatchInputResolver<'a, 'session> {
         mut reuse: Option<WasmBuildInputReuse<'session>>,
     ) -> Self {
         let specs = specs.into_iter().collect::<Vec<_>>();
-        let mut keys = Vec::<BatchResolutionKey>::new();
+        let mut groups_by_key = HashMap::new();
         let mut groups = Vec::<BatchResolutionGroup>::new();
         let mut group_by_index = Vec::with_capacity(specs.len());
         for (index, spec) in specs.iter().copied().enumerate() {
-            let key = BatchResolutionKey::for_spec(spec);
-            let group = keys
-                .iter()
-                .position(|candidate| *candidate == key)
-                .unwrap_or_else(|| {
-                    keys.push(key);
+            let group = *groups_by_key
+                .entry(BatchResolutionKey::for_spec(spec))
+                .or_insert_with(|| {
                     groups.push(BatchResolutionGroup {
                         indexes: Vec::new(),
                     });
@@ -1933,27 +1948,23 @@ impl<'a, 'session> WasmBuildBatchInputResolver<'a, 'session> {
                 }
             };
             let spec = self.specs[index];
-            let resolved = ResolvedCargoBuildInputs {
-                fingerprint: finish_build_fingerprint(
-                    spec,
-                    &cargo_identity,
-                    &rustc_identity,
-                    input_digest,
-                ),
+            let fingerprint =
+                finish_build_fingerprint(spec, &cargo_identity, &rustc_identity, input_digest);
+            let resolved = ResolvedCargoBuildInputs::assemble(
+                spec,
+                inputs,
+                exclusions,
                 input_digest,
                 validation_digest,
-                inputs: cargo_build_inputs(inputs.validation_inputs),
-                exclusions: exclusions.into(),
-                wasm_artifact_error: inputs.wasm_artifact_error,
-                artifact_paths: expected_artifacts(spec, &spec.target_dir, &inputs.wasm_targets)
-                    .into(),
-                wasm_targets: inputs.wasm_targets.into(),
-                timings: if Some(index) == timing_index {
-                    timings
-                } else {
-                    WasmInputResolutionTimings::default()
+                fingerprint,
+                || {
+                    if Some(index) == timing_index {
+                        timings
+                    } else {
+                        WasmInputResolutionTimings::default()
+                    }
                 },
-            };
+            );
             if let Some(WasmBuildInputReuse::Session(session)) = self.reuse.as_mut() {
                 session.remember(spec, &resolved);
             }
@@ -3741,23 +3752,21 @@ fn build_fingerprint_with_policy(
 
     let fingerprint =
         finish_build_fingerprint(spec, &cargo_identity, &rustc_identity, input_digest);
-    Ok(ResolvedCargoBuildInputs {
-        fingerprint,
+    Ok(ResolvedCargoBuildInputs::assemble(
+        spec,
+        inputs,
+        exclusions,
         input_digest,
         validation_digest,
-        inputs: cargo_build_inputs(inputs.validation_inputs),
-        exclusions: exclusions.into(),
-        wasm_artifact_error: inputs.wasm_artifact_error,
-        artifact_paths: expected_artifacts(spec, &spec.target_dir, &inputs.wasm_targets).into(),
-        wasm_targets: inputs.wasm_targets.into(),
-        timings: WasmInputResolutionTimings {
+        fingerprint,
+        || WasmInputResolutionTimings {
             tool_identity,
             cargo_metadata,
             input_discovery,
             content_hashing,
             total: total_started.elapsed(),
         },
-    })
+    ))
 }
 
 fn cargo_build_inputs(inputs: Vec<(PathBuf, PathBuf)>) -> Arc<[CargoBuildInput]> {
@@ -3952,7 +3961,7 @@ fn capture_controlled_probe(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    let mut child = OwnedChild::spawn_with_cleanup(command, policy.cleanup).map_err(|source| {
+    let mut child = OwnedChild::spawn(command, policy.cleanup).map_err(|source| {
         ToolError::Execution(Box::new(ExecutionError {
             failure: ExecutionFailure::Io {
                 operation: ExecutionOperation::Spawn,
@@ -3988,7 +3997,7 @@ struct MetadataPackage<'a> {
 // its own closure and independently validates filesystem inputs.
 struct ParsedCargoMetadata<'a> {
     packages: HashMap<&'a str, MetadataPackage<'a>>,
-    workspace_members: HashSet<&'a str>,
+    workspace_packages: HashMap<&'a str, Option<&'a str>>,
     nodes: HashMap<&'a str, MetadataNode<'a>>,
     workspace_root: &'a Path,
 }
@@ -4004,11 +4013,21 @@ impl<'a> ParsedCargoMetadata<'a> {
         original: &'a Value,
     ) -> Result<Self, String> {
         let packages = metadata_packages(metadata, original);
-        let workspace_members = metadata
+        let workspace_members: HashSet<_> = metadata
             .workspace_members
             .iter()
             .map(|id| id.repr.as_str())
             .collect();
+        let mut workspace_packages = HashMap::new();
+        for package in packages
+            .values()
+            .filter(|package| workspace_members.contains(package.package.id.repr.as_str()))
+        {
+            workspace_packages
+                .entry(package.package.name.as_str())
+                .and_modify(|id| *id = None)
+                .or_insert(Some(package.package.id.repr.as_str()));
+        }
         let resolve = metadata
             .resolve
             .as_ref()
@@ -4029,7 +4048,7 @@ impl<'a> ParsedCargoMetadata<'a> {
             .collect();
         Ok(Self {
             packages,
-            workspace_members,
+            workspace_packages,
             nodes,
             workspace_root: metadata.workspace_root.as_std_path(),
         })
@@ -4059,6 +4078,23 @@ struct LockedPackageIdentity {
     version: String,
     source: String,
     checksum: Option<String>,
+}
+
+type LockedPackageIndex<'a> = HashMap<(&'a str, &'a str, &'a str), &'a LockedPackageIdentity>;
+
+fn index_locked_packages(packages: &[LockedPackageIdentity]) -> LockedPackageIndex<'_> {
+    let mut index = HashMap::with_capacity(packages.len());
+    for package in packages {
+        // Preserve the first matching row, including an absent checksum.
+        index
+            .entry((
+                package.name.as_str(),
+                package.version.as_str(),
+                package.source.as_str(),
+            ))
+            .or_insert(package);
+    }
+    index
 }
 
 fn resolve_local_inputs(
@@ -4178,24 +4214,14 @@ fn selected_package_ids<'a>(
 ) -> Result<VecDeque<&'a str>, WasmBuildError> {
     let mut selected_ids = VecDeque::new();
     for requested in &spec.packages {
-        let mut matches = metadata
-            .packages
-            .values()
-            .filter(|package| {
-                package.package.name == *requested
-                    && metadata
-                        .workspace_members
-                        .contains(package.package.id.repr.as_str())
-            })
-            .map(|package| package.package.id.repr.as_str());
-        match (matches.next(), matches.next()) {
-            (Some(id), None) => selected_ids.push_back(id),
-            (None, _) => {
+        match metadata.workspace_packages.get(requested.as_str()) {
+            Some(Some(id)) => selected_ids.push_back(*id),
+            None => {
                 return Err(WasmBuildError::InvalidSpec {
                     message: format!("Cargo workspace contains no package named `{requested}`"),
                 });
             }
-            _ => {
+            Some(None) => {
                 return Err(WasmBuildError::InvalidSpec {
                     message: format!("Cargo workspace package name `{requested}` is ambiguous"),
                 });
@@ -4213,13 +4239,14 @@ fn semantic_workspace_projection(
     // A workspace-root or external local package cannot be separated from the
     // broad root safely; `None` keeps the complete-input fingerprint.
     let locked_packages = locked_package_identities(workspace_root)?;
+    let locked_index = index_locked_packages(&locked_packages);
     let mut identities = HashMap::new();
     for &id in closure {
         let package = metadata
             .packages
             .get(id)
             .ok_or_else(|| invalid_metadata(&format!("resolved package `{id}` is missing")))?;
-        let Some(identity) = semantic_package_identity(package, workspace_root, &locked_packages)
+        let Some(identity) = semantic_package_identity(package, workspace_root, &locked_index)
         else {
             return Ok(None);
         };
@@ -4346,12 +4373,13 @@ fn locked_package_identities(
 fn semantic_package_identity(
     package: &MetadataPackage<'_>,
     workspace_root: &Path,
-    locked_packages: &[LockedPackageIdentity],
+    locked_packages: &LockedPackageIndex<'_>,
 ) -> Option<InputDigest> {
     let package = package.package;
+    let version = package.version.to_string();
     let mut hasher = InputHasher::new("wasm-semantic-package-identity-v1");
     hasher.field("name", package.name.as_bytes());
-    hasher.field("version", package.version.to_string().as_bytes());
+    hasher.field("version", version.as_bytes());
     if package.source.is_none() {
         let manifest = package.manifest_path.strip_prefix(workspace_root).ok()?;
         let package_root = package.manifest_path.parent()?;
@@ -4361,11 +4389,11 @@ fn semantic_package_identity(
         hasher.field("local-manifest", &os_bytes(manifest.as_os_str()));
     } else {
         let metadata_source = &package.source.as_ref()?.repr;
-        let locked = locked_packages.iter().find(|locked| {
-            package.name == locked.name
-                && locked.version == package.version.to_string()
-                && locked.source == *metadata_source
-        })?;
+        let locked = locked_packages.get(&(
+            package.name.as_str(),
+            version.as_str(),
+            metadata_source.as_str(),
+        ))?;
         match locked.source.as_str() {
             source if source.starts_with("registry+") && locked.checksum.is_some() => {}
             source if source.starts_with("git+") && source.contains('#') => {}
@@ -4390,13 +4418,20 @@ fn semantic_package_projection(
     // through CARGO_PKG_* variables. Local manifests and external checksums
     // cover the remaining package definition.
     let mut hasher = InputHasher::new("wasm-semantic-package-projection-v1");
+    let mut serialized = Vec::new();
     for field in SEMANTIC_PACKAGE_FIELDS {
         hasher.field("package-field-name", field.as_bytes());
         match package.original.get(*field) {
-            Some(value) => hasher.field("package-field-value", value.to_string().as_bytes()),
+            Some(value) => {
+                serialized.clear();
+                serde_json::to_writer(&mut serialized, value)
+                    .expect("serializing JSON values into a Vec cannot fail");
+                hasher.field("package-field-value", &serialized);
+            }
             None => hasher.field("package-field-missing", b""),
         }
     }
+    drop(serialized);
 
     let mut features = node
         .node
@@ -4742,7 +4777,7 @@ fn validate_shared_incremental_target_boundary(
             Ok((canonical, metadata.is_dir()))
         })
         .collect::<Result<Vec<_>, WasmBuildError>>()?;
-    let safe_generated_roots = std::iter::once(spec.target_dir.clone())
+    let has_safe_generated_root = std::iter::once(spec.target_dir.clone())
         .chain(std::iter::once(spec.workspace_root.join("target")))
         .chain(
             inputs
@@ -4756,11 +4791,9 @@ fn validate_shared_incremental_target_boundary(
                 .iter()
                 .any(|(input, _is_directory)| input.starts_with(root))
         })
-        .collect::<Vec<_>>();
-    if safe_generated_roots
-        .iter()
-        .any(|root| shared_target.starts_with(root))
-    {
+        // Keep observing every candidate after finding a safe generated root.
+        .fold(false, |safe, root| safe | shared_target.starts_with(root));
+    if has_safe_generated_root {
         return Ok(());
     }
 
@@ -4899,7 +4932,7 @@ fn communicate_cargo_build(
         command.stdin(Stdio::null());
     }
     let mut child = if observed {
-        OwnedChild::spawn(&mut command)
+        OwnedChild::spawn(&mut command, CleanupPolicy::KillAndWait)
     } else {
         OwnedChild::spawn_direct(&mut command)
     }
@@ -5003,40 +5036,40 @@ fn collect_wasm_artifact(
     let schema::Message::CompilerArtifact(artifact) = message else {
         return Ok(());
     };
-    for (target, selected) in targets.iter().zip(artifacts) {
-        if !artifact_matches(&artifact, &target.package_id, &target.name, &target.kind) {
-            continue;
-        }
-        if !artifact
-            .target
-            .crate_types
-            .contains(&schema::CrateType::CDyLib)
-        {
-            return Err(io::Error::new(
+    // Acquisition admits unique targets before dispatching Cargo.
+    let Some((_, selected)) = targets.iter().zip(artifacts).find(|(target, _)| {
+        artifact_matches(&artifact, &target.package_id, &target.name, &target.kind)
+    }) else {
+        return Ok(());
+    };
+    if !artifact
+        .target
+        .crate_types
+        .contains(&schema::CrateType::CDyLib)
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Cargo reported a non-cdylib Wasm target",
+        ));
+    }
+    let mut matching = artifact
+        .filenames
+        .into_iter()
+        .filter(|path| path.extension() == Some("wasm"));
+    let path = matching
+        .next()
+        .filter(|path| path.is_absolute())
+        .ok_or_else(|| {
+            io::Error::new(
                 io::ErrorKind::InvalidData,
-                "Cargo reported a non-cdylib Wasm target",
-            ));
-        }
-        let mut matching = artifact
-            .filenames
-            .iter()
-            .filter(|path| path.extension() == Some("wasm"));
-        let path = matching
-            .next()
-            .filter(|path| path.is_absolute())
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Cargo omitted absolute Wasm artifact path",
-                )
-            })?;
-        if matching.next().is_some() || selected.replace(path.clone().into_std_path_buf()).is_some()
-        {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Cargo reported ambiguous Wasm artifacts",
-            ));
-        }
+                "Cargo omitted absolute Wasm artifact path",
+            )
+        })?;
+    if matching.next().is_some() || selected.replace(path.into_std_path_buf()).is_some() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Cargo reported ambiguous Wasm artifacts",
+        ));
     }
     Ok(())
 }
@@ -5074,16 +5107,14 @@ fn expected_artifacts(
             .profile_target_dir()
             .expect("Cargo profile was validated before artifact discovery"),
     );
+    let directory = if spec.example.is_some() {
+        profile.join("examples")
+    } else {
+        profile
+    };
     targets
         .iter()
-        .map(|target| {
-            let directory = if spec.example.is_some() {
-                profile.join("examples")
-            } else {
-                profile.clone()
-            };
-            directory.join(format!("{}.wasm", target.name.replace('-', "_")))
-        })
+        .map(|target| directory.join(format!("{}.wasm", target.name.replace('-', "_"))))
         .collect()
 }
 
@@ -5098,9 +5129,9 @@ fn validated_artifact_set(
     fingerprint: InputDigest,
 ) -> Option<Vec<FileDigest>> {
     let header = artifact_stamp_header(fingerprint);
-    // Both digests have a fixed encoded width. Use the writer's format to bound
-    // the read without hashing artifact bytes before rejecting a stale stamp.
-    let stamp_len = artifact_stamp_contents(fingerprint, fingerprint).len();
+    // The artifact digest has a fixed hex width, followed by one newline.
+    let stamp_len =
+        header.len() + ARTIFACT_STAMP_DIGEST_LABEL.len() + fingerprint.as_bytes().len() * 2 + 1;
     artifacts
         .iter()
         .map(|artifact| {
@@ -5144,7 +5175,7 @@ fn artifact_stamp_header(fingerprint: InputDigest) -> String {
 
 fn artifact_stamp_contents(fingerprint: InputDigest, artifact_digest: InputDigest) -> String {
     format!(
-        "{}artifact-sha256:{artifact_digest}\n",
+        "{}{ARTIFACT_STAMP_DIGEST_LABEL}{artifact_digest}\n",
         artifact_stamp_header(fingerprint),
     )
 }
@@ -5338,15 +5369,16 @@ impl std::fmt::Display for WasmBuildError {
                 "invalid Cargo configuration at {}: {message}",
                 path.display(),
             ),
-            Self::MissingArtifacts { paths } => write!(
-                formatter,
-                "cargo build succeeded without producing: {}",
-                paths
-                    .iter()
-                    .map(|path| path.display().to_string())
-                    .collect::<Vec<_>>()
-                    .join(", "),
-            ),
+            Self::MissingArtifacts { paths } => {
+                formatter.write_str("cargo build succeeded without producing: ")?;
+                for (index, path) in paths.iter().enumerate() {
+                    if index != 0 {
+                        formatter.write_str(", ")?;
+                    }
+                    write!(formatter, "{}", path.display())?;
+                }
+                Ok(())
+            }
             Self::InputsChangedDuringAcquisition { before, after } => write!(
                 formatter,
                 "Wasm inputs changed during artifact acquisition: {before} -> {after}",

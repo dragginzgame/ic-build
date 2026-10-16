@@ -118,12 +118,13 @@ pub fn discover_cargo_depfile_inputs(
             if record.extension().is_none_or(|extension| extension != "d") {
                 continue;
             }
-            inputs.extend(read_record_inputs(
+            read_record_inputs(
                 current_dir,
                 &record,
                 &excluded,
                 maximum_record_bytes,
-            )?);
+                &mut inputs,
+            )?;
         }
     }
     Ok(inputs.into_iter().collect())
@@ -158,11 +159,15 @@ pub fn read_cargo_depfile_inputs(
         .iter()
         .map(|path| canonicalize_allow_missing(path))
         .collect::<io::Result<Vec<_>>>()?;
-    Ok(
-        read_record_inputs(current_dir, record, &excluded, maximum_record_bytes)?
-            .into_iter()
-            .collect(),
-    )
+    let mut inputs = BTreeSet::new();
+    read_record_inputs(
+        current_dir,
+        record,
+        &excluded,
+        maximum_record_bytes,
+        &mut inputs,
+    )?;
+    Ok(inputs.into_iter().collect())
 }
 
 fn read_record_inputs(
@@ -170,12 +175,12 @@ fn read_record_inputs(
     record: &Path,
     excluded: &[PathBuf],
     maximum_record_bytes: usize,
-) -> io::Result<BTreeSet<PathBuf>> {
+    inputs: &mut BTreeSet<PathBuf>,
+) -> io::Result<()> {
     let bytes = ic_host_fs::read::read_file_no_follow(record, maximum_record_bytes)
         .map_err(io::Error::from)?;
     let text = std::str::from_utf8(&bytes)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-    let mut inputs = BTreeSet::new();
     for path in parse_cargo_depfile(text)? {
         let path = if path.is_absolute() {
             path
@@ -196,7 +201,7 @@ fn read_record_inputs(
         }
         inputs.insert(path);
     }
-    Ok(inputs)
+    Ok(())
 }
 
 fn flush_token(

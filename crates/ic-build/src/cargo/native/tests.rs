@@ -29,34 +29,40 @@ fn metadata() -> schema::Metadata {
 fn metadata_selection_refuses_missing_ambiguous_and_relative_roots() {
     let spec = spec();
     let original = metadata();
-    let (id, root) = selection(&original, &spec).unwrap();
+    let (id, root) = selection(original.clone(), &spec).unwrap();
     assert_eq!(id, "path+file:///source#fixture@0.0.0");
     assert_eq!(root, PathBuf::from("/selected-target"));
     let mut ambiguous = original.clone();
     ambiguous.packages.push(original.packages[0].clone());
-    assert!(selection(&ambiguous, &spec).is_err());
+    assert!(selection(ambiguous, &spec).is_err());
     let mut missing = original.clone();
     missing.packages[0].targets.clear();
-    assert!(selection(&missing, &spec).is_err());
+    assert!(selection(missing, &spec).is_err());
     let mut relative = original.clone();
     relative.target_directory = "relative-target".into();
-    assert!(selection(&relative, &spec).is_err());
+    assert!(selection(relative, &spec).is_err());
     let mut wrong_kind = original;
     wrong_kind.packages[0].targets[0].kind = vec![schema::TargetKind::Lib];
-    assert!(selection(&wrong_kind, &spec).is_err());
+    assert!(selection(wrong_kind, &spec).is_err());
     let mut missing_package = metadata();
     missing_package.packages.clear();
-    assert!(selection(&missing_package, &spec).is_err());
+    assert!(selection(missing_package, &spec).is_err());
     let mut duplicate_target = metadata();
     let target = duplicate_target.packages[0].targets[0].clone();
     duplicate_target.packages[0].targets.push(target);
-    assert!(selection(&duplicate_target, &spec).is_err());
+    assert!(selection(duplicate_target, &spec).is_err());
+    let mut missing_identity = metadata();
+    missing_identity.packages[0].id.repr.clear();
+    assert_eq!(
+        selection(missing_identity, &spec).unwrap_err().to_string(),
+        "Cargo omitted package identity"
+    );
 }
 
 #[test]
 fn messages_keep_exact_package_target_diagnostics_and_ambiguity() {
     let spec = spec();
-    let (id, _) = selection(&metadata(), &spec).unwrap();
+    let (id, _) = selection(metadata(), &spec).unwrap();
     let target = serde_json::to_value(&metadata().packages[0].targets[0]).unwrap();
     let artifact = json!({
         "reason": "compiler-artifact", "package_id": id, "target": target,

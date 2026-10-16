@@ -16,7 +16,7 @@ pub(super) fn canonicalize_allow_missing(path: &Path) -> io::Result<PathBuf> {
     } else {
         std::env::current_dir()?
     };
-    ic_host_fs::path::canonicalize_allow_missing(path, &base)
+    ic_host_fs::path::canonicalize_allow_missing(path, &base, usize::MAX)
 }
 
 const CACHE_DIRECTORY_TAG: &str = "Signature: 8a477f597d28d172789f06886806bc55\n\
@@ -340,7 +340,10 @@ pub(super) fn lock_cache_file_with_wait_observer(
 }
 
 pub(super) fn try_lock_cache_file(path: &Path) -> Result<Option<File>, CacheFsError> {
-    match ic_host_fs::durable::try_lock_regular_file_with_parents(path).map_err(io::Error::from) {
+    let result = ic_host_fs::durable::open_regular_lock_file_with_parents(path)
+        .map_err(io::Error::from)
+        .and_then(|file| ic_host_fs::durable::try_lock_exclusive(&file).map(|()| file));
+    match result {
         Ok(file) => Ok(Some(file)),
         Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(None),
         Err(source) => Err(CacheFsError {

@@ -181,6 +181,52 @@ fn write_projection_package(root: &Path, package: &str, manifest_suffix: &str) {
 }
 
 #[test]
+fn workspace_selection_preserves_membership_ambiguity_and_requested_order() {
+    let packages = [("a", "alpha"), ("z", "zeta"), ("other", "alpha")].map(|(id, name)| {
+        serde_json::json!({
+            "id": id, "name": name, "version": "1.0.0",
+            "manifest_path": format!("/workspace/{id}/Cargo.toml"),
+            "dependencies": [], "targets": [], "features": {},
+        })
+    });
+    let original = serde_json::json!({
+        "packages": packages,
+        "workspace_members": ["a", "z", "a", "unknown-id"],
+        "workspace_root": "/workspace", "target_directory": "/workspace/target",
+        "resolve": {"nodes": [], "root": null}, "version": 1,
+    });
+    let mut spec = WasmBuildSpec::new(Path::new("/workspace"), Path::new("/target"), &[]);
+    // Exercise the selector independently of the builder's canonical ordering.
+    spec.packages = vec!["zeta".into(), "alpha".into()];
+    let canonical = serde_json::from_value(original.clone()).unwrap();
+    let parsed = super::ParsedCargoMetadata::parse(&canonical, &original).unwrap();
+    assert_eq!(
+        super::selected_package_ids(&spec, &parsed).unwrap(),
+        ["z", "a"]
+    );
+    spec.packages = vec!["missing".into(), "alpha".into()];
+    assert!(matches!(
+        super::selected_package_ids(&spec, &parsed),
+        Err(WasmBuildError::InvalidSpec { message })
+            if message == "Cargo workspace contains no package named `missing`"
+    ));
+
+    let mut ambiguous = original.clone();
+    ambiguous["workspace_members"] = serde_json::json!(["a", "z", "other"]);
+    let canonical = serde_json::from_value(ambiguous.clone()).unwrap();
+    let parsed = super::ParsedCargoMetadata::parse(&canonical, &ambiguous).unwrap();
+    spec.packages = vec!["alpha".into()];
+    assert!(matches!(
+        super::selected_package_ids(&spec, &parsed),
+        Err(WasmBuildError::InvalidSpec { message })
+            if message == "Cargo workspace package name `alpha` is ambiguous"
+    ));
+    // An unused ambiguous name still permits selecting another workspace member.
+    spec.packages = vec!["zeta".into()];
+    assert_eq!(super::selected_package_ids(&spec, &parsed).unwrap(), ["z"]);
+}
+
+#[test]
 #[cfg(unix)]
 fn package_selection_agrees_across_identity_artifacts_and_cargo_invocation() {
     let root = unique_temp_directory("canonical-wasm-packages");
@@ -308,6 +354,19 @@ fn wasm_stamps_require_exact_identity_and_unmodified_contents() {
     assert!(validated_artifact_set(&artifacts, fingerprint).is_none());
     publish_artifact_stamps(&artifacts, fingerprint).expect("replace oversized stamp");
     assert!(validated_artifact_set(&artifacts, fingerprint).is_some());
+    for bytes in [[0; 32], [0xff; 32]] {
+        let fingerprint = super::InputDigest::from_bytes(bytes);
+        publish_artifact_stamps(&artifacts, fingerprint).unwrap();
+        let stamp = fs::read(&stamp_path).unwrap();
+        assert_eq!(stamp.len(), 184);
+        assert!(validated_artifact_set(&artifacts, fingerprint).is_some());
+        let mut oversized = stamp.clone();
+        oversized.push(b'\n');
+        fs::write(&stamp_path, oversized).unwrap();
+        assert!(validated_artifact_set(&artifacts, fingerprint).is_none());
+        fs::write(&stamp_path, &stamp[..stamp.len() - 1]).unwrap();
+        assert!(validated_artifact_set(&artifacts, fingerprint).is_none());
+    }
     fs::remove_dir_all(root).expect("remove stamp fixture");
 }
 
@@ -509,6 +568,18 @@ fn cargo_input_overrides_are_rejected_before_resolution_or_acquisition() {
 #[test]
 fn shared_target_boundaries_preserve_retained_exact_entries() {
     let (root, base) = fake_wasm_build_spec("shared-exact-boundary");
+    let missing = root.join("missing-input");
+    let generated = base
+        .clone()
+        .with_shared_incremental_target(base.target_dir.join("incremental"));
+    assert!(matches!(
+        super::validate_shared_incremental_target_boundary(
+            &generated,
+            &[("root".into(), root.clone()), ("missing".into(), missing.clone())],
+        ),
+        Err(WasmBuildError::Io { path, source, .. })
+            if path == missing && source.kind() == std::io::ErrorKind::NotFound
+    ));
     let unsafe_shared = root.join("shared");
     let mut nested = base.clone();
     nested.target_dir = unsafe_shared.join("exact");
@@ -769,7 +840,12 @@ fn semantic_projection_preserves_v1_raw_metadata_fields() {
         package: &canonical,
         original: &original,
     };
-    let identity = semantic_package_identity(&package, Path::new("/workspace"), &[]).unwrap();
+    let identity = semantic_package_identity(
+        &package,
+        Path::new("/workspace"),
+        &super::LockedPackageIndex::new(),
+    )
+    .unwrap();
     let value = serde_json::json!({
         "id": id, "features": ["z", "a"], "dependencies": [],
         "deps": [{"name": "self", "pkg": id,
@@ -829,17 +905,54 @@ fn semantic_package_identity_uses_selected_registry_lock_checksum() {
 
     write_lock(Some("aaa"));
     let first_lock = locked_package_identities(&root).expect("project first lockfile");
-    let first = semantic_package_identity(&package, &root, &first_lock)
-        .expect("project checksummed registry package");
+    let first =
+        semantic_package_identity(&package, &root, &super::index_locked_packages(&first_lock))
+            .expect("project checksummed registry package");
     write_lock(Some("bbb"));
     let second_lock = locked_package_identities(&root).expect("project second lockfile");
-    let second = semantic_package_identity(&package, &root, &second_lock)
-        .expect("project changed registry checksum");
+    let second =
+        semantic_package_identity(&package, &root, &super::index_locked_packages(&second_lock))
+            .expect("project changed registry checksum");
     assert_ne!(first, second);
 
     write_lock(None);
     let missing_checksum = locked_package_identities(&root).expect("project incomplete lockfile");
-    assert!(semantic_package_identity(&package, &root, &missing_checksum).is_none());
+    assert!(
+        semantic_package_identity(
+            &package,
+            &root,
+            &super::index_locked_packages(&missing_checksum)
+        )
+        .is_none()
+    );
+
+    // Same names with different versions/sources must not shadow the exact row;
+    // duplicate exact rows retain the first checksum, even when it is missing.
+    for checksum in [Some("aaa"), None] {
+        write_lock(checksum);
+        let selected = fs::read_to_string(root.join("Cargo.lock")).unwrap();
+        let row = |name: &str, version: &str, source: &str| {
+            format!(
+                "\n[[package]]\nname = \"{name}\"\nversion = \"{version}\"\nsource = \"{source}\"\nchecksum = \"decoy\"\n"
+            )
+        };
+        let mut contents = String::from("version = 4\n");
+        contents.push_str(&row("other", "1.2.3", source));
+        contents.push_str(&row("dependency", "1.2.4", source));
+        contents.push_str(&row(
+            "dependency",
+            "1.2.3",
+            "registry+https://other.invalid",
+        ));
+        contents.push_str(selected.strip_prefix("version = 4\n").unwrap());
+        contents.push_str(&row("dependency", "1.2.3", source));
+        fs::write(root.join("Cargo.lock"), contents).unwrap();
+        let rows = locked_package_identities(&root).unwrap();
+        assert_eq!(
+            semantic_package_identity(&package, &root, &super::index_locked_packages(&rows)),
+            checksum.map(|_| first)
+        );
+    }
     fs::remove_dir_all(root).expect("remove registry identity fixture");
 }
 
@@ -869,7 +982,7 @@ fn batch_input_snapshot_reuses_compatible_toolchain_and_metadata_resolution() {
         fs::create_dir_all(root.join(package).join("src")).expect("create batch fixture package");
         fs::write(
             root.join(package).join("Cargo.toml"),
-            format!("[package]\nname = \"{package}\"\nversion = \"0.0.0\"\nedition = \"2024\"\n"),
+            format!("[package]\nname = \"{package}\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[features]\nalpha = []\n"),
         )
         .expect("write batch fixture manifest");
         fs::write(
@@ -898,21 +1011,25 @@ fn batch_input_snapshot_reuses_compatible_toolchain_and_metadata_resolution() {
     let target = root.join("exact");
     let specs = [
         WasmBuildSpec::new(&root, &target, &["fixture_a"]).with_cargo_program(&cargo_wrapper),
+        WasmBuildSpec::new(&root, &target, &["fixture_b"])
+            .with_cargo_program(&cargo_wrapper)
+            .with_cargo_profile_args(["--features=alpha"]),
         WasmBuildSpec::new(&root, &target, &["fixture_b"]).with_cargo_program(&cargo_wrapper),
+        WasmBuildSpec::new(&root, &target, &["fixture_a"])
+            .with_cargo_program(&cargo_wrapper)
+            .with_cargo_profile_args(["--features=alpha"]),
     ];
     let mut resolver = WasmBuildBatchInputResolver::new(&specs, None);
     let mut progress = ProgressReporter::silent();
 
-    let first = resolver
-        .resolve(0, &mut progress)
-        .expect("resolve first batched input");
-    let second = resolver
-        .resolve(1, &mut progress)
-        .expect("reuse batched input snapshot");
-    assert_eq!(resolver.metrics().runs, 1);
-    assert_eq!(resolver.metrics().reuses, 1);
-    assert!(first.timings().total() > Duration::ZERO);
-    assert_eq!(second.timings().total(), Duration::ZERO);
+    let snapshots = (0..specs.len())
+        .map(|index| resolver.resolve(index, &mut progress).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(resolver.metrics().runs, 2);
+    assert_eq!(resolver.metrics().reuses, 2);
+    for (index, inputs) in snapshots.iter().enumerate() {
+        assert_eq!(inputs.timings().total() > Duration::ZERO, index < 2);
+    }
 
     let invocations = fs::read_to_string(&invocation_log).expect("read Cargo invocation log");
     assert_eq!(
@@ -920,23 +1037,28 @@ fn batch_input_snapshot_reuses_compatible_toolchain_and_metadata_resolution() {
             .lines()
             .filter(|line| *line == "--version")
             .count(),
-        1
+        2
     );
     assert_eq!(
         invocations
             .lines()
             .filter(|line| *line == "metadata")
             .count(),
-        1
+        2
     );
-    assert_eq!(
-        first.fingerprint(),
-        resolve_cargo_build_inputs(&specs[0])
-            .expect("resolve equivalent standalone inputs")
-            .fingerprint(),
-        "batch membership must not change an individual exact fingerprint",
-    );
-    assert_ne!(first.fingerprint(), second.fingerprint());
+    for (spec, inputs) in specs.iter().zip(&snapshots) {
+        let mut fresh =
+            resolve_cargo_build_inputs(spec).expect("resolve equivalent standalone inputs");
+        let mut batched = inputs.clone();
+        fresh.timings = super::WasmInputResolutionTimings::default();
+        batched.timings = super::WasmInputResolutionTimings::default();
+        assert_eq!(
+            batched, fresh,
+            "all snapshot fields must agree independently of timing attribution"
+        );
+    }
+    assert_ne!(snapshots[0].fingerprint(), snapshots[3].fingerprint());
+    assert_ne!(snapshots[1].fingerprint(), snapshots[2].fingerprint());
     fs::remove_dir_all(root).expect("remove batch input snapshot fixture");
 }
 
@@ -2949,6 +3071,9 @@ fn cargo_artifact_protocol_refuses_bad_evidence_after_child_completion() {
         "kind",
         "relative",
         "duplicate",
+        "ambiguous",
+        "no-wasm",
+        "crate-type",
         "malformed",
         "oversized",
         "failed",
@@ -2969,6 +3094,11 @@ fn cargo_artifact_protocol_refuses_bad_evidence_after_child_completion() {
             "kind" => original.replace("\"kind\":[\"cdylib\"]", "\"kind\":[\"lib\"]"),
             "relative" => original.replace("'\"$target\"'", "relative"),
             "duplicate" => original.replace(record, &format!("{record}\n{record}")),
+            "ambiguous" => original.replace("fixture.wasm\"]", "fixture.wasm\",\"/extra.wasm\"]"),
+            "no-wasm" => original.replace("fixture.wasm\"]", "fixture.rlib\"]"),
+            "crate-type" => {
+                original.replace("\"crate_types\":[\"cdylib\"]", "\"crate_types\":[\"lib\"]")
+            }
             "malformed" => original.replace(record, "printf '%s\\n' '{invalid}'"),
             _ => original.clone(),
         };
@@ -3038,4 +3168,34 @@ fn fixture_targets(spec: &WasmBuildSpec) -> Vec<super::WasmArtifactTarget> {
 }
 fn expected_artifacts(spec: &WasmBuildSpec, target_dir: &Path) -> Vec<PathBuf> {
     super::expected_artifacts(spec, target_dir, &fixture_targets(spec))
+}
+
+#[cfg(unix)]
+#[test]
+fn prepared_reader_counts_are_concurrent_saturating_and_only_for_matches() {
+    let (root, spec) = fake_wasm_build_spec("reader-counter");
+    let state = super::WasmBuildInputSnapshotState::prepare(std::slice::from_ref(&spec)).unwrap();
+    let unknown = spec.clone().with_extra_env([("OTHER_RECIPE", "yes")]);
+    assert!(state.reuse(&unknown).is_none());
+    assert_eq!(state.reader_reuses(), 0);
+    thread::scope(|scope| {
+        for _ in 0..8 {
+            scope.spawn(|| {
+                for _ in 0..32 {
+                    assert!(state.reuse(&spec).is_some());
+                }
+            });
+        }
+    });
+    assert_eq!(state.reader_reuses(), 256);
+    state.reader_reuses.store(usize::MAX - 1, Ordering::Relaxed);
+    thread::scope(|scope| {
+        for _ in 0..8 {
+            scope.spawn(|| assert!(state.reuse(&spec).is_some()));
+        }
+    });
+    assert_eq!(state.reader_reuses(), usize::MAX);
+    assert!(state.reuse(&unknown).is_none());
+    assert_eq!(state.reader_reuses(), usize::MAX);
+    fs::remove_dir_all(root).unwrap();
 }

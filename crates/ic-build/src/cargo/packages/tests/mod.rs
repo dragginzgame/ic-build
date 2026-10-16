@@ -77,6 +77,19 @@ fn graph_requires_exact_extracted_identity_and_unique_members() {
         admit_graph(&serde_json::from_value(metadata.clone())?, &root, &specs)
     };
     admit(&metadata).unwrap();
+    let mut missing = metadata.clone();
+    missing["packages"] = json!([]);
+    let mut ambiguous = metadata.clone();
+    ambiguous["packages"]
+        .as_array_mut()
+        .unwrap()
+        .push(metadata["packages"][0].clone());
+    for rejected in [&missing, &ambiguous] {
+        assert_eq!(
+            admit(rejected).unwrap_err().to_string(),
+            "expected one extracted package: sample"
+        );
+    }
     for (field, value) in [
         ("source", json!("registry+wrong")),
         ("version", json!("0.9.0")),

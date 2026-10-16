@@ -303,7 +303,7 @@ fn unsafe_or_conflicting_example_selectors_fail_before_dispatch() {
 #[test]
 fn external_command_keeps_caller_failure_deadline_and_cancellation_policy() {
     use ic_host_process::{
-        child::OwnedChild,
+        child::{CleanupPolicy, OwnedChild},
         tool::{ExecutionFailure, SuccessfulExit, ToolError, communicate_child},
     };
     use std::process::Stdio;
@@ -354,7 +354,7 @@ fn external_command_keeps_caller_failure_deadline_and_cancellation_policy() {
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    let mut child = OwnedChild::spawn(&mut command).unwrap();
+    let mut child = OwnedChild::spawn(&mut command, CleanupPolicy::KillAndWait).unwrap();
     let error =
         communicate_child(&mut child, None, limits, SuccessfulExit::Cleanup, || true).unwrap_err();
     let ToolError::Execution(error) = error else {

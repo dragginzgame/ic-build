@@ -266,9 +266,9 @@ impl InputEvidence {
                         io::Error::new(io::ErrorKind::InvalidInput, "input is outside digest root"),
                     )
                 })?;
-                let parts = relative
-                    .components()
-                    .map(|part| match part {
+                let mut key = String::new();
+                for part in relative.components() {
+                    let name = match part {
                         Component::Normal(name) => name.to_str().ok_or_else(|| {
                             input_io(
                                 path,
@@ -285,9 +285,13 @@ impl InputEvidence {
                                 "input digest requires normal relative paths",
                             ),
                         )),
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok((parts.join("/"), value))
+                    }?;
+                    if !key.is_empty() {
+                        key.push('/');
+                    }
+                    key.push_str(name);
+                }
+                Ok((key, value))
             })
             .collect::<Result<Vec<_>, InputEvidenceError>>()?;
         Ok(digest_values(&self.spec.identity, &mut ordered))

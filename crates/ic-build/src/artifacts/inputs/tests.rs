@@ -119,6 +119,7 @@ fn standalone_file_directory_absence_and_consumer_encoding_are_preserved() {
     let directory = root.join("a");
     fs::create_dir(&directory).unwrap();
     fs::write(directory.join("child"), b"abc").unwrap();
+    fs::write(directory.join("λ source"), b"Unicode filename").unwrap();
     fs::write(root.join("a.sibling"), b"sibling").unwrap();
     let missing = root.join("missing");
     let evidence = capture(b"same authority", &[root.clone(), missing.clone()]);
@@ -161,6 +162,35 @@ fn standalone_file_directory_absence_and_consumer_encoding_are_preserved() {
     }
     assert_eq!(
         evidence.digest().unwrap().as_bytes(),
+        &<[u8; 32]>::from(expected.finalize())
+    );
+    // Independently retain the component/join encoding, including the empty root
+    // key, Unicode, missing entries and lexical ordering across path components.
+    let mut expected = Sha256::new();
+    let mut relative_fields = fields
+        .iter()
+        .map(|(path, value)| {
+            let key = Path::new(path)
+                .strip_prefix(&root)
+                .unwrap()
+                .components()
+                .map(|part| part.as_os_str().to_str().unwrap())
+                .collect::<Vec<_>>()
+                .join("/");
+            (key, value)
+        })
+        .collect::<Vec<_>>();
+    relative_fields.sort_by(|(left, _), (right, _)| left.cmp(right));
+    for field in std::iter::once(b"same authority".as_slice()).chain(
+        relative_fields
+            .iter()
+            .flat_map(|(path, hash)| [path.as_bytes(), hash.as_bytes()]),
+    ) {
+        expected.update(u64::try_from(field.len()).unwrap().to_be_bytes());
+        expected.update(field);
+    }
+    assert_eq!(
+        evidence.digest_relative_to(&root).unwrap().as_bytes(),
         &<[u8; 32]>::from(expected.finalize())
     );
     fs::remove_dir_all(root).unwrap();
@@ -359,6 +389,22 @@ fn depfile_discovery_and_disappearing_records_preserve_external_custody() {
     )
     .unwrap();
     assert_eq!(paths, std::slice::from_ref(&external));
+    fs::write(
+        records.join("second.d"),
+        "other: external/source external\n",
+    )
+    .unwrap();
+    assert_eq!(
+        discover_cargo_depfile_inputs(
+            &root,
+            &[records.clone(), records.clone()],
+            std::slice::from_ref(&records),
+            4096,
+        )
+        .unwrap(),
+        [external.clone(), external.join("source")]
+    );
+    fs::remove_file(records.join("second.d")).unwrap();
     let before = capture(b"same authority", &paths);
     fs::remove_file(&record).unwrap();
     let paths =
@@ -435,6 +481,23 @@ fn malformed_or_oversized_depfiles_refuse_the_entire_discovery() {
     assert!(discover_cargo_depfile_inputs(&root, std::slice::from_ref(&root), &[], 1).is_err());
     #[cfg(unix)]
     {
+        // Syntax refusal precedes canonicalization, even when an earlier token
+        // would fail with a symlink loop. No partial inventory may escape.
+        std::os::unix::fs::symlink("loop", root.join("loop")).unwrap();
+        fs::write(root.join("bad.d"), "role: loop\nmalformed\n").unwrap();
+        assert_eq!(
+            read_cargo_depfile_inputs(&root, &root.join("bad.d"), &[], 4096)
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidData
+        );
+        assert_eq!(
+            discover_cargo_depfile_inputs(&root, std::slice::from_ref(&root), &[], 4096)
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidData
+        );
+        fs::remove_file(root.join("bad.d")).unwrap();
         std::os::unix::fs::symlink(root.join("good.d"), root.join("alias.d")).unwrap();
         assert!(
             discover_cargo_depfile_inputs(&root, std::slice::from_ref(&root), &[], 4096).is_err()

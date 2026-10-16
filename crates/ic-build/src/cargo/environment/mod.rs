@@ -5,6 +5,7 @@ mod tests;
 
 use ic_host_artifacts::artifact::Sha256Digest;
 use std::{
+    borrow::Cow,
     collections::BTreeSet,
     ffi::OsStr,
     fmt, fs, io,
@@ -241,9 +242,9 @@ fn append_configuration(
     if let Some(include) = configuration.get("include") {
         for (included, optional) in configuration_includes(include, config)? {
             let included = if included.is_absolute() {
-                included
+                Cow::Borrowed(included)
             } else {
-                parent.join(included)
+                Cow::Owned(parent.join(included))
             };
             append_configuration(files, &included, active, optional)?;
         }
@@ -252,10 +253,10 @@ fn append_configuration(
     Ok(())
 }
 
-fn configuration_includes(
-    include: &Value,
+fn configuration_includes<'a>(
+    include: &'a Value,
     config: &Path,
-) -> Result<Vec<(PathBuf, bool)>, ConfigurationError> {
+) -> Result<Vec<(&'a Path, bool)>, ConfigurationError> {
     let values = match include {
         Value::Array(values) => values.as_slice(),
         value => std::slice::from_ref(value),
@@ -263,7 +264,7 @@ fn configuration_includes(
     values
         .iter()
         .map(|value| match value {
-            Value::String(path) => Ok((PathBuf::from(path), false)),
+            Value::String(path) => Ok((Path::new(path), false)),
             Value::Table(table) => {
                 let path = table.get("path").and_then(Value::as_str).ok_or_else(|| {
                     invalid_configuration(
@@ -283,7 +284,7 @@ fn configuration_includes(
                     })
                     .transpose()?
                     .unwrap_or(false);
-                Ok((PathBuf::from(path), optional))
+                Ok((Path::new(path), optional))
             }
             _ => Err(invalid_configuration(
                 config,

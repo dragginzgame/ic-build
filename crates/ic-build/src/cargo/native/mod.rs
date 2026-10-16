@@ -99,7 +99,7 @@ pub fn build_native_executable(
         OutputStream::Stdout => append(&mut bytes, chunk, spec.max_message_bytes),
         OutputStream::Stderr => diagnostics.write_all(chunk),
     })?;
-    let (package_id, target_directory) = selection(&serde_json::from_slice(&bytes)?, spec)?;
+    let (package_id, target_directory) = selection(serde_json::from_slice(&bytes)?, spec)?;
     admit()?;
     let mut command = cargo();
     command.args([
@@ -144,12 +144,12 @@ pub fn build_native_executable(
 }
 
 fn selection(
-    metadata: &schema::Metadata,
+    metadata: schema::Metadata,
     spec: &NativeExecutableSpec<'_>,
 ) -> io::Result<(String, PathBuf)> {
     let mut matching = metadata
         .packages
-        .iter()
+        .into_iter()
         .filter(|package| package.name.as_str() == spec.package);
     let package = matching
         .next()
@@ -173,8 +173,8 @@ fn selection(
         return Err(protocol("Cargo omitted absolute target directory"));
     }
     Ok((
-        package.id.repr.clone(),
-        metadata.target_directory.clone().into_std_path_buf(),
+        package.id.repr,
+        metadata.target_directory.into_std_path_buf(),
     ))
 }
 

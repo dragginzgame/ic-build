@@ -362,15 +362,11 @@ fn execute(
 }
 
 fn package<'a>(metadata: &'a Metadata, name: &str) -> Result<&'a Package, Cause> {
-    let selected = metadata
-        .packages
-        .iter()
-        .filter(|p| p.name == name)
-        .collect::<Vec<_>>();
-    if selected.len() != 1 {
-        return Err(format!("expected one extracted package: {name}").into());
+    let mut matching = metadata.packages.iter().filter(|p| p.name == name);
+    match (matching.next(), matching.next()) {
+        (Some(package), None) => Ok(package),
+        _ => Err(format!("expected one extracted package: {name}").into()),
     }
-    Ok(selected[0])
 }
 
 fn admit_graph(

@@ -32,6 +32,39 @@ use std::{
 };
 
 #[test]
+fn artifact_error_lists_preserve_exact_text_and_order() {
+    for (paths, expected) in [
+        (vec![], ""),
+        (vec!["a λ"], "a λ"),
+        (vec!["z", "a λ"], "z, a λ"),
+    ] {
+        let error = crate::artifacts::WasmBuildError::MissingArtifacts {
+            paths: paths.iter().map(std::path::PathBuf::from).collect(),
+        };
+        assert_eq!(
+            error.to_string(),
+            format!("cargo build succeeded without producing: {expected}")
+        );
+    }
+    for (outputs, expected) in [
+        (vec![], ""),
+        (vec![("first", "a λ")], "first (a λ)"),
+        (vec![("z", "z"), ("a", "a λ")], "z (z), a (a λ)"),
+    ] {
+        let error = ArtifactCacheError::InvalidOutputs {
+            outputs: outputs
+                .into_iter()
+                .map(|(name, path)| (name.into(), path.into()))
+                .collect(),
+        };
+        assert_eq!(
+            error.to_string(),
+            format!("artifact transaction has missing or invalid outputs: {expected}")
+        );
+    }
+}
+
+#[test]
 #[cfg(unix)]
 fn failed_commit_retains_primary_and_cleanup_errors_and_remaining_staging() {
     let root = unique_temp_directory("transaction-cleanup-failure");
@@ -1042,10 +1075,24 @@ fn import_helper_and_debug_output_do_not_expose_identity_values() {
         .with_environment([("SECRET_TOKEN", "do-not-render")])
         .with_identity_bytes("private-ish", b"also-do-not-render")
         .with_output("output", &root.join("public/output"));
-    let debug = format!("{spec:?}");
-    assert!(debug.contains("SECRET_TOKEN"));
-    assert!(!debug.contains("do-not-render"));
-    assert!(!debug.contains("also-do-not-render"));
+    for (debug, expected_names, expected_labels) in [
+        (
+            format!("{spec:?}"),
+            "environment_names: [\"SECRET_TOKEN\"]",
+            "identity_labels: [\"private-ish\"]",
+        ),
+        (
+            format!("{spec:#?}"),
+            "environment_names: [\n        \"SECRET_TOKEN\",\n    ]",
+            "identity_labels: [\n        \"private-ish\",\n    ]",
+        ),
+    ] {
+        assert!(debug.contains(expected_names));
+        assert!(debug.contains(expected_labels));
+        assert!(debug.contains("cargo_build_input_labels: []"));
+        assert!(!debug.contains("do-not-render"));
+        assert!(!debug.contains("also-do-not-render"));
+    }
     let transaction = expect_build(prepare_artifact_cache(&spec).unwrap());
 
     transaction

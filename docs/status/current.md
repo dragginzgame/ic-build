@@ -1,5 +1,176 @@
 # Current handoff
 
+## Snapshot assembly, JSON scratch and Debug projections — pending 0.11.0
+
+This compatible cleanup extends the existing dirty work over `95567eb` and its
+selected registry Host 0.23.1 graph. Fresh and batched Cargo resolution share one
+private snapshot assembler. The fresh timing callback runs after path conversion;
+batch attribution still charges one successful entry and leaves peers at zero.
+Fresh input discovery and mutation guards remain independent. Package projection
+reuses one JSON byte buffer across raw fields, retaining exact compact encoding,
+missing/null distinctions and framing. Redacted Debug lists format borrowed
+iterators directly through a private Debug adapter; values stay hidden and both
+ordinary/pretty formatting retain the former list representation.
+
+On actual Rust 1.91, 20 focused units and eight real Cargo integration parents
+pass. Coverage includes complete fresh/batch snapshot equality apart from timing,
+the retained raw-JSON fingerprint vector, semantic dependency changes, independent
+batch errors, Debug redaction/layout, named examples, concurrent prepared readers
+and transactional source guards. Strict all-target Clippy, actual MSRV all-target
+checking, formatting and links pass on Linux. Full release and native macOS gates
+remain unrun. Own versions, manifests/lock, index, incoming edits and retained
+artifacts are preserved. Before-images remain under
+`/tmp/ic-build-snapshot-assembly-20261016.3hcztc/`.
+
+## Artifact collection, diagnostics and incoming Host repair — pending 0.11.0
+
+This batch starts over `95567eb` plus the existing cleanup work and an incoming
+manifest/lock selection of registry Host 0.23.1. That graph initially fails at
+four retired APIs. The required callers now explicitly preserve `usize::MAX`
+missing-target symlink depth, open/no-follow plus nonblocking exclusive locking,
+caller-selected probe cleanup and observed-build KillAndWait group cleanup.
+The example's owned group selects the same explicit policy. Incoming manifest
+and lock bytes are preserved. Exposed Host types make the combined draft 0.11.0;
+earlier 0.10.1 draft evidence below belongs to this pending minor release.
+Own package versions and Git operations remain user-owned and unchanged.
+
+Cargo artifact collection finds the unique admitted target, then moves its owned
+filename while retaining exact package/kind/name matching, absolute-path checks,
+ambiguous filenames and duplicate-record refusal. Error-list formatting streams
+directly with unchanged text, ordering, Unicode and empty-list output. Shared
+target boundaries fold generated roots into a boolean, consuming every candidate
+and keeping all resolved-input admission eager before considering generated roots.
+
+On actual Rust 1.91 with the incoming Host graph, 58 distinct focused units and
+eight integration parents pass, including their explicitly dispatched process
+workers. Evidence covers protocol refusal after child completion, lock contention
+and redirection, source drift, retained outputs, cancellation/cleanup, real Cargo
+examples and custom multi-package library paths. Strict all-target Clippy, actual
+MSRV all-target checking, formatting and links pass on Linux. Full release gates
+and native macOS qualification remain unrun. Before-images remain under
+`/tmp/ic-build-artifact-formatting-20261016.Bz83PK/`.
+
+## Borrowed include paths, tree roots and artifact directories — pending 0.10.1
+
+This compatible batch extends incoming dirty work over `95567eb`. Configuration
+include parsing borrows paths from the decoded TOML; absolute paths stay borrowed
+and relative paths allocate only their resolved lookup path. All include entries
+are still validated before recursion. Tree parsing borrows its current root name
+from captured text while retaining owned map keys and normalized tree contents.
+Wasm output discovery chooses the common profile/example directory once per set,
+preserving target names, paths and retained cache identities.
+
+On actual Rust 1.91, 17 focused units and two real Cargo/Wasm integrations pass.
+Coverage includes absolute/relative/optional includes, distinct aliases, malformed
+include refusal before missing-file reads, feature-safe grouping, profile bounds,
+library/example selection, named-example reuse and distinct custom-library outputs.
+Strict all-target Clippy, actual MSRV all-target checking, formatting and links
+pass on Linux. Full release and native macOS gates remain unrun. Existing edits,
+own versions, registry graph, index and retained artifacts are preserved. Task
+before-images remain under `/tmp/ic-build-borrowed-paths-20261016.8E5J8r/`.
+
+## Cargo package selection — pending 0.10.1
+
+This compatible batch extends the incoming dirty work over `95567eb`. Parsed
+Cargo contexts retain a borrowed workspace-name index instead of a membership
+set used for repeated package scans. Missing and ambiguous names remain distinct,
+nonmembers cannot shadow workspace members, duplicate member IDs are deduplicated,
+and requested order is preserved. Ambiguity is refused only when that name is
+selected. Native executable selection consumes decoded metadata and moves its
+package ID and target directory. Archive qualification checks its first two
+matching packages without allocating a match vector. Public APIs, selected
+dependencies, fingerprint inputs and refusal diagnostics stay unchanged.
+
+On actual Rust 1.91, 32 focused units and three real Cargo integrations pass:
+native custom-profile execution and failed-build diagnostics, package archive
+qualification, and isolated/shared Wasm cache publication/reuse. Units cover
+selection order, membership, absent/ambiguous identities, interleaved feature
+contexts, standalone fingerprint parity and independent batch failures. Strict
+all-target Clippy, actual MSRV all-target checking, formatting and documentation
+links pass on Linux. Full release and native macOS gates remain unrun. Own
+versions, index, registry graph and existing artifacts are preserved. Task
+before-images remain under `/tmp/ic-build-package-selection-20261016.UJNxCH/`.
+
+## Batch grouping, depfile accumulation and stamp bounds — pending 0.10.1
+
+This compatible batch extends the incoming dirty work over `95567eb`. Batch
+resolution indexes complete context keys without scanning prior groups; the
+group/member vectors retain first-seen order. Workspace, tools, metadata arguments
+and effective environment remain part of equality. Depfile readers insert into
+the caller's canonical-path set directly, preserving complete syntax admission
+before filesystem inspection and refusing the entire discovery on any error.
+Wasm stamp reads calculate the exact bound from the existing header, shared
+artifact label, digest width and newline, without rendering a placeholder stamp.
+The writer's retained format, fingerprints and cache namespaces stay unchanged.
+
+On actual Rust 1.91, 37 distinct focused units and two real Cargo integrations
+pass. Evidence covers interleaved feature contexts with one probe sequence per
+context and standalone fingerprint parity; duplicate depfile inputs/records,
+syntax refusal before symlink-loop inspection; exact 184-byte stamps, one-byte
+overflow/truncation, reconstruction and publication failures. Strict all-target
+Clippy, actual MSRV all-target checking, formatting and documentation links pass.
+These are Linux checks; full release and native macOS gates remain unrun. Own
+versions, registry graph, index and existing artifacts are preserved. Task
+before-images remain under `/tmp/ic-build-batch-depfiles-20261016.WMrFga/`.
+
+## Indexed lock identity and input allocation cuts — pending 0.10.1
+
+This compatible batch extends the existing dirty 0.10.1 work over `95567eb`.
+Semantic projection builds one borrowed index of external lock identities,
+preserving the first exact name/version/source row, including absent checksums.
+Package versions are formatted once per identity. Lock parsing still inspects
+every row, and registry/git qualification, fallback and fingerprint fields stay.
+Transaction boundary caches borrow path keys on hits and allocate keys on misses;
+filesystem facts remain lazy and scoped to one validation call. Relative input
+evidence appends validated path components into one String, preserving empty-root
+encoding, slash separators, UTF-8 refusal and the required lexical sort.
+
+On actual Rust 1.91, 55 distinct affected units and two real Cargo integrations
+pass. Coverage includes duplicate lock rows, absent checksums and decoy identities;
+exact absolute/relative digest encoding with empty-root, Unicode and absent paths;
+fresh-call boundary failures, exclusions and transaction input drift. Strict
+all-target Clippy, actual MSRV all-target checking and formatting pass on Linux.
+Full release gates and native macOS qualification remain unrun. Existing edits,
+own versions, selected lock, index and retained artifacts are preserved. Task
+before-images remain under `/tmp/ic-build-indexed-inputs-20261016.SbHL7m/`.
+
+## Borrowed grouping, snapshot metrics and fixed hex — pending 0.10.1
+
+[#50](https://github.com/dragginzgame/ic-build/issues/50) owns this compatible
+batch over the clean 0.10.0 release commit `95567eb`. Feature-safe grouping moves
+the isolated tree out of its map and borrows candidate package names. Greedy
+input/command ordering, exact feature-tree comparisons and typed failures stay.
+Prepared reader metrics use the standard saturating atomic update with relaxed
+ordering and matching-only increments. Rust 1.99 deprecates fetch_update, while
+try_update is unstable on actual Rust 1.91; the one MSRV-supported implementation
+has a scoped, explained deprecation allowance rather than a second code path.
+
+All six Cargo grouping cases and a concurrent/saturating reader case pass on
+actual Rust 1.91, together with the real concurrent prepared-reader integration.
+Strict all-target Clippy, actual MSRV all-target checking and formatting pass.
+
+[Host PR #163](https://github.com/dragginzgame/ic-host-tooling/pull/163), from pushed
+main `798fd42`, adds fixed-buffer lowercase SHA-256 output and makes Display use
+that sole encoder. Two focused cases on actual Rust 1.88 cover known vectors,
+every byte at every digest position, leading zeroes, parser round trips and
+existing formatting flags. Strict affected lint, Rustdoc, formatting and links pass.
+
+A frozen Build caller removes the inventory hasher's per-file temporary String.
+All 37 affected units, real Cargo depfile integration, strict all-target Clippy
+and actual Rust 1.91 all-target checking pass. Four inventories with 256 varied
+files, Unicode paths, absence and exclusions retain all eight absolute/relative
+digest values against the released source. Ordering and big-endian field framing
+stay unchanged. Only three Host registry identities become coherent temporary
+path selections; every other lock selection stays. Normal Build keeps published
+APIs until reviewed Host publication permits adoption. The apply-checked caller
+patch has SHA-256
+`ea532e8ac3c048823d0441ed179f06531593fac5168b5a7ec313e10ef253164e`.
+
+Own versions, registry graph, index and retained artifacts are preserved. No full
+suite, native macOS qualification, normal sibling mutation or release ran.
+Before-images, the caller patch, frozen sources and focused evidence remain under
+`/tmp/ic-build-borrowed-grouping-20261016.P9JwS3/`.
+
 ## Cargo artifact evidence and directory custody — pending 0.10.0
 
 [#49](https://github.com/dragginzgame/ic-build/issues/49) owns this batch over

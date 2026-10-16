@@ -52,9 +52,9 @@ pub fn compatible_package_groups(
     let mut isolated = BTreeMap::new();
     let mut groups: Vec<Vec<String>> = Vec::new();
     for package in packages {
-        let tree = resolved_trees(
+        let mut tree = resolved_trees(
             workspace,
-            std::slice::from_ref(package),
+            &[package.as_str()],
             target,
             limits,
             &mut cargo_command,
@@ -63,13 +63,16 @@ pub fn compatible_package_groups(
             return Err("Cargo returned additional isolated package roots".into());
         }
         let selected = tree
-            .get(package)
+            .remove(package)
             .ok_or("Cargo omitted the selected package tree")?;
-        isolated.insert(package.clone(), selected.clone());
+        isolated.insert(package.clone(), selected);
         let mut selected_group = None;
         for (index, group) in groups.iter().enumerate() {
-            let mut candidate = group.clone();
-            candidate.push(package.clone());
+            let candidate = group
+                .iter()
+                .map(String::as_str)
+                .chain(std::iter::once(package.as_str()))
+                .collect::<Vec<_>>();
             let combined =
                 resolved_trees(workspace, &candidate, target, limits, &mut cargo_command)?;
             if preserves_individual_trees(&isolated, &combined, &candidate) {
@@ -88,18 +91,17 @@ pub fn compatible_package_groups(
 
 fn resolved_trees(
     workspace: &Path,
-    packages: &[String],
+    packages: &[&str],
     target: &str,
     limits: OutputLimits,
     cargo_command: &mut impl FnMut() -> Command,
 ) -> Result<BTreeMap<String, String>, Box<dyn std::error::Error>> {
     let manifest = workspace.join("Cargo.toml");
-    let packages = packages.iter().map(String::as_str).collect::<Vec<_>>();
     let features = observation::CargoFeatureSelection::default();
     let tree = observation::observe_tree(
         &observation::CargoTreeSpec {
             manifest_path: &manifest,
-            packages: &packages,
+            packages,
             target,
             edges: "normal,build",
             format: "{p}\t{f}",
@@ -125,10 +127,9 @@ fn parse_trees(text: &str) -> Result<BTreeMap<String, String>, Box<dyn std::erro
             if trees.insert(name.to_string(), String::new()).is_some() {
                 return Err("duplicate Cargo tree root".into());
             }
-            root = Some(name.to_string());
+            root = Some(name);
         }
         let tree = root
-            .as_ref()
             .and_then(|name| trees.get_mut(name))
             .ok_or("Cargo dependency has no selected root")?;
         tree.push_str(line);
@@ -143,12 +144,12 @@ fn parse_trees(text: &str) -> Result<BTreeMap<String, String>, Box<dyn std::erro
 fn preserves_individual_trees(
     isolated: &BTreeMap<String, String>,
     combined: &BTreeMap<String, String>,
-    packages: &[String],
+    packages: &[impl AsRef<str>],
 ) -> bool {
     combined.len() == packages.len()
         && packages.iter().all(|name| {
             isolated
-                .get(name)
-                .is_some_and(|expected| combined.get(name) == Some(expected))
+                .get(name.as_ref())
+                .is_some_and(|expected| combined.get(name.as_ref()) == Some(expected))
         })
 }

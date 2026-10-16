@@ -446,6 +446,18 @@ impl ArtifactCacheSpec {
     }
 }
 
+struct DebugValues<I>(I);
+
+impl<I> std::fmt::Debug for DebugValues<I>
+where
+    I: Iterator + Clone,
+    I::Item: std::fmt::Debug,
+{
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_list().entries(self.0.clone()).finish()
+    }
+}
+
 impl std::fmt::Debug for ArtifactCacheSpec {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
@@ -457,25 +469,22 @@ impl std::fmt::Debug for ArtifactCacheSpec {
             .field("inputs", &self.inputs)
             .field("tools", &self.tools)
             .field("argument_count", &self.arguments.len())
-            .field(
-                "environment_names",
-                &self.environment.keys().collect::<Vec<_>>(),
-            )
+            .field("environment_names", &DebugValues(self.environment.keys()))
             .field(
                 "identity_labels",
-                &self
-                    .identities
-                    .iter()
-                    .map(|identity| identity.label.as_str())
-                    .collect::<Vec<_>>(),
+                &DebugValues(
+                    self.identities
+                        .iter()
+                        .map(|identity| identity.label.as_str()),
+                ),
             )
             .field(
                 "cargo_build_input_labels",
-                &self
-                    .cargo_build_inputs
-                    .iter()
-                    .map(|input| input.label.as_str())
-                    .collect::<Vec<_>>(),
+                &DebugValues(
+                    self.cargo_build_inputs
+                        .iter()
+                        .map(|input| input.label.as_str()),
+                ),
             )
             .field("outputs", &self.outputs)
             .field("prune_policy", &self.prune_policy)
@@ -1972,15 +1981,16 @@ impl std::fmt::Display for ArtifactCacheError {
                 formatter,
                 "failed to revalidate resolved Cargo build inputs `{label}`: {source}",
             ),
-            Self::InvalidOutputs { outputs } => write!(
-                formatter,
-                "artifact transaction has missing or invalid outputs: {}",
-                outputs
-                    .iter()
-                    .map(|(name, path)| format!("{name} ({})", path.display()))
-                    .collect::<Vec<_>>()
-                    .join(", "),
-            ),
+            Self::InvalidOutputs { outputs } => {
+                formatter.write_str("artifact transaction has missing or invalid outputs: ")?;
+                for (index, (name, path)) in outputs.iter().enumerate() {
+                    if index != 0 {
+                        formatter.write_str(", ")?;
+                    }
+                    write!(formatter, "{name} ({})", path.display())?;
+                }
+                Ok(())
+            }
             Self::UnknownOutput { name } => {
                 write!(
                     formatter,

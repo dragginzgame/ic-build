@@ -80,8 +80,19 @@ fn observations_bind_raw_bytes_overrides_and_include_trees() {
     assert_eq!(observed[2].compiler_overrides, ["rustc-wrapper"]);
     fs::write(&config, source.replace("caller-doc", "changed-doc")).unwrap();
     assert_ne!(
-        observe_configurations(&[config]).unwrap()[0].sha256,
+        observe_configurations(std::slice::from_ref(&config)).unwrap()[0].sha256,
         observed[0].sha256
+    );
+    let absolute = Value::String(included.to_str().unwrap().to_owned());
+    fs::write(
+        &config,
+        format!("include = {{ path = {absolute}, optional = false }}\n"),
+    )
+    .unwrap();
+    let observed = observe_configurations(std::slice::from_ref(&config)).unwrap();
+    assert_eq!(
+        observed.iter().map(|file| &file.path).collect::<Vec<_>>(),
+        [&config, &included]
     );
     fs::remove_dir_all(root).unwrap();
 }
@@ -142,5 +153,12 @@ fn required_and_malformed_configuration_fail_without_source_text_in_diagnostics(
         assert!(!error.to_string().contains("private-value"));
     }
     assert!(observe_configurations(&[PathBuf::from("relative.toml")]).is_err());
+    // Validate all include entries before attempting the first recursive read.
+    fs::write(&config, "include = ['missing.toml', {path = 1}]\n").unwrap();
+    assert!(matches!(
+        observe_configurations(std::slice::from_ref(&config)),
+        Err(ConfigurationError::Invalid { message, .. })
+            if message == "Cargo configuration include table requires a string `path`"
+    ));
     fs::remove_dir_all(root).unwrap();
 }
