@@ -1,5 +1,5 @@
 use super::{ArtifactStagingDirectory, CapturedArtifact, OwnedDirectory};
-use crate::artifacts::test_support::unique_temp_directory;
+use crate::fs_fixture::unique_temp_directory;
 use std::{fs, io};
 
 #[test]

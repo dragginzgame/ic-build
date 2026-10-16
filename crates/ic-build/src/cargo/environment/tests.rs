@@ -1,5 +1,5 @@
 use super::*;
-use crate::artifacts::test_support::unique_temp_directory;
+use crate::fs_fixture::unique_temp_directory;
 
 #[test]
 fn discovery_and_environment_classification_keep_caller_selection() {
@@ -59,7 +59,13 @@ fn observations_bind_raw_bytes_overrides_and_include_trees() {
     )
     .unwrap();
     assert_eq!(preferred_configuration(&cargo), Some(config.clone()));
-    let observed = observe_configurations(&[config.clone(), shadowed.clone()]).unwrap();
+    let observed = observe_configurations(&[
+        config.clone(),
+        included.clone(),
+        config.clone(),
+        shadowed.clone(),
+    ])
+    .unwrap();
     assert_eq!(
         observed.iter().map(|file| &file.path).collect::<Vec<_>>(),
         vec![&config, &included, &shadowed]
@@ -76,6 +82,42 @@ fn observations_bind_raw_bytes_overrides_and_include_trees() {
         observe_configurations(&[config]).unwrap()[0].sha256,
         observed[0].sha256
     );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn repeated_configuration_roots_keep_distinct_alias_include_trees() {
+    use std::os::unix::fs::symlink;
+
+    let root = unique_temp_directory("cargo-environment-aliases");
+    let shared = root.join("shared.toml");
+    fs::write(&shared, "include = 'local.toml'\n").unwrap();
+    let mut roots = Vec::new();
+    let mut expected = Vec::new();
+    for name in ["left", "right"] {
+        let directory = root.join(name);
+        fs::create_dir(&directory).unwrap();
+        let alias = directory.join("config.toml");
+        let local = directory.join("local.toml");
+        symlink(&shared, &alias).unwrap();
+        fs::write(
+            &local,
+            format!("include = 'config.toml'\n[build]\nrustc = '{name}'\n"),
+        )
+        .unwrap();
+        roots.extend([alias.clone(), local.clone(), alias.clone()]);
+        expected.extend([alias, local]);
+    }
+    let observed = observe_configurations(&roots).unwrap();
+    assert_eq!(
+        observed.iter().map(|file| &file.path).collect::<Vec<_>>(),
+        expected.iter().collect::<Vec<_>>()
+    );
+    assert_eq!(observed[0].sha256, observed[2].sha256);
+    assert_ne!(observed[1].sha256, observed[3].sha256);
+    assert_eq!(observed[1].compiler_overrides, ["rustc"]);
+    assert_eq!(observed[3].compiler_overrides, ["rustc"]);
     fs::remove_dir_all(root).unwrap();
 }
 

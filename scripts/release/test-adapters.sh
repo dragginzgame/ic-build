@@ -43,8 +43,9 @@ cp -P "$root"/.tools/host* "$root"/.tools/ic* "$fixture/workspace/.tools/"
 cp -R "$root/.tools/rust" "$fixture/workspace/.tools/rust"
 export YQ="$root/.tools/host/bin/yq"
 export PATH="$root/.tools/host/bin:$root/.tools/ic/bin:$root/.tools/rust/common/bin:$PATH"
-export IC_BUILD_TEST_REAL_CARGO
+export IC_BUILD_TEST_REAL_CARGO IC_BUILD_TEST_REAL_MAKE
 IC_BUILD_TEST_REAL_CARGO="$(command -v cargo)"
+IC_BUILD_TEST_REAL_MAKE="$(command -v make)"
 export IC_BUILD_TEST_CARGO_CALLS="$fixture/cargo.calls"
 cat > "$fixture/bin/cargo" <<'CARGO'
 #!/usr/bin/env bash
@@ -54,9 +55,27 @@ if [[ "$1" == publish ]]; then
     exit "${IC_BUILD_TEST_PUBLISH_STATUS:-0}"
 fi
 if [[ "$1" == metadata && "${IC_BUILD_TEST_FAIL_METADATA:-0}" == 1 ]]; then exit 42; fi
+if [[ "$1" == fetch && "${IC_BUILD_TEST_PREFLIGHT:-0}" == 1 ]]; then
+    [[ -z "${IC_BUILD_RELEASE_CACHE_PREPARE+x}" ]] || exit 99
+    printf 'cargo:%s\n' "$*" >> "$IC_BUILD_TEST_PREFLIGHT_EVENTS"
+    exit "${IC_BUILD_TEST_FETCH_STATUS:-0}"
+fi
 exec "$IC_BUILD_TEST_REAL_CARGO" "$@"
 CARGO
-chmod +x "$fixture/bin/cargo"
+cat > "$fixture/bin/make" <<'MAKE'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${IC_BUILD_TEST_PREFLIGHT:-0}" == 1 && $# == 4 && "$1" == --no-print-directory && "$2" == -C ]]; then
+    [[ "$3" == "$IC_BUILD_TEST_PREFLIGHT_ROOT" && -z "${IC_BUILD_RELEASE_CACHE_PREPARE+x}" ]] || exit 99
+    printf 'make:%s\n' "$4" >> "$IC_BUILD_TEST_PREFLIGHT_EVENTS"
+    if [[ -n "${IC_BUILD_TEST_CHANGE_PIN:-}" ]]; then
+        printf '\n# changed during preflight\n' >> "$IC_BUILD_TEST_CHANGE_PIN"
+    fi
+    exit "${IC_BUILD_TEST_MAKE_STATUS:-0}"
+fi
+exec "$IC_BUILD_TEST_REAL_MAKE" "$@"
+MAKE
+chmod +x "$fixture/bin/cargo" "$fixture/bin/make"
 export PATH="$fixture/bin:$PATH"
 export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
 cd "$fixture/workspace"
@@ -105,6 +124,50 @@ expect_failure make --no-print-directory release-verify
 cp "$fixture/pass-Makefile" Makefile
 
 make --no-print-directory release-preflight > "$fixture/preflight.log" 2>&1
+# Exercise this adapter's common catalog selection and authority boundary.
+export IC_BUILD_TEST_PREFLIGHT=1 IC_BUILD_TEST_PREFLIGHT_ROOT="$PWD"
+export IC_BUILD_TEST_PREFLIGHT_EVENTS="$fixture/preflight.events"
+for mode in 0 1; do
+    : > "$IC_BUILD_TEST_PREFLIGHT_EVENTS"
+    IC_BUILD_RELEASE_CACHE_PREPARE="$mode" bash scripts/release/metadata.sh preflight > "$fixture/preflight-$mode.log" 2>&1
+    if [[ "$mode" == 0 ]]; then
+        printf 'cargo:fetch --locked --offline\nmake:tools-check\n' > "$fixture/preflight.expected"
+    else
+        printf 'cargo:fetch --locked\nmake:install-tools\nmake:tools-check\n' > "$fixture/preflight.expected"
+    fi
+    cmp "$fixture/preflight.expected" "$IC_BUILD_TEST_PREFLIGHT_EVENTS"
+done
+cp ci/tool-versions.env "$fixture/preflight-pin"
+: > "$IC_BUILD_TEST_PREFLIGHT_EVENTS"
+status=0
+IC_BUILD_RELEASE_CACHE_PREPARE=1 IC_BUILD_TEST_CHANGE_PIN="$PWD/ci/tool-versions.env" \
+    bash scripts/release/metadata.sh preflight > "$fixture/preflight-pin.log" 2>&1 || status=$?
+cp "$fixture/preflight-pin" ci/tool-versions.env
+[[ "$status" == 1 ]]
+printf 'cargo:fetch --locked\nmake:install-tools\n' > "$fixture/preflight.expected"
+cmp "$fixture/preflight.expected" "$IC_BUILD_TEST_PREFLIGHT_EVENTS"
+for kind in fetch make invalid; do
+    : > "$IC_BUILD_TEST_PREFLIGHT_EVENTS"
+    status=0
+    case "$kind" in
+        fetch)
+            IC_BUILD_TEST_FETCH_STATUS=43 IC_BUILD_RELEASE_CACHE_PREPARE=1 \
+                bash scripts/release/metadata.sh preflight > "$fixture/preflight-fetch.log" 2>&1 || status=$?
+            [[ "$status" == 43 ]]
+            printf 'cargo:fetch --locked\n' > "$fixture/preflight.expected" ;;
+        make)
+            IC_BUILD_TEST_MAKE_STATUS=49 IC_BUILD_RELEASE_CACHE_PREPARE=1 \
+                bash scripts/release/metadata.sh preflight > "$fixture/preflight-make.log" 2>&1 || status=$?
+            [[ "$status" == 49 ]]
+            printf 'cargo:fetch --locked\nmake:install-tools\n' > "$fixture/preflight.expected" ;;
+        invalid)
+            IC_BUILD_RELEASE_CACHE_PREPARE=2 bash scripts/release/metadata.sh preflight > "$fixture/preflight-invalid.log" 2>&1 || status=$?
+            [[ "$status" == 2 ]]
+            : > "$fixture/preflight.expected" ;;
+    esac
+    cmp "$fixture/preflight.expected" "$IC_BUILD_TEST_PREFLIGHT_EVENTS"
+done
+unset IC_BUILD_TEST_PREFLIGHT
 printf '\n// unrelated\n' >> crates/ic-build/src/lib.rs
 expect_failure make --no-print-directory release-preflight
 git restore -- crates/ic-build/src/lib.rs

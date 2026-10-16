@@ -20,7 +20,7 @@ use std::{
 };
 
 fn workspace() -> std::path::PathBuf {
-    let root = support::unique_temp_directory("cargo-example");
+    let root = support::fs_fixture::unique_temp_directory("cargo-example");
     let workspace = root.join("workspace");
     fs::create_dir_all(workspace.join("src")).unwrap();
     fs::create_dir(workspace.join(".cargo")).unwrap();

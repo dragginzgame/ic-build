@@ -23,7 +23,7 @@ use std::{
 };
 
 fn fixture() -> PathBuf {
-    let root = support::unique_temp_directory("handoff");
+    let root = support::fs_fixture::unique_temp_directory("handoff");
     support::cargo::write_fixture_package(
         &root.join("workspace"),
         "[workspace]\n[lib]\ncrate-type = [\"cdylib\"]\n",

@@ -296,6 +296,9 @@ and the explicitly supplied Cargo home without reading ambient environment.
 `preferred_configuration` selects `config` before `config.toml`;
 `observe_configurations` follows selected include trees and returns lookup paths,
 stable locations, raw SHA-256 bytes and compiler-override field names.
+Within one call, recorded lookup paths are not read or expanded again; distinct
+aliases retain their own include lookup directories. A new call observes fresh
+bytes under the caller's source-custody contract.
 
 For Canic adoption, retain its source-custody and release recipe. Keep absent
 candidate paths in pre-build `InputEvidence`; observing existing configuration
@@ -888,11 +891,11 @@ resolution, execution and Git provenance belong to `ic_host_process`; Candid
 extraction and response decoding belong to `ic_host_tools`. Its pure Candid text
 APIs are portable; extraction, execution, resolution and provenance are Unix-only.
 Structural Wasm inspection does not replace PocketIC's runtime validation.
-Published IC Build 0.6 requires compatible IC Host 0.19 releases. Pending 0.7
-requires IC Host 0.20 at the public dependency boundary. Retained staging still
+Published IC Build 0.7 requires compatible IC Host 0.20 releases. Pending 0.8
+requires IC Host 0.21 at the public dependency boundary. Retained staging still
 uses checked native permission conversion on macOS. Align direct Host dependencies
 when passing `OutputLimits` or matching typed Host failures across the engine
-boundary. Host 0.19 and 0.20 values have different Rust crate identities even
+boundary. Host 0.20 and 0.21 values have different Rust crate identities even
 when their fields match. The earlier IC Build 0.2.0 boundary also means an
 `ic-build = "0.1"` requirement does not select this engine. Process execution returns completed
 results even for nonzero exits: call `require_success()` before admitting or

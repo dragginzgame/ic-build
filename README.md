@@ -61,8 +61,8 @@ framing and source custody. Configuration contents are excluded from returned
 facts and failure diagnostics. Observation executes no Cargo commands and does
 not establish build or release validity.
 
-Published IC Build 0.6 uses IC Host 0.19 at its public grouping/capture boundary.
-Pending 0.7 requires IC Host 0.20; align direct Host dependencies before passing
+Published IC Build 0.7 uses IC Host 0.20 at its public grouping/capture boundary.
+Pending 0.8 requires IC Host 0.21; align direct Host dependencies before passing
 `OutputLimits` or typed Host failures across that boundary.
 The [deployable-Wasm LTO guidance](docs/artifacts.md#deployable-wasm-lto) records
 whole-canister measurements and shows how a common adapter can apply full LTO
@@ -75,7 +75,7 @@ contracts.
 
 ## Development
 
-Shared Tooling 0.15.0 is pinned in
+Shared Tooling 0.15.2 is pinned in
 [.shared-tooling.snapshot](.shared-tooling.snapshot); commands use this reviewed
 local snapshot. The [Make interface](docs/make-interface.md) owns common setup,
 formatting, hook installation and release entrypoints.
@@ -103,11 +103,9 @@ cargo fetch --locked
 make install-hooks
 ```
 
-`make install-tools` also prepares the consumer-pinned `cargo-set-version`
-release editor from [ci/release-tools.env](ci/release-tools.env) through the
-canonical shared Cargo tool installer. `make tools-check` admits it offline;
-release adapters use that admitted executable directly. Global Cargo plugins
-are not setup prerequisites.
+Release preparation uses the shared workspace-version renderer and does not
+require an additional Cargo editor. Global Cargo plugins are not setup
+prerequisites.
 
 [rust-toolchain.toml](rust-toolchain.toml) selects the existing Rust 1.99.0
 development compiler, rustfmt, Clippy and its Wasm target independently of the qualified Linux

@@ -3,6 +3,34 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.8.0]
+
+- **Breaking:** align exposed Host types with the selected IC Host 0.21 graph.
+  Consumers passing Host limits or typed errors across this boundary must align
+  their direct Host dependencies and rebuild.
+
+- Decode standalone and archive-qualification Cargo metadata directly into the
+  canonical schema without an intermediate JSON tree; retain original JSON in
+  cache fingerprinting.
+- Adopt Shared Tooling 0.15.2 and delegate locked release-cache preparation and
+  pin checks to its shared preflight helper, preserving source/recovery admission
+  ([#39 — Shared release preflight](https://github.com/dragginzgame/ic-build/issues/39)).
+- Remove the unused Cargo release-editor installation, pin and admission flow;
+  the shared workspace-version renderer prepares versions directly.
+- Use Host's existing SHA-256 formatter for input digests, preserving lowercase
+  hexadecimal output, leading zeroes and cache identities.
+- Observe each Cargo configuration lookup path and include tree once per call,
+  retaining distinct aliases, include ordering and fresh-call re-observation.
+- Simplify depfile parsing by collecting dependencies directly and retaining
+  only target presence, preserving strict syntax refusal and phony rules.
+- Reuse Host's SHA-256 parser for package checksums while retaining lowercase
+  syntax, qualification diagnostics and exact external-selection checks.
+- Run shared-target coordination and scheduled-maintenance process qualification
+  against independent Build-owned Cargo/Wasm fixtures, removing skips for a
+  missing Testkit package.
+- Share fixture-directory setup across unit and integration tests and use Host
+  marker waits with explicit timeouts and early worker-exit diagnostics.
+
 ## [0.7.0] - 2026-10-15
 
 - **Breaking:** align exposed Host types with IC Host 0.20. Consumers passing

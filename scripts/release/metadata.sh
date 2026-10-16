@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# IC Build consumer adapter, adapted from IC Metrics (MIT). Dependencies: Cargo/cargo-edit/cargo-sort, jq, yq, Git, tar, awk and Unix utilities.
+# IC Build consumer adapter, adapted from IC Metrics (MIT). Dependencies: Cargo, jq, yq, Git, tar, awk and Unix utilities.
 # Copyright (c) 2026 ic-metrics contributors; MIT terms in LICENSE.
 operation="${1:-}"
 [[ $# -eq 1 ]] || exit 2
@@ -34,34 +34,9 @@ case "$operation" in
         # Refuse conflicting pending notes before a gate or preparation intent.
         awk -v version="${RELEASE_VERSION:?}" -v previous="$RELEASE_PREVIOUS" -v date="${RELEASE_DATE:?}" \
             -f scripts/ci/finalize-release-changelog.awk CHANGELOG.md > /dev/null
-        tool_versions="$root/ci/tool-versions.env"
-        tool_versions_digest="$(bash "$root/scripts/ci/verify-file-checksum.sh" --print sha256 "$tool_versions")"
-        release_tools="$root/ci/release-tools.env"
-        release_tools_digest="$(bash "$root/scripts/ci/verify-file-checksum.sh" --print sha256 "$release_tools")"
-        tool_targets=(tools-check)
-        case "$release_cache_prepare" in
-            1)
-                cargo fetch --locked
-                tool_targets=(install-tools tools-check)
-                ;;
-            0) cargo fetch --locked --offline ;;
-            *) echo 'invalid release cache preparation selection' >&2; exit 2 ;;
-        esac
-        # Source fetching does not install the pinned Cargo executables. Prepare
-        # only behind normal release admission; standalone preflight stays offline.
-        for target in "${tool_targets[@]}"; do
-            make --no-print-directory -C "$root" "$target"
-            if [[ "$(bash "$root/scripts/ci/verify-file-checksum.sh" --print sha256 "$tool_versions")" != "$tool_versions_digest" ]]; then
-                echo 'selected Rust tool pins changed during release preflight' >&2
-                exit 1
-            fi
-            if [[ "$(bash "$root/scripts/ci/verify-file-checksum.sh" --print sha256 "$release_tools")" != "$release_tools_digest" ]]; then
-                echo 'selected release tool pins changed during release preflight' >&2
-                exit 1
-            fi
-        done
-        editor="$(bash "$root/scripts/release/cargo-editor.sh" --check)"
-        "$editor" set-version --help > /dev/null
+        bash "$root/scripts/ci/cargo-release-preflight.sh" "$root" "$release_cache_prepare" \
+            --pin "$root/ci/tool-versions.env" \
+            --check tools-check --prepare install-tools --prepare tools-check
         ;;
     prepare)
         bash "$root/scripts/ci/check-release-source.sh" \
@@ -73,8 +48,7 @@ case "$operation" in
             exit
         fi
         [[ "$current_version" == "${RELEASE_PREVIOUS:?}" ]] || exit 1
-        editor="$(bash "$root/scripts/release/cargo-editor.sh" --check)"
-        PATH="${editor%/*}:$PATH" bash "$root/scripts/ci/cargo-release-metadata.sh" prepare ic-build
+        bash "$root/scripts/ci/cargo-release-metadata.sh" prepare ic-build
         ;;
     check|commit-check)
         if [[ "$operation" == commit-check ]]; then

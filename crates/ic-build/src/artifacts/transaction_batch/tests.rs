@@ -6,8 +6,8 @@ use super::{
 };
 use crate::artifacts::{
     ArtifactCacheOutcome, ArtifactCachePreparation, ArtifactCacheSpec, prepare_artifact_cache,
-    test_support::unique_temp_directory,
 };
+use crate::fs_fixture::unique_temp_directory;
 
 #[test]
 fn labeled_transactions_build_then_reuse_in_order() {

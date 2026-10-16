@@ -21,9 +21,8 @@ use crate::artifacts::cache_fs::{
     ArtifactCachePrunePolicy, CACHE_DIRECTORY_TAG_SIGNATURE, directory_logical_size,
     write_last_used,
 };
-use crate::artifacts::{
-    WasmBuildInputSnapshot, digest::digest_bytes, test_support::unique_temp_directory,
-};
+use crate::artifacts::{WasmBuildInputSnapshot, digest::digest_bytes};
+use crate::fs_fixture::unique_temp_directory;
 use std::{
     collections::BTreeSet,
     ffi::OsString,

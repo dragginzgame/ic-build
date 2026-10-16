@@ -685,7 +685,7 @@ fn remove_cache_entry(
 #[cfg(test)]
 mod tests {
     use super::directory_logical_size;
-    use crate::artifacts::test_support::unique_temp_directory;
+    use crate::fs_fixture::unique_temp_directory;
     use std::{
         fs,
         time::{Duration, SystemTime, UNIX_EPOCH},

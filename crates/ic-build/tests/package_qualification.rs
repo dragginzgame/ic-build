@@ -11,7 +11,7 @@ use std::{fs, os::unix::fs::PermissionsExt as _, process::Command};
 
 #[test]
 fn real_package_qualification_retains_exact_graph_and_source_inventory() {
-    let root = support::unique_temp_directory("package-qualification");
+    let root = support::fs_fixture::unique_temp_directory("package-qualification");
     fs::create_dir(root.join("src")).unwrap();
     fs::write(root.join("Cargo.toml"), "[workspace]\n[package]\nname='qualification-fixture'\nversion='0.1.0'\nedition='2024'\n[dependencies]\nitoa='1.0'\n").unwrap();
     fs::write(root.join("src/lib.rs"), "pub fn value() -> String { itoa::Buffer::new().format(42).to_owned() }\n#[test]\nfn formats_value() { assert_eq!(value(), \"42\"); }\n").unwrap();
@@ -34,7 +34,7 @@ fn real_package_qualification_retains_exact_graph_and_source_inventory() {
         String::from_utf8_lossy(&prepared.stderr)
     );
     let entry_lock = fs::read(root.join("Cargo.lock")).unwrap();
-    let evidence = support::unique_temp_directory("package-qualification-evidence");
+    let evidence = support::fs_fixture::unique_temp_directory("package-qualification-evidence");
     fs::create_dir_all(root.join("target/package")).unwrap();
     fs::set_permissions(&evidence, fs::Permissions::from_mode(0o700)).unwrap();
     qualify_package_archives(

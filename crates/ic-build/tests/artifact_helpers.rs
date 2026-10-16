@@ -4,7 +4,7 @@ mod support;
 
 use std::{fs, path::PathBuf};
 use support::discover_workspace;
-use support::unique_temp_directory as unique_temp_dir;
+use support::fs_fixture::unique_temp_directory as unique_temp_dir;
 
 // Verify Cargo locates the workspace owning this package.
 #[test]

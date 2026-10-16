@@ -1,5 +1,95 @@
 # Current handoff
 
+## Metadata, configuration and release preparation cuts — pending 0.8.0
+
+The incoming manifests/lock select registry Host 0.21.0 while IC Build's own
+version remains 0.7.0. Public Host limits and typed failures have different Rust
+crate identities from the released Host 0.20 boundary. The complete pending notes
+therefore select 0.8.0; consumers crossing that boundary must align direct Host
+dependencies and rebuild. This cleanup changes no dependency selection or own
+package version.
+
+Shared-target coordination and scheduled-maintenance process tests now create
+their own dependency-free Cargo/Wasm workspace under the test fixture root and
+pass it to both workers. They no longer depend on the absent Testkit perf package
+or return before the process assertions. The real Wasm tests use the same fixture
+writer. Host owns marker polling, with explicit ten-second test allowances and
+child-aware readiness checks. Unit and integration targets include one shared
+fixture-directory wrapper; existing naming and caller-owned retention remain.
+
+On actual Rust 1.91, all 21 selected integration cases pass, including both
+restored process parents and all 16 real Wasm cases. Their three harness-ignored
+worker entrypoints execute through the parent process cases. Twelve staging and
+four configuration cases also pass through the shared unit fixture owner.
+Strict all-target Clippy, actual MSRV all-target compilation and formatting pass.
+These are focused Linux checks, without full-suite, release or native macOS
+qualification. The incoming manifests, lock selection and index remain unchanged.
+Before-images and logs remain at `/tmp/ic-build-process-fixtures-20261016.7GEKzb/`.
+
+Configuration observations skip already recorded lookup paths before reading or
+expanding their include trees again. Distinct aliases retain their own relative
+include directories; active-cycle suppression, first-observation order and fresh
+calls' raw-byte checks remain intact. Depfile parsing retains target presence
+instead of discarded target strings and inserts dependencies directly into its
+ordered set. Package qualification uses Host's existing strict SHA-256 parser
+while retaining Build's checksum diagnostic and exact external-selection checks.
+
+On the selected Host 0.21.0 graph, all 30 focused configuration, input/depfile,
+package-admission and real Cargo archive cases pass on actual Rust 1.91. A
+temporary comparison against the saved depfile parser matches results, error
+kinds and diagnostics on 597,871 generated inputs. Strict all-target Clippy,
+actual MSRV all-target checking, Rustdoc, formatting and documentation links pass.
+No full suite, release or native macOS qualification ran for these cuts. Own
+manifests/lock and the real index are byte-identical to their incoming state.
+Before-images and logs are retained under
+`/tmp/ic-build-config-depfile-cuts-20261016.pTiXky/`.
+
+From released 0.7.0 `f07f4032d1dcac669135a0bdba0857e9b2a2a3c0`, standalone
+Cargo observations and archive qualification decode directly into the canonical
+schema. Wasm fingerprints retain their raw JSON projection and original
+identity/encoding. All five real Cargo observation and typed-refusal cases pass
+on actual Rust 1.91. The seven archive-admission cases and real Cargo archive
+qualification also pass on that compiler, preserving retained metadata, graph
+admission and source inventories.
+
+Input digests delegate lowercase hexadecimal rendering to Host 0.20.1's existing
+`Sha256Digest` formatter. All 12 digest cases pass on actual Rust 1.91, including
+leading zeroes and exact digest bytes; framing, public types and cache identities
+are unchanged. No new dependency selection or upstream publication is required.
+
+Shared Tooling 0.15.2 is adopted from clean committed revision
+`f5080b812489654eaa04d368a09f460aea07d4ce`, adding the shared release preflight
+entrypoint through canonical distribution. All 101 payloads verify. Build's
+adapter delegates locked fetch and ordered tool/pin checks while retaining source
+and recovery admission. The unused Cargo editor installer, extra catalog, Make
+hooks and editor admission are removed: Shared's workspace-version renderer
+already owns version preparation. Existing installed bundles are preserved.
+Its actual release fixtures pass on current Bash and genuine Bash 3.2.57,
+including common-catalog pin mutation, preparation-authority
+consumption, offline/preparation order, original failure statuses and refused
+invalid selection. Metadata preparation/recovery/publication substitutes also
+pass. Shared owns the helper implementation; no local fork is introduced.
+
+[Host PR #99](https://github.com/dragginzgame/ic-host-tooling/pull/99) is normally
+refreshed on released 0.20.1 at `5591efb158db71ab89f7b34d719275e2df9023c1`.
+The existing capture implementation passes all 68 selected tool/internal-engine
+cases on actual Rust 1.88 and strict affected lint/MSRV/docs/static checks. A
+frozen current Build caller deletion passes all 65 Wasm-cache cases, strict
+Clippy and actual Rust 1.91 against the coherent temporary Host candidate family;
+all other lock selections remain unchanged. The replay patch is retained as
+`/tmp/ic-build-cuts071-20261015/build-capture-adoption.patch`. Registry activation
+still requires reviewed Host publication under #43; normal Build dependencies
+and its local composition remain intact until then. New hosted/native checks
+must qualify the refreshed PR head, not its older green receipts.
+
+Root strict Clippy, actual MSRV, Rustdoc, formatting, pins, workspace metadata,
+links and snapshot checks pass. Own versions, selected lock, real index and
+release state remain unchanged; no release or native qualification ran here.
+The separate clean clones exclude sibling dirty source. Before-images, candidate
+graph, patches and logs remain under `/tmp/ic-build-cuts071-20261015/`.
+The additional archive/digest/editor cuts have before-images and focused logs
+under `/tmp/ic-build-three-cuts-20261015/`.
+
 ## Host 0.20 admission repair — pending 0.7.0
 
 The maintainer's `8eb59e1d256677b6c1d2fba741258a7ae70a041b` selects registry

@@ -13,3 +13,7 @@ mod batch;
 #[cfg(test)]
 #[path = "../test-support/cargo/mod.rs"]
 pub(crate) mod cargo_fixture;
+
+#[cfg(test)]
+#[path = "../test-support/fs/mod.rs"]
+pub(crate) mod fs_fixture;

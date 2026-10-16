@@ -26,14 +26,13 @@ use std::{
     time::Duration,
 };
 
-use support::unique_temp_directory as unique_temp_dir;
+use support::fs_fixture::unique_temp_directory as unique_temp_dir;
 use support::wasm_path;
 
 #[cfg(unix)]
+use ic_host_process::testing::crash_barrier::wait_for_path;
+#[cfg(unix)]
 use std::ffi::OsString;
-#[cfg(unix)]
-#[cfg(unix)]
-use support::wait::wait_for_path;
 
 const PERF_PROBE_PACKAGE: &str = "fixture";
 
@@ -44,7 +43,7 @@ fn hyphenated_packages_use_the_default_library_artifact_in_every_cache_mode() {
         let manifest = root.join("Cargo.toml");
         let original = fs::read_to_string(&manifest)
             .unwrap()
-            .replace("name=\"fixture\"", "name=\"fixture-canister\"");
+            .replace("name = \"fixture\"", "name = \"fixture-canister\"");
         fs::write(&manifest, &original).unwrap();
         let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
         assert!(
@@ -1122,7 +1121,7 @@ fn source_changes_during_shared_incremental_build_reject_exact_publication() {
         drop(source_guard);
         (report, invalidated, next)
     });
-    wait_for_path(&started);
+    wait_for_path(&started, "build start", Duration::from_secs(10)).expect("build start");
     fs::write(
         &source,
         "#[unsafe(no_mangle)]\npub extern \"C\" fn probe() -> u32 { 2 }\n",
@@ -1230,7 +1229,7 @@ fn source_race_invalidates_every_prepared_snapshot_reader() {
                 .build_batch(&specs, WasmBuildBatchConfig::new())
                 .expect("valid prepared race-test batch")
         });
-        wait_for_path(&started);
+        wait_for_path(&started, "build start", Duration::from_secs(10)).expect("build start");
         fs::write(
             &source,
             "#[unsafe(no_mangle)]\npub extern \"C\" fn probe() -> u32 { 2 }\n",
@@ -1281,17 +1280,6 @@ exec \"$REAL_CARGO\" \"$@\"\n",
 
 fn real_wasm_workspace() -> std::path::PathBuf {
     let root = unique_temp_dir("ic-build-real-wasm-source");
-    fs::create_dir_all(root.join("src")).unwrap();
-    fs::write(root.join("Cargo.toml"), "[package]\nname=\"fixture\"\nversion=\"0.0.0\"\nedition=\"2024\"\n[workspace]\n[lib]\ncrate-type=[\"cdylib\"]\n").unwrap();
-    fs::write(root.join("src/lib.rs"), "pub fn value() -> u32 { 7 }\n").unwrap();
-    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-    assert!(
-        std::process::Command::new(cargo)
-            .current_dir(&root)
-            .args(["generate-lockfile", "--offline"])
-            .status()
-            .unwrap()
-            .success()
-    );
+    support::wasm::write_workspace(&root).expect("prepare real Wasm workspace");
     root
 }

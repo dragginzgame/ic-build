@@ -122,7 +122,7 @@ fn projects_a_coherent_multi_package_family() {
 
 #[test]
 fn cargo_generated_workspace_update_preserves_external_selections() {
-    use crate::artifacts::test_support::unique_temp_directory;
+    use crate::fs_fixture::unique_temp_directory;
     use std::{fs, process::Command};
 
     let root = unique_temp_directory("cargo-lock-projection");

@@ -2,8 +2,8 @@ use crate::artifacts::{
     InputEvidence, InputEvidenceError, InputEvidenceSpec, InputEvidenceValue,
     digest::{InputHasher, digest_labeled_paths},
     discover_cargo_depfile_inputs, parse_cargo_depfile, read_cargo_depfile_inputs,
-    test_support::unique_temp_directory,
 };
+use crate::fs_fixture::unique_temp_directory;
 use sha2::{Digest as _, Sha256};
 use std::{
     fs, io,
@@ -307,8 +307,19 @@ fn depfiles_support_escaped_paths_multiple_rules_and_phony_targets() {
         ]
         .map(PathBuf::from)
     );
+    assert_eq!(
+        parse_cargo_depfile(
+            "first second: shared.rs other.rs shared.rs\nshared.rs:\nthird: shared.rs\n"
+        )
+        .unwrap(),
+        ["other.rs", "shared.rs"].map(PathBuf::from)
+    );
     for text in [
         "no separator",
+        ": source.rs",
+        "target: source.rs\nno separator",
+        "target: source.rs\n: another.rs",
+        "target: source.rs\nother # not a full-line comment",
         "target:",
         "target: /path/$(UNKNOWN)",
         "target: /path/\\q",

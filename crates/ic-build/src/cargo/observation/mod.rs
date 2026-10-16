@@ -125,7 +125,7 @@ pub fn observe_metadata(
         command.arg("--filter-platform").arg(target);
     }
     let output = capture(&mut command, limits)?;
-    Ok(decode_metadata(&serde_json::from_slice(&output.stdout)?)?)
+    Ok(serde_json::from_slice(&output.stdout)?)
 }
 
 /// Observe a depth-prefixed, non-deduplicated package-selected Cargo tree.

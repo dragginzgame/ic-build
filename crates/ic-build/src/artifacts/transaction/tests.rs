@@ -5,8 +5,8 @@ use super::{
 };
 use crate::artifacts::{
     ArtifactCacheMaintenance, ArtifactCachePrunePolicy, WasmBuildSpec, resolve_cargo_build_inputs,
-    test_support::unique_temp_directory,
 };
+use crate::fs_fixture::unique_temp_directory;
 use std::{
     ffi::OsString,
     fs,

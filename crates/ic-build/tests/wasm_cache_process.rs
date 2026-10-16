@@ -4,8 +4,10 @@
 
 mod support;
 
-#[cfg(unix)]
-use ic_host_process::testing::write_executable_script;
+use ic_host_process::testing::{
+    crash_barrier::{wait_for_child_path, wait_for_path},
+    write_executable_script,
+};
 
 use ic_build::artifacts::{
     SharedIncrementalTargetMaintenanceOutcome, SharedIncrementalTargetPrunePolicy,
@@ -19,32 +21,34 @@ use std::{
     process::Command,
     time::Duration,
 };
-use support::wait::wait_for_path;
-use support::{discover_workspace, unique_temp_directory};
+use support::fs_fixture::unique_temp_directory;
 
-const PERF_PROBE_PACKAGE: &str = "ic_testkit_perf_probe";
 const WORKER_ROOT_ENV: &str = "IC_TESTKIT_WASM_PROCESS_ROOT";
 const WORKER_ID_ENV: &str = "IC_TESTKIT_WASM_PROCESS_WORKER";
 
 #[test]
 fn different_cache_roots_coordinate_one_shared_incremental_target_across_processes() {
-    let workspace =
-        discover_workspace(env!("CARGO_MANIFEST_DIR")).expect("resolve Cargo workspace");
-    if !workspace
-        .join("crates/ic_testkit_perf_probe/Cargo.toml")
-        .is_file()
-    {
-        eprintln!("skipping shared-target process test: fixture canister is not packaged");
-        return;
-    }
     let root = unique_temp_directory("wasm-shared-process-lock");
+    support::wasm::write_workspace(&root.join("workspace")).expect("prepare process workspace");
     write_cargo_wrapper(&root.join("cargo-wrapper.sh"));
     let executable = std::env::current_exe().expect("resolve current process-test executable");
     let mut first = spawn_worker(&executable, &root, "first");
     let mut second = spawn_worker(&executable, &root, "second");
 
-    wait_for_path(&root.join("ready-first"));
-    wait_for_path(&root.join("ready-second"));
+    wait_for_child_path(
+        &mut first,
+        &root.join("ready-first"),
+        "first worker ready",
+        Duration::from_secs(10),
+    )
+    .expect("wait for first worker");
+    wait_for_child_path(
+        &mut second,
+        &root.join("ready-second"),
+        "second worker ready",
+        Duration::from_secs(10),
+    )
+    .expect("wait for second worker");
     fs::write(root.join("go"), b"go").expect("release shared-target workers");
 
     assert!(first.wait().expect("wait for first worker").success());
@@ -66,16 +70,8 @@ fn different_cache_roots_coordinate_one_shared_incremental_target_across_process
 
 #[test]
 fn scheduled_shared_target_maintenance_runs_once_across_processes() {
-    let workspace =
-        discover_workspace(env!("CARGO_MANIFEST_DIR")).expect("resolve Cargo workspace");
-    if !workspace
-        .join("crates/ic_testkit_perf_probe/Cargo.toml")
-        .is_file()
-    {
-        eprintln!("skipping scheduled-maintenance process test: fixture is not packaged");
-        return;
-    }
     let root = unique_temp_directory("wasm-shared-scheduled-maintenance");
+    support::wasm::write_workspace(&root.join("workspace")).expect("prepare maintenance workspace");
     fs::create_dir_all(root.join("shared-target/debug/deps"))
         .expect("create shared target for scheduled process test");
     fs::write(root.join("shared-target/debug/deps/state"), b"state")
@@ -84,8 +80,20 @@ fn scheduled_shared_target_maintenance_runs_once_across_processes() {
     let mut first = spawn_scheduled_maintenance_worker(&executable, &root, "first");
     let mut second = spawn_scheduled_maintenance_worker(&executable, &root, "second");
 
-    wait_for_path(&root.join("ready-first"));
-    wait_for_path(&root.join("ready-second"));
+    wait_for_child_path(
+        &mut first,
+        &root.join("ready-first"),
+        "first worker ready",
+        Duration::from_secs(10),
+    )
+    .expect("wait for first worker");
+    wait_for_child_path(
+        &mut second,
+        &root.join("ready-second"),
+        "second worker ready",
+        Duration::from_secs(10),
+    )
+    .expect("wait for second worker");
     fs::write(root.join("go"), b"go").expect("release scheduled-maintenance workers");
 
     assert!(first.wait().expect("wait for first worker").success());
@@ -108,15 +116,19 @@ fn shared_incremental_process_worker() {
     );
     let worker = std::env::var(WORKER_ID_ENV).expect("worker identity environment must be set");
     fs::write(root.join(format!("ready-{worker}")), b"ready").expect("mark worker ready");
-    wait_for_path(&root.join("go"));
+    wait_for_path(
+        &root.join("go"),
+        "parent start marker",
+        Duration::from_secs(10),
+    )
+    .expect("wait for parent start");
 
-    let workspace =
-        discover_workspace(env!("CARGO_MANIFEST_DIR")).expect("resolve Cargo workspace");
+    let workspace = root.join("workspace");
     let real_cargo = std::env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo"));
     let spec = WasmBuildSpec::new(
         &workspace,
         &root.join(format!("cache-{worker}")),
-        &[PERF_PROBE_PACKAGE],
+        &["fixture"],
         "debug",
     )
     .with_shared_incremental_target(root.join("shared-target"))
@@ -153,14 +165,18 @@ fn scheduled_shared_target_maintenance_process_worker() {
     );
     let worker = std::env::var(WORKER_ID_ENV).expect("worker identity environment must be set");
     fs::write(root.join(format!("ready-{worker}")), b"ready").expect("mark worker ready");
-    wait_for_path(&root.join("go"));
+    wait_for_path(
+        &root.join("go"),
+        "parent start marker",
+        Duration::from_secs(10),
+    )
+    .expect("wait for parent start");
 
-    let workspace =
-        discover_workspace(env!("CARGO_MANIFEST_DIR")).expect("resolve Cargo workspace");
+    let workspace = root.join("workspace");
     let spec = WasmBuildSpec::new(
         &workspace,
         &root.join(format!("cache-{worker}")),
-        &[PERF_PROBE_PACKAGE],
+        &["fixture"],
         "debug",
     )
     .with_shared_incremental_target(root.join("shared-target"));

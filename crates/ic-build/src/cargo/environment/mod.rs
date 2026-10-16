@@ -124,7 +124,8 @@ pub fn preferred_configuration(directory: &Path) -> Option<PathBuf> {
 ///
 /// Roots must be absolute. Required missing/invalid files fail; optional absent includes
 /// are skipped. Includes resolve beside the configured entry, not a symlink referent.
-/// Active recursion is suppressed without merging distinct lookup aliases.
+/// Recorded lookup paths are not read or expanded again in the same call. Active
+/// recursion is suppressed without merging distinct lookup aliases.
 ///
 /// Callers own source custody, root selection and re-observation before acceptance.
 /// This does not resolve tools, execute Cargo, admit compilers or grant cache/release validity.
@@ -184,6 +185,9 @@ fn append_configuration(
             "configuration path must be absolute",
         ));
     }
+    if files.iter().any(|file| file.path == config) {
+        return Ok(());
+    }
     let contents = match fs::read_to_string(config) {
         Ok(contents) => contents,
         Err(error) if optional && error.kind() == io::ErrorKind::NotFound => return Ok(()),
@@ -214,28 +218,26 @@ fn append_configuration(
     }
     let configuration = toml::from_str::<Value>(&contents)
         .map_err(|_| invalid_configuration(config, "invalid TOML"))?;
-    if !files.iter().any(|file| file.path == config) {
-        let compiler_overrides = [
-            "rustc",
-            "rustc-wrapper",
-            "rustc-workspace-wrapper",
-            "rustdoc",
-        ]
-        .into_iter()
-        .filter(|field| {
-            configuration
-                .get("build")
-                .and_then(|build| build.get(field))
-                .is_some()
-        })
-        .collect();
-        files.push(ConfigurationFile {
-            path: config.to_owned(),
-            location: location.clone(),
-            sha256: Sha256::digest(contents.as_bytes()).into(),
-            compiler_overrides,
-        });
-    }
+    let compiler_overrides = [
+        "rustc",
+        "rustc-wrapper",
+        "rustc-workspace-wrapper",
+        "rustdoc",
+    ]
+    .into_iter()
+    .filter(|field| {
+        configuration
+            .get("build")
+            .and_then(|build| build.get(field))
+            .is_some()
+    })
+    .collect();
+    files.push(ConfigurationFile {
+        path: config.to_owned(),
+        location: location.clone(),
+        sha256: Sha256::digest(contents.as_bytes()).into(),
+        compiler_overrides,
+    });
     if let Some(include) = configuration.get("include") {
         for (included, optional) in configuration_includes(include, config)? {
             let included = if included.is_absolute() {

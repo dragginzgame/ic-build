@@ -2,10 +2,8 @@
 //!
 //! Consumers supply package/version selection, tools, source custody and budgets.
 //! This is local build evidence, never registry publication or release admission.
-use super::observation::{
-    decode_metadata,
-    schema::{Metadata, Package},
-};
+use super::observation::schema::{Metadata, Package};
+use ic_host_artifacts::artifact::Sha256Digest;
 use ic_host_process::tool::{CompletedExecution, OutputLimits, ToolError, capture_command};
 mod source_inventory;
 #[cfg(test)]
@@ -189,7 +187,7 @@ fn qualify(
         "1",
     ]);
     let metadata = execute(&mut command, &evidence, "entry-metadata", limits.process)?;
-    let metadata = decode_metadata(&serde_json::from_slice(&metadata)?)?;
+    let metadata = serde_json::from_slice(&metadata)?;
     let mut originals = BTreeMap::new();
     originals.insert(
         workspace.join("Cargo.toml"),
@@ -271,11 +269,7 @@ fn qualify(
         ])
         .arg(&manifest_path);
     let metadata = execute(&mut command, &evidence, "metadata", limits.process)?;
-    admit_graph(
-        &decode_metadata(&serde_json::from_slice(&metadata)?)?,
-        &evidence,
-        packages,
-    )?;
+    admit_graph(&serde_json::from_slice(&metadata)?, &evidence, packages)?;
     let admitted_lock = read(&payload_lock, limits.file_bytes)?;
     admit_lock(&entry_lock, &admitted_lock)?;
     fs::write(evidence.join("admitted-Cargo.toml"), &manifest)?;
@@ -430,13 +424,9 @@ fn external_rows(bytes: &[u8]) -> Result<BTreeMap<(String, String, String), Stri
         let source = source.as_str().ok_or("invalid lock source")?;
         let checksum = if source.starts_with("registry+") {
             let checksum = text("checksum")?;
-            if checksum.len() != 64
-                || !checksum
-                    .bytes()
-                    .all(|b| b.is_ascii_digit() || matches!(b, b'a'..=b'f'))
-            {
-                return Err("invalid package checksum".into());
-            }
+            checksum
+                .parse::<Sha256Digest>()
+                .map_err(|_| "invalid package checksum")?;
             checksum
         } else {
             ""
