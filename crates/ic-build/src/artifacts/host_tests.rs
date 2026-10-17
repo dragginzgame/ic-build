@@ -36,9 +36,9 @@ fn admitted_shared_tool_output_is_published_and_invalidated_by_tool_bytes() {
             executable: &executable,
             executable_bytes: script.len() as u64,
             version_arguments: &[OsString::from("--version")],
-            version_identity: "fixture-tool 1.0",
         },
         Sha256Digest::compute(script),
+        "fixture-tool 1.0",
         &context,
         limits,
     )
@@ -113,9 +113,9 @@ fn shim_wasm_and_post_link_caches_reuse_and_invalidate_independently() {
                 executable: &executable,
                 executable_bytes: bytes.len() as u64,
                 version_arguments: &[OsString::from("--version")],
-                version_identity: "optimizer 1",
             },
             Sha256Digest::compute(bytes),
+            "optimizer 1",
             &context,
             limits,
         )
@@ -214,9 +214,9 @@ fn failed_admitted_producers_cannot_publish_or_reuse_staged_output() {
                 executable: &executable,
                 executable_bytes: failing_script.len() as u64,
                 version_arguments: &[OsString::from("--version")],
-                version_identity: "producer 1",
             },
             Sha256Digest::compute(failing_script.as_bytes()),
+            "producer 1",
             &context,
             limits,
         )

@@ -38,12 +38,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             executable: &tool,
             executable_bytes: 256 * 1024 * 1024,
             version_arguments: &["--version".into()],
-            version_identity: version.to_str().ok_or("version must be UTF-8")?,
         },
         sha256
             .to_str()
             .ok_or("SHA-256 must be UTF-8")?
             .parse::<Sha256Digest>()?,
+        version.to_str().ok_or("version must be UTF-8")?,
         &context,
         limits,
     )?;

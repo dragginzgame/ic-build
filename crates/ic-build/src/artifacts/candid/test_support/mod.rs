@@ -46,8 +46,8 @@ impl Fixture {
                 executable: &path,
                 executable_bytes: 1024 * 1024,
                 version_arguments: &[OsString::from("--version")],
-                version_identity: VERSION,
             },
+            VERSION,
             &self.context(&[]),
             LIMITS,
         )

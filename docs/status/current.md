@@ -1,5 +1,21 @@
 # Current handoff
 
+## Host 0.25 admission caller repair — pending 0.13
+
+The incoming `2f4783a` selects registry Host 0.25.0 but retains five old tool
+admission calls in the transaction example and Host/Candid fixtures. Those calls
+now pass the expected version separately from `VersionSpec`, preserving their
+exact versions, digest authority, executable bounds, environment and deadlines.
+No compatibility adapter, dependency selection or own version change is added.
+The existing pending 0.13 notes now cover the exposed Host minor-family boundary.
+
+The reported `make check-package` gate passes. Actual Rust 1.91 all-target/all-
+feature compilation and all 11 affected Host/Candid cases pass on Linux; strict
+current all-target/all-feature Clippy, changed-file formatting, documentation
+links, snapshot and diff checks pass. Logs: `/tmp/ic-build-host025-admission-20261017/`.
+Full release validation and native macOS qualification remain separate. Root
+index/refs, manifests and the selected lock remain unchanged.
+
 ## Canic caller PR, producer contributions and issue acceptance
 
 [Auth PR #68](https://github.com/dragginzgame/ic-auth/pull/68), head `9309204`,

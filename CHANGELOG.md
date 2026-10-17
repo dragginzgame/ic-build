@@ -5,6 +5,9 @@ archive also includes the extracted artifact engine and Cargo grouping API.
 
 ## [0.13.0]
 
+- **Breaking:** align exposed Host types with the selected Host 0.25 family.
+  Align direct Host dependencies when passing Host values. Tool admission callers
+  pass the expected version separately from the version invocation specification.
 - **Breaking:** native executable builds require explicit child spawning and
   cancellation callbacks. Pass `OwnedChild::spawn_direct` and `|| false` to retain
   direct-child behavior; callers may select owned-group cleanup and in-flight
