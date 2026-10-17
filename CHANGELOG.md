@@ -3,6 +3,13 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.14.1]
+
+- Export retained Wasm builds with bounded streaming capture and build/source
+  provenance. Refuse changed inputs and preserve prior evidence on admission
+  failure; consumers retain source custody, recipes and report acceptance.
+  [#58](https://github.com/dragginzgame/ic-build/issues/58).
+
 ## [0.14.0] - 2026-10-17
 
 - **Breaking:** move `CargoFeatureSelection` to `cargo::selection` and keep

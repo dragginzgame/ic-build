@@ -1,5 +1,15 @@
 # Current handoff
 
+## Pending retained Wasm evidence export
+
+The isolated IC Wire contribution adds retained acquisition, freshness checks and
+bounded artifact export with provenance through the existing capture/cache owners.
+[#58](https://github.com/dragginzgame/ic-build/issues/58) tracks producer acceptance.
+Linux synthetic-producer export/refusal/reuse/recovery checks, strict Clippy and
+Rust 1.91 library checks pass. Native macOS and consumer installed qualification
+remain separate. Host dependency selection is unchanged; PR #57 owns that work.
+No version, publication or integration-branch change is part of this contribution.
+
 Development Clippy 1.99 rejected two default-selection emptiness assertions
 with `assert_is_empty`; they now compare explicit empty `OsString` arrays.
 `make clippy` and both selection tests pass on development Rust 1.99; both tests
