@@ -33,24 +33,6 @@ pub struct ArtifactCacheBatchEntry<E> {
     entry_elapsed: Duration,
 }
 
-/// One successful generic artifact batch entry.
-#[derive(Clone, Copy, Debug)]
-pub struct ArtifactCacheBatchOutcomeEntry<'a> {
-    index: usize,
-    label: &'a str,
-    outcome: &'a ArtifactCacheOutcome,
-    entry_elapsed: Duration,
-}
-
-/// One failed generic artifact batch entry.
-#[derive(Debug)]
-pub struct ArtifactCacheBatchFailedEntry<'a, E> {
-    index: usize,
-    label: &'a str,
-    failure: &'a ArtifactCacheBatchFailure<E>,
-    entry_elapsed: Duration,
-}
-
 /// Structural error that prevents a labeled artifact batch from starting.
 #[non_exhaustive]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -167,32 +149,14 @@ impl<E> ArtifactCacheBatchReport<E> {
         self.entries
     }
 
-    /// Structured successful entries with labels and wall-clock times.
-    pub fn outcomes(&self) -> impl Iterator<Item = ArtifactCacheBatchOutcomeEntry<'_>> {
-        self.entries.iter().filter_map(|entry| {
-            entry
-                .outcome()
-                .map(|outcome| ArtifactCacheBatchOutcomeEntry {
-                    index: entry.index,
-                    label: &entry.label,
-                    outcome,
-                    entry_elapsed: entry.entry_elapsed,
-                })
-        })
+    /// Successful entries, retaining the canonical identity, result and timings.
+    pub fn outcomes(&self) -> impl Iterator<Item = &ArtifactCacheBatchEntry<E>> {
+        self.entries.iter().filter(|entry| entry.is_success())
     }
 
-    /// Structured failed entries with labels and partial phase timings.
-    pub fn failures(&self) -> impl Iterator<Item = ArtifactCacheBatchFailedEntry<'_, E>> {
-        self.entries.iter().filter_map(|entry| {
-            entry
-                .failure()
-                .map(|failure| ArtifactCacheBatchFailedEntry {
-                    index: entry.index,
-                    label: &entry.label,
-                    failure,
-                    entry_elapsed: entry.entry_elapsed,
-                })
-        })
+    /// Failed entries; inspect `failure()` on each entry.
+    pub fn failures(&self) -> impl Iterator<Item = &ArtifactCacheBatchEntry<E>> {
+        self.entries.iter().filter(|entry| !entry.is_success())
     }
 
     /// Complete wall-clock time for the sequential collect-all batch.
@@ -215,8 +179,11 @@ impl<E> ArtifactCacheBatchReport<E> {
             total: self.total,
             ..ArtifactCacheBatchMetrics::default()
         };
-        for entry in self.outcomes() {
-            let outcome = entry.outcome();
+        for outcome in self
+            .entries
+            .iter()
+            .filter_map(ArtifactCacheBatchEntry::outcome)
+        {
             if outcome.is_reused() {
                 metrics.reused += 1;
             } else {
@@ -285,64 +252,6 @@ impl<E> ArtifactCacheBatchEntry<E> {
         Duration,
     ) {
         (self.index, self.label, self.result, self.entry_elapsed)
-    }
-}
-
-impl<'a> ArtifactCacheBatchOutcomeEntry<'a> {
-    /// Zero-based position in the supplied specification slice.
-    #[must_use]
-    pub const fn index(self) -> usize {
-        self.index
-    }
-
-    /// Caller-owned stable label.
-    #[must_use]
-    pub const fn label(self) -> &'a str {
-        self.label
-    }
-
-    /// Successful artifact outcome.
-    #[must_use]
-    pub const fn outcome(self) -> &'a ArtifactCacheOutcome {
-        self.outcome
-    }
-
-    /// Complete wall-clock time retained for this successful entry.
-    #[must_use]
-    pub const fn entry_elapsed(self) -> Duration {
-        self.entry_elapsed
-    }
-}
-
-impl<'a, E> ArtifactCacheBatchFailedEntry<'a, E> {
-    /// Zero-based position in the supplied specification slice.
-    #[must_use]
-    pub const fn index(&self) -> usize {
-        self.index
-    }
-
-    /// Caller-owned stable label.
-    #[must_use]
-    pub const fn label(&self) -> &'a str {
-        self.label
-    }
-
-    /// Structured cache or caller-build failure.
-    #[must_use]
-    pub const fn failure(&self) -> &'a ArtifactCacheBatchFailure<E> {
-        self.failure
-    }
-
-    /// Partial phase timings retained with the failure.
-    #[must_use]
-    pub const fn timings(&self) -> ArtifactCacheBatchFailureTimings {
-        self.failure.timings()
-    }
-
-    /// Complete wall-clock time retained for this failed entry.
-    #[must_use]
-    pub const fn entry_elapsed(&self) -> Duration {
-        self.entry_elapsed
     }
 }
 

@@ -11,11 +11,11 @@ use std::{
 use super::wasm_cache::{
     SharedIncrementalTargetMaintenanceConfig, SharedIncrementalTargetMaintenanceOutcome,
     SharedIncrementalTargetPrunePolicy, WasmBuildBatchAttempt, WasmBuildBatchInputMetrics,
-    WasmBuildBatchInputResolver, WasmBuildError, WasmBuildFailureDetails, WasmBuildFailurePhase,
-    WasmBuildFailureTimings, WasmBuildInputReuse, WasmBuildInputSnapshotState, WasmBuildOutcome,
-    WasmBuildProgressConfig, WasmBuildProgressEvent, WasmBuildSessionState, WasmBuildSpec,
-    WasmBuildTimings, WasmInputResolutionTimings, build_wasm_canisters_cached_in_batch,
-    build_wasm_canisters_cached_in_batch_with_progress, shared_incremental_target,
+    WasmBuildBatchInputResolver, WasmBuildError, WasmBuildFailureDetails, WasmBuildInputReuse,
+    WasmBuildInputSnapshotState, WasmBuildOutcome, WasmBuildProgressConfig, WasmBuildProgressEvent,
+    WasmBuildSessionState, WasmBuildSpec, WasmBuildTimings, WasmInputResolutionTimings,
+    build_wasm_canisters_cached_in_batch, build_wasm_canisters_cached_in_batch_with_progress,
+    shared_incremental_target,
 };
 
 /// Orchestration shared by every entry in one independent Wasm build batch.
@@ -89,33 +89,6 @@ pub struct WasmBuildBatchEntry {
     label: String,
     result: Result<WasmBuildOutcome, (WasmBuildError, WasmBuildFailureDetails)>,
     entry_elapsed: Duration,
-}
-
-/// One successful Wasm batch entry.
-#[derive(Clone, Copy, Debug)]
-pub struct WasmBuildBatchOutcomeEntry<'a> {
-    index: usize,
-    label: &'a str,
-    outcome: &'a WasmBuildOutcome,
-    entry_elapsed: Duration,
-}
-
-/// One failed Wasm batch entry with its retained wall-clock time.
-#[derive(Clone, Copy, Debug)]
-pub struct WasmBuildBatchFailure<'a> {
-    index: usize,
-    label: &'a str,
-    error: &'a WasmBuildError,
-    details: WasmBuildFailureDetails,
-    entry_elapsed: Duration,
-}
-
-/// One integrated shared-target maintenance outcome from a Wasm batch.
-#[derive(Clone, Copy, Debug)]
-pub struct WasmBuildBatchMaintenanceEntry<'a> {
-    index: usize,
-    label: &'a str,
-    outcome: &'a SharedIncrementalTargetMaintenanceOutcome,
 }
 
 /// Structural error that prevents a labeled Wasm batch from starting.
@@ -459,90 +432,6 @@ impl WasmBuildBatchEntry {
     }
 }
 
-impl<'a> WasmBuildBatchOutcomeEntry<'a> {
-    /// Zero-based position in the supplied labeled specification slice.
-    #[must_use]
-    pub const fn index(self) -> usize {
-        self.index
-    }
-
-    /// Caller-owned stable label.
-    #[must_use]
-    pub const fn label(self) -> &'a str {
-        self.label
-    }
-
-    /// Successful Wasm build outcome.
-    #[must_use]
-    pub const fn outcome(self) -> &'a WasmBuildOutcome {
-        self.outcome
-    }
-
-    /// Complete wall-clock time retained for this successful entry.
-    #[must_use]
-    pub const fn entry_elapsed(self) -> Duration {
-        self.entry_elapsed
-    }
-}
-
-impl<'a> WasmBuildBatchFailure<'a> {
-    /// Zero-based position in the supplied specification slice.
-    #[must_use]
-    pub const fn index(self) -> usize {
-        self.index
-    }
-
-    /// Caller-owned stable label.
-    #[must_use]
-    pub const fn label(self) -> &'a str {
-        self.label
-    }
-
-    /// Structured acquisition failure.
-    #[must_use]
-    pub const fn error(self) -> &'a WasmBuildError {
-        self.error
-    }
-
-    /// Primary acquisition phase that returned the failure.
-    #[must_use]
-    pub const fn phase(self) -> WasmBuildFailurePhase {
-        self.details.phase()
-    }
-
-    /// Partial phase timings retained before the failure returned.
-    #[must_use]
-    pub const fn timings(self) -> WasmBuildFailureTimings {
-        self.details.timings()
-    }
-
-    /// Complete wall-clock time retained for this failed entry.
-    #[must_use]
-    pub const fn entry_elapsed(self) -> Duration {
-        self.entry_elapsed
-    }
-}
-
-impl<'a> WasmBuildBatchMaintenanceEntry<'a> {
-    /// Zero-based position in the supplied labeled specification slice.
-    #[must_use]
-    pub const fn index(self) -> usize {
-        self.index
-    }
-
-    /// Caller-owned stable label.
-    #[must_use]
-    pub const fn label(self) -> &'a str {
-        self.label
-    }
-
-    /// Structured shared-target maintenance outcome.
-    #[must_use]
-    pub const fn outcome(self) -> &'a SharedIncrementalTargetMaintenanceOutcome {
-        self.outcome
-    }
-}
-
 /// Aggregate counters and successful-acquisition timings for a Wasm build batch.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct WasmBuildBatchMetrics {
@@ -608,52 +497,34 @@ impl WasmBuildBatchReport {
         self.entries
     }
 
-    /// Structured successful entries with labels and wall-clock times.
-    pub fn outcomes(&self) -> impl Iterator<Item = WasmBuildBatchOutcomeEntry<'_>> {
-        self.entries.iter().filter_map(|entry| {
-            entry.outcome().map(|outcome| WasmBuildBatchOutcomeEntry {
-                index: entry.index,
-                label: &entry.label,
-                outcome,
-                entry_elapsed: entry.entry_elapsed,
-            })
-        })
+    /// Successful entries, retaining the canonical identity, result and timings.
+    pub fn outcomes(&self) -> impl Iterator<Item = &WasmBuildBatchEntry> {
+        self.entries.iter().filter(|entry| entry.is_success())
     }
 
-    /// Structured failed entries with labels and wall-clock times.
-    pub fn failures(&self) -> impl Iterator<Item = WasmBuildBatchFailure<'_>> {
-        self.entries.iter().filter_map(|entry| {
-            entry
-                .result
-                .as_ref()
-                .err()
-                .map(|(error, details)| WasmBuildBatchFailure {
-                    index: entry.index,
-                    label: &entry.label,
-                    error,
-                    details: *details,
-                    entry_elapsed: entry.entry_elapsed,
-                })
-        })
+    /// Failed entries; inspect `error()` and `failure_details()` on each entry.
+    pub fn failures(&self) -> impl Iterator<Item = &WasmBuildBatchEntry> {
+        self.entries.iter().filter(|entry| !entry.is_success())
     }
 
-    /// Labeled integrated shared-target maintenance outcomes.
+    /// Canonical entries paired with their integrated shared-target maintenance.
     ///
     /// Batch-owned maintenance contributes at most one outcome for each
     /// distinct configured shared-target path.
     pub fn shared_incremental_maintenance_outcomes(
         &self,
-    ) -> impl Iterator<Item = WasmBuildBatchMaintenanceEntry<'_>> {
+    ) -> impl Iterator<
+        Item = (
+            &WasmBuildBatchEntry,
+            &SharedIncrementalTargetMaintenanceOutcome,
+        ),
+    > {
         self.outcomes().filter_map(|entry| {
             entry
-                .outcome
+                .outcome()?
                 .record()
                 .shared_incremental_maintenance()
-                .map(|outcome| WasmBuildBatchMaintenanceEntry {
-                    index: entry.index,
-                    label: entry.label,
-                    outcome,
-                })
+                .map(|outcome| (entry, outcome))
         })
     }
 
@@ -681,8 +552,7 @@ impl WasmBuildBatchReport {
             total: self.total,
             ..WasmBuildBatchMetrics::default()
         };
-        for entry in self.outcomes() {
-            let outcome = entry.outcome();
+        for outcome in self.entries.iter().filter_map(WasmBuildBatchEntry::outcome) {
             if outcome.is_reused() {
                 metrics.reused += 1;
             } else {

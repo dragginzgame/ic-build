@@ -8,8 +8,8 @@ use super::{
 };
 use crate::artifacts::{
     SharedIncrementalTargetMaintenanceConfig, SharedIncrementalTargetMaintenanceFailureMode,
-    SharedIncrementalTargetPrunePolicy, WasmBuildBatchFailure, WasmBuildError,
-    WasmBuildFailurePhase, WasmBuildProgressConfig, WasmBuildSpec,
+    SharedIncrementalTargetPrunePolicy, WasmBuildBatchEntry, WasmBuildError, WasmBuildFailurePhase,
+    WasmBuildProgressConfig, WasmBuildSpec,
 };
 use std::{path::Path, time::Duration};
 
@@ -61,13 +61,28 @@ fn library_output_validation_survives_batch_session_and_prepared_resolution() {
         assert_eq!(report.outcomes().count(), 1);
         assert_eq!(report.failures().count(), 1);
         let failure = report.failures().next().unwrap();
+        assert!(std::ptr::eq(
+            failure,
+            &raw const report.entries()[failure.index()]
+        ));
+        let success = report.outcomes().next().unwrap();
+        assert!(std::ptr::eq(
+            success,
+            &raw const report.entries()[success.index()]
+        ));
         assert_eq!(failure.label(), "ordinary");
         assert!(matches!(
-            failure.error(),
+            failure.error().unwrap(),
             WasmBuildError::InvalidSpec { .. }
         ));
-        assert_eq!(failure.phase(), WasmBuildFailurePhase::InputDiscovery);
-        assert_eq!(failure.timings().cargo_build(), None);
+        assert_eq!(
+            failure.failure_details().unwrap().phase(),
+            WasmBuildFailurePhase::InputDiscovery
+        );
+        assert_eq!(
+            failure.failure_details().unwrap().timings().cargo_build(),
+            None
+        );
     };
     check(build_wasm_canisters_cached_batch(&specs).unwrap());
 
@@ -124,7 +139,7 @@ fn batch_retains_every_indexed_failure() {
     assert_eq!(
         report
             .failures()
-            .map(WasmBuildBatchFailure::label)
+            .map(WasmBuildBatchEntry::label)
             .collect::<Vec<_>>(),
         ["root", "worker"]
     );
@@ -134,8 +149,8 @@ fn batch_retains_every_indexed_failure() {
             .all(|failure| failure.entry_elapsed() <= report.total())
     );
     assert!(report.failures().all(|failure| {
-        failure.phase() == WasmBuildFailurePhase::Specification
-            && failure.timings().total() <= failure.entry_elapsed()
+        failure.failure_details().unwrap().phase() == WasmBuildFailurePhase::Specification
+            && failure.failure_details().unwrap().timings().total() <= failure.entry_elapsed()
     }));
     assert_eq!(report.outcomes().count(), 0);
     let metrics = report.metrics();
@@ -166,11 +181,33 @@ fn batch_failure_retains_partial_metadata_timing() {
     let report = build_wasm_canisters_cached_batch(&specs).expect("valid labeled batch");
     let failure = report.failures().next().expect("metadata failure");
 
-    assert_eq!(failure.phase(), WasmBuildFailurePhase::CargoMetadata);
-    assert!(failure.timings().input_resolution().tool_identity() > Duration::ZERO);
-    assert!(failure.timings().input_resolution().cargo_metadata() > Duration::ZERO);
-    assert_eq!(failure.timings().cargo_build(), None);
-    assert!(failure.timings().total() <= failure.entry_elapsed());
+    assert_eq!(
+        failure.failure_details().unwrap().phase(),
+        WasmBuildFailurePhase::CargoMetadata
+    );
+    assert!(
+        failure
+            .failure_details()
+            .unwrap()
+            .timings()
+            .input_resolution()
+            .tool_identity()
+            > Duration::ZERO
+    );
+    assert!(
+        failure
+            .failure_details()
+            .unwrap()
+            .timings()
+            .input_resolution()
+            .cargo_metadata()
+            > Duration::ZERO
+    );
+    assert_eq!(
+        failure.failure_details().unwrap().timings().cargo_build(),
+        None
+    );
+    assert!(failure.failure_details().unwrap().timings().total() <= failure.entry_elapsed());
 
     std::fs::remove_dir_all(root).expect("remove failure timing fixture");
 }
@@ -202,12 +239,18 @@ fn malformed_shared_metadata_is_reported_for_every_entry() {
     for (index, failure) in failures.iter().enumerate() {
         assert_eq!(failure.index(), index);
         assert_eq!(failure.label(), specs[index].label());
-        assert_eq!(failure.phase(), WasmBuildFailurePhase::InputDiscovery);
+        assert_eq!(
+            failure.failure_details().unwrap().phase(),
+            WasmBuildFailurePhase::InputDiscovery
+        );
         assert!(matches!(
-            failure.error(),
+            failure.error().unwrap(),
             WasmBuildError::InvalidMetadata { .. }
         ));
-        assert_eq!(failure.timings().cargo_build(), None);
+        assert_eq!(
+            failure.failure_details().unwrap().timings().cargo_build(),
+            None
+        );
     }
     std::fs::remove_dir_all(root).expect("remove malformed metadata fixture");
 }
@@ -328,9 +371,9 @@ fn batch_maintenance_distinguishes_workspaces_and_deduplicates_aliases() {
     assert!(
         report
             .shared_incremental_maintenance_outcomes()
-            .all(|outcome| {
+            .all(|(_, outcome)| {
                 matches!(
-                    outcome.outcome(),
+                    outcome,
                     SharedIncrementalTargetMaintenanceOutcome::Performed { .. }
                 )
             })
@@ -345,7 +388,7 @@ fn batch_maintenance_distinguishes_workspaces_and_deduplicates_aliases() {
         report
             .outcomes()
             .last()
-            .is_some_and(|entry| entry.outcome().is_reused())
+            .is_some_and(|entry| entry.outcome().unwrap().is_reused())
     );
     drop(report);
     fs::remove_dir_all(first_root).expect("remove first maintenance workspace");
@@ -376,9 +419,12 @@ fn batch_maintenance_rejects_per_spec_policy_ownership() {
     assert_eq!(failure.index(), 0);
     assert_eq!(failure.label(), "fixture");
     assert_eq!(failure.entry_elapsed(), report.entries()[0].entry_elapsed());
-    assert_eq!(failure.phase(), WasmBuildFailurePhase::Specification);
+    assert_eq!(
+        failure.failure_details().unwrap().phase(),
+        WasmBuildFailurePhase::Specification
+    );
     assert!(
-        matches!(failure.error(), WasmBuildError::InvalidSpec { message } if message.contains("cannot be combined"))
+        matches!(failure.error().unwrap(), WasmBuildError::InvalidSpec { message } if message.contains("cannot be combined"))
     );
 }
 
@@ -409,12 +455,22 @@ fn unsafe_shared_target_does_not_fail_other_compatible_batch_entries() {
     let failures = report.failures().collect::<Vec<_>>();
     assert_eq!(failures.len(), 1);
     assert_eq!(failures[0].label(), "unsafe");
-    assert_eq!(failures[0].phase(), WasmBuildFailurePhase::InputDiscovery);
+    assert_eq!(
+        failures[0].failure_details().unwrap().phase(),
+        WasmBuildFailurePhase::InputDiscovery
+    );
     assert!(matches!(
-        failures[0].error(),
+        failures[0].error().unwrap(),
         WasmBuildError::InvalidSpec { .. }
     ));
-    assert_eq!(failures[0].timings().cargo_build(), None);
+    assert_eq!(
+        failures[0]
+            .failure_details()
+            .unwrap()
+            .timings()
+            .cargo_build(),
+        None
+    );
     assert_eq!(
         fs::read(&sentinel).expect("read preserved source"),
         b"preserve"
@@ -451,7 +507,10 @@ fn a_missing_input_does_not_fail_other_compatible_batch_entries() {
             let failures = report.failures().collect::<Vec<_>>();
             assert_eq!(failures.len(), 1);
             assert_eq!(failures[0].label(), "bad");
-            assert_eq!(failures[0].phase(), WasmBuildFailurePhase::ContentHashing);
+            assert_eq!(
+                failures[0].failure_details().unwrap().phase(),
+                WasmBuildFailurePhase::ContentHashing
+            );
             for entry in report.into_entries() {
                 let failed = entry.label() == "bad";
                 assert_eq!(entry.result().is_err(), failed);

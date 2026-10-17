@@ -11,12 +11,12 @@ use ic_build::artifacts::{
     ArtifactCacheError, ArtifactCachePreparation, ArtifactCachePrunePolicy, ArtifactCacheSpec,
     LabeledWasmBuildSpec, SharedIncrementalTargetMaintenanceOutcome,
     SharedIncrementalTargetPrunePolicy, WasmBuildBatchConfig, WasmBuildBatchContractError,
-    WasmBuildBatchMetrics, WasmBuildBatchOutcomeEntry, WasmBuildBatchProgressEvent,
-    WasmBuildBatchReport, WasmBuildError, WasmBuildFailurePhase, WasmBuildInputSnapshot,
-    WasmBuildOutcome, WasmBuildPhase, WasmBuildProgressConfig, WasmBuildProgressEvent,
-    WasmBuildSession, WasmBuildSpec, build_wasm_canisters_cached,
-    build_wasm_canisters_cached_with_progress, inspect_shared_incremental_target,
-    prepare_artifact_cache, prune_wasm_build_cache, resolve_cargo_build_inputs,
+    WasmBuildBatchEntry, WasmBuildBatchMetrics, WasmBuildBatchProgressEvent, WasmBuildBatchReport,
+    WasmBuildError, WasmBuildFailurePhase, WasmBuildInputSnapshot, WasmBuildOutcome,
+    WasmBuildPhase, WasmBuildProgressConfig, WasmBuildProgressEvent, WasmBuildSession,
+    WasmBuildSpec, build_wasm_canisters_cached, build_wasm_canisters_cached_with_progress,
+    inspect_shared_incremental_target, prepare_artifact_cache, prune_wasm_build_cache,
+    resolve_cargo_build_inputs,
 };
 use std::{
     fs,
@@ -404,27 +404,31 @@ fn independent_wasm_batch_preserves_standalone_feature_resolution() {
     assert_eq!(
         batch
             .outcomes()
-            .map(WasmBuildBatchOutcomeEntry::label)
+            .map(WasmBuildBatchEntry::label)
             .collect::<Vec<_>>(),
         ["feature-a", "feature-b"]
     );
     assert!(
         batch
             .outcomes()
-            .all(|entry| matches!(entry.outcome(), WasmBuildOutcome::Built(_)))
+            .all(|entry| matches!(entry.outcome().unwrap(), WasmBuildOutcome::Built(_)))
     );
     assert!(wasm_path(&target, "feature_a", "debug").is_file());
     assert!(wasm_path(&target, "feature_b", "debug").is_file());
-    assert!(
-        batch
-            .outcomes()
-            .all(|entry| entry.outcome().record().exact_cache_path().is_dir())
-    );
+    assert!(batch.outcomes().all(|entry| {
+        entry
+            .outcome()
+            .unwrap()
+            .record()
+            .exact_cache_path()
+            .is_dir()
+    }));
     let first_exact_cache = batch
         .outcomes()
         .next()
         .expect("first batch outcome")
         .outcome()
+        .unwrap()
         .record()
         .exact_cache_path()
         .to_owned();
@@ -541,7 +545,11 @@ fn prepared_wasm_inputs_serve_concurrent_warm_readers() {
         )
     });
     for report in [&first_report, &second_report] {
-        assert!(report.outcomes().all(|entry| entry.outcome().is_reused()));
+        assert!(
+            report
+                .outcomes()
+                .all(|entry| entry.outcome().unwrap().is_reused())
+        );
         assert_prepared_batch_metrics(report.metrics());
     }
     assert_eq!(snapshot.metrics().reader_reuses(), 2);
@@ -657,7 +665,11 @@ fn assert_reused_batch_with_failure(
         ],
     );
     assert_eq!(report.outcomes().count(), 2);
-    assert!(report.outcomes().all(|entry| entry.outcome().is_reused()));
+    assert!(
+        report
+            .outcomes()
+            .all(|entry| entry.outcome().unwrap().is_reused())
+    );
     assert_eq!(
         report
             .failures()
@@ -1135,14 +1147,16 @@ fn source_changes_during_shared_incremental_build_reject_exact_publication() {
         .expect("changed source must fail the leased entry");
 
     assert!(matches!(
-        failure.error(),
+        failure.error().unwrap(),
         WasmBuildError::InputsChangedDuringAcquisition { .. }
     ));
-    assert_eq!(failure.phase(), WasmBuildFailurePhase::ContentHashing);
-    assert!(failure.timings().input_resolution().content_hashing() > Duration::ZERO);
-    assert!(failure.timings().cargo_build().is_some());
-    assert!(failure.timings().artifact_publication().is_some());
-    assert!(failure.timings().cleanup().is_some());
+    let details = failure.failure_details().unwrap();
+    assert_eq!(details.phase(), WasmBuildFailurePhase::ContentHashing);
+    let timings = details.timings();
+    assert!(timings.input_resolution().content_hashing() > Duration::ZERO);
+    assert!(timings.cargo_build().is_some());
+    assert!(timings.artifact_publication().is_some());
+    assert!(timings.cleanup().is_some());
     assert!(invalidated);
     assert!(matches!(
         next,
@@ -1240,10 +1254,13 @@ fn source_race_invalidates_every_prepared_snapshot_reader() {
         .next()
         .expect("changed source must fail the prepared reader");
     assert!(matches!(
-        failure.error(),
+        failure.error().unwrap(),
         WasmBuildError::InputsChangedDuringAcquisition { .. }
     ));
-    assert_eq!(failure.phase(), WasmBuildFailurePhase::ContentHashing);
+    assert_eq!(
+        failure.failure_details().unwrap().phase(),
+        WasmBuildFailurePhase::ContentHashing
+    );
     assert!(snapshot.metrics().is_invalidated());
     assert!(matches!(
         snapshot.build_batch(&specs, WasmBuildBatchConfig::new()),

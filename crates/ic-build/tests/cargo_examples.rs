@@ -388,13 +388,16 @@ fn prepared_metadata_sharing_preserves_distinct_example_selections() {
     assert!(cold.is_success());
     let identities: Vec<_> = cold
         .outcomes()
-        .map(|entry| entry.outcome().record().fingerprint())
+        .map(|entry| entry.outcome().unwrap().record().fingerprint())
         .collect();
     assert_ne!(identities[0], identities[1]);
     let warm = snapshot
         .build_batch(&recipes, WasmBuildBatchConfig::new())
         .unwrap();
-    assert!(warm.outcomes().all(|entry| entry.outcome().is_reused()));
+    assert!(
+        warm.outcomes()
+            .all(|entry| entry.outcome().unwrap().is_reused())
+    );
     let unprepared = [LabeledWasmBuildSpec::new(
         "unprepared",
         recipes[0].spec().clone().with_example("missing"),

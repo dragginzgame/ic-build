@@ -1,9 +1,10 @@
 use super::*;
+use crate::cargo::packages::ExternalLockError;
 use crate::fs_fixture::unique_temp_directory;
 use ic_host_process::tool::{ExecutionFailure, OutputLimit};
 use std::{process::Stdio, time::Duration};
 
-fn limits() -> PackageQualificationLimits {
+const fn limits() -> PackageQualificationLimits {
     PackageQualificationLimits {
         process: OutputLimits {
             stdout: OutputLimit::Terminate(4096),

@@ -104,6 +104,7 @@ retained-cache contracts.
 ## Native executables
 
 IC Build 0.10 and newer provide `cargo::native::build_native_executable` on Unix.
+The example below uses the pending 0.13 caller-selected process policy.
 It builds an explicit package's binary or example and returns Cargo's reported
 executable and target root, without reconstructing paths for custom profiles or
 target directories.
@@ -114,6 +115,7 @@ path overrides are refused. Compiler diagnostics stream without a default deadli
 
 ```rust,no_run
 use ic_build::cargo::native::{NativeExecutableSpec, build_native_executable};
+use ic_host_process::child::OwnedChild;
 use std::process::Command;
 
 let spec = NativeExecutableSpec {
@@ -127,13 +129,14 @@ let built = build_native_executable(&spec, || {
     let mut cargo = Command::new("cargo");
     cargo.current_dir("/checkout");
     cargo
-}, std::io::stderr(), || Ok(()))?;
+}, std::io::stderr(), || Ok(()), OwnedChild::spawn_direct, || false)?;
 # Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
 ```
 
-Admission runs before each dispatch; commands already running complete through
-Host's direct-child owner. Source/configuration/tool exclusion, in-flight signal
-policy and artifact lifetime stay with the caller. This result does not establish
+Admission runs before each dispatch. The caller selects child/group custody and
+cleanup with the spawning callback; the interruption callback is polled during
+metadata and compilation. Signal handlers, source/configuration/tool exclusion
+and artifact lifetime stay with the caller. This result does not establish
 immutable artifact custody or release admission.
 
 ## Development

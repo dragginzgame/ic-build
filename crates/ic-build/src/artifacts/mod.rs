@@ -82,22 +82,22 @@ pub use inputs::{
     InputEvidence, InputEvidenceError, InputEvidenceSpec, InputEvidenceValue,
     discover_cargo_depfile_inputs, parse_cargo_depfile, read_cargo_depfile_inputs,
 };
-pub use staging::{ArtifactStagingDirectory, CaptureRetentionError, CapturedArtifact};
+pub use staging::{
+    ArtifactStagingDirectory, CaptureRetentionError, CapturedArtifact, produce_and_retain_artifact,
+};
 pub use transaction::{
     ArtifactBuildTransaction, ArtifactCacheArtifact, ArtifactCacheError, ArtifactCacheOutcome,
     ArtifactCachePreparation, ArtifactCacheRecord, ArtifactCacheSpec, ArtifactCacheTimings,
     ArtifactOutputValidation, prepare_artifact_cache, prune_artifact_cache,
 };
 pub use transaction_batch::{
-    ArtifactCacheBatchContractError, ArtifactCacheBatchEntry, ArtifactCacheBatchFailedEntry,
-    ArtifactCacheBatchFailure, ArtifactCacheBatchFailurePhase, ArtifactCacheBatchFailureTimings,
-    ArtifactCacheBatchMetrics, ArtifactCacheBatchOutcomeEntry, ArtifactCacheBatchReport,
-    LabeledArtifactCacheSpec, build_artifact_caches_batch,
+    ArtifactCacheBatchContractError, ArtifactCacheBatchEntry, ArtifactCacheBatchFailure,
+    ArtifactCacheBatchFailurePhase, ArtifactCacheBatchFailureTimings, ArtifactCacheBatchMetrics,
+    ArtifactCacheBatchReport, LabeledArtifactCacheSpec, build_artifact_caches_batch,
 };
 pub use wasm_batch::{
     LabeledWasmBuildSpec, WasmBuildBatchConfig, WasmBuildBatchContractError, WasmBuildBatchEntry,
-    WasmBuildBatchFailure, WasmBuildBatchMaintenanceEntry, WasmBuildBatchMetrics,
-    WasmBuildBatchOutcomeEntry, WasmBuildBatchProgressEvent, WasmBuildBatchReport,
+    WasmBuildBatchMetrics, WasmBuildBatchProgressEvent, WasmBuildBatchReport,
     WasmBuildInputSnapshot, WasmBuildInputSnapshotMetrics, WasmBuildSession,
     WasmBuildSessionMetrics, build_wasm_canisters_cached_batch,
     build_wasm_canisters_cached_batch_with_config,

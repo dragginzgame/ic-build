@@ -3,6 +3,25 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.13.0]
+
+- **Breaking:** native executable builds require explicit child spawning and
+  cancellation callbacks. Pass `OwnedChild::spawn_direct` and `|| false` to retain
+  direct-child behavior; callers may select owned-group cleanup and in-flight
+  cancellation. Host execution/cleanup errors remain intact
+  ([PR #55](https://github.com/dragginzgame/ic-build/pull/55)).
+- Share exclusive producer/log admission and capture-before-cleanup custody for
+  caller-executed artifact transforms. Preserve partial outputs and diagnostics;
+  tools, arguments, output budgets and process policy remain caller-owned
+  ([PR #53](https://github.com/dragginzgame/ic-build/pull/53)).
+- **Breaking:** batch success/failure iterators return canonical entry references;
+  remove the separate success, failure and maintenance view types without aliases.
+  Read optional results and failure details from entries; shared-target maintenance
+  returns `(entry, outcome)` pairs. Labels, ordering, timing and retention remain intact
+  ([#54](https://github.com/dragginzgame/ic-build/issues/54)).
+- **Breaking:** make archive qualification Unix-only and remove its separate
+  non-Unix source walker. The pure external-lock subset verifier remains portable.
+
 ## [0.12.1] - 2026-10-17
 
 - Restore Shared Tooling snapshot verification by keeping the external-lock API

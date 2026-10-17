@@ -204,7 +204,8 @@ fn verify_rows(original: &ExternalRows, candidate: &ExternalRows) -> Result<(), 
     Ok(())
 }
 
-pub(super) fn admit_lock(entry: &[u8], payload: &[u8]) -> Result<(), super::Cause> {
+#[cfg(any(unix, test))]
+pub(super) fn admit_lock(entry: &[u8], payload: &[u8]) -> Result<(), Box<dyn Error>> {
     let entry = external_rows(entry, "original")?;
     let payload = external_rows(payload, "candidate")?;
     if payload.is_empty() {

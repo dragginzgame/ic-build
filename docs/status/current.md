@@ -1,5 +1,93 @@
 # Current handoff
 
+## Canic caller PR, producer contributions and issue acceptance
+
+[Auth PR #68](https://github.com/dragginzgame/ic-auth/pull/68), head `9309204`,
+adopts published Build 0.12.1 in private native tooling and deletes the duplicate
+yq/jq external-lock comparison. It starts at public `8ef596db`, excluding the
+normal checkout's unpublished batch. No-follow bounded reads retain an explicit
+8 MiB per-lock allowance; Auth retains package/feature/dependency and release
+policy. All 368 original lock identities/sources/checksums remain selected; ten
+packages are added for the tooling edge, while public library graphs exclude
+Build. Actual Rust 1.91 build, seven native tooling cases, package-consumer
+refusal fixtures and dependency boundaries pass, with strict all-target tooling
+Clippy, formatting, shell lint, dependency inheritance, links and snapshot checks.
+Fresh Linux/native macOS CI is running; archive/MSRV-matrix acceptance remains
+separate. Auth #66 stays open for review/integration and consumer acceptance.
+
+[Canic PR #593](https://github.com/dragginzgame/canic/pull/593), head `5181a159b`,
+is ready for review. Canonical-entry reporting now includes the minimal Testkit
+public-field correction needed to compile against pushed `53f1f22`. Actual Rust
+1.91 library checking and strict current library Clippy pass; the exact-source
+pending-Build projection harness retains its ordering/phase/timing coverage.
+Manifests and lockfile are unchanged, and the normal unpublished integration
+batch remains excluded. Fresh hosted CI is running; PocketIC/native Wasm and
+published Build 0.13 consumer adoption remain separate.
+
+Build [PR #53](https://github.com/dragginzgame/ic-build/pull/53) (`5cd31f7d`) and
+[PR #55](https://github.com/dragginzgame/ic-build/pull/55) (`6ead7812`) are reconciled
+locally into pending 0.13. Producer/log admission now retains successful output
+before producer cleanup, leaving tools, callbacks and failure recovery local.
+Native Cargo execution requires explicit child spawning and cancellation during
+both metadata and compilation; the README caller migrates with that API cut.
+Actual Rust 1.91 passes 18 staging cases, five native units and the real Cargo
+executable integration. Strict all-target Clippy, MSRV all-target compilation,
+warning-denied floor rustdoc, formatting, links and snapshot checks pass.
+No PR merge, root commit, own version change or publication has occurred.
+
+[Host PR #173](https://github.com/dragginzgame/ic-host-tooling/pull/173),
+`700b40b`, [Host PR #174](https://github.com/dragginzgame/ic-host-tooling/pull/174),
+`74ef1db`, and [Host PR #176](https://github.com/dragginzgame/ic-host-tooling/pull/176),
+`2b1eea8`, now pass Linux, both native macOS architectures and actual MSRV.
+PR #176 targets integration PR #172's HTTP fixture race. All remain open;
+review/integration/publication still gate Build's filesystem/lock/framing caller
+deletions. Build #42, #47 and #54 record the source-bound hosted evidence.
+
+Build #25 is closed as producer-complete: registry 0.12.1's VCS receipt names
+`1836512`, archive SHA-256 agrees with the selected checksum, and exact release
+[CI](https://github.com/dragginzgame/ic-build/actions/runs/39013061639) passes Linux,
+both native macOS hosts and lint/security. Blob #69 and Auth #66 retain consumer
+acceptance; #54 and #47 retain pending cuts and Host publication/adoption.
+Task before-images, source identities and logs: `/tmp/ic-build-next-20261017/`
+and `/tmp/ic-build-canic-followup-20261017/`. Only this handoff changed in normal
+Build during the consumer follow-up; incoming source, root index/refs, versions
+and selected registry graph remain unchanged.
+
+## Batch views, Unix archive admission and upstream lock guard — pending 0.13
+
+Over released `1836512`, batch success/failure iterators now borrow their stored
+entries, while integrated shared-target maintenance returns `(entry, outcome)`
+pairs. The five separate result-view types have no compatibility aliases.
+Labels, order, collect-all failures, partial phase timings and retained records
+stay intact; pointer-identity assertions cover canonical iterator borrowing.
+Tests and API-guide examples migrate together. Archive qualification now lives
+behind one Unix module gate with Host's descriptor-based source traversal;
+the distinct non-Unix recursive walker is removed. The pure external-lock
+subset verifier and its structural admission tests remain platform-independent.
+
+On actual Rust 1.91/Linux, 29 selected batch/package units and 28 retained-handoff,
+Cargo-example, archive and Wasm integration parents pass, including explicit
+process workers. Strict all-target Clippy, MSRV all-target compilation,
+warning-denied floor rustdoc, formatting, links and snapshot verification pass.
+Synthetic Wasm producers qualify orchestration, not native Wasm compilation.
+
+[Host PR #174](https://github.com/dragginzgame/ic-host-tooling/pull/174), head
+`74ef1db`, extracts the existing explicit-unlock guard from pushed `2f3976d`.
+Eight descriptor-lock cases, all-target checking and warning-denied rustdoc
+pass on actual Rust 1.88/Linux, with strict current Clippy, formatting and links.
+The frozen Build caller deletion passes ten cache-filesystem units, six retained-
+handoff/cache-process integration parents and explicit workers on Rust 1.91,
+plus strict all-target Clippy. Only three coherent Host source identities change;
+all unrelated lock identities/checksums remain fixed. Build retains its existing
+guard and registry graph until reviewed Host publication permits direct adoption.
+[Build #54](https://github.com/dragginzgame/ic-build/issues/54) retains that
+publication boundary and the tested caller patch, SHA-256
+`6e63ca055a7987287bbdd8b8e63363e4ba3be96bd23caa36a6679865a6ff43c4`.
+
+Own versions, root index/refs, the selected lock and normal sibling checkouts
+remain unchanged. Full release validation, native macOS and published consumer
+adoption remain separate. Sources and logs: `/tmp/ic-build-cuts-20261017/`.
+
 ## Shared Tooling snapshot repair
 
 The 2026-10-17 release validation rejected local API prose added to the

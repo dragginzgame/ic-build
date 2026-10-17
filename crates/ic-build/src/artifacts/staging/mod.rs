@@ -18,6 +18,9 @@ use ic_host_fs::{
     read::open_regular_file,
 };
 
+mod produce;
+pub use produce::produce_and_retain_artifact;
+
 const STAGE_ATTEMPTS: usize = 64;
 static STAGE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 

@@ -1,6 +1,7 @@
 # Artifact and Wasm build APIs
 
-Examples use the published 0.12 API. When upgrading from before 0.9, remove the
+Examples target the pending 0.13 API; published 0.12 batch iterators use separate
+result views. When upgrading from before 0.9, remove the
 fourth argument from `WasmBuildSpec::new`; keep Cargo profile arguments in
 `with_cargo_profile_args`. Align direct Host dependencies with the 0.24 family
 when passing Host values through Build's public APIs.
@@ -176,6 +177,15 @@ do not invoke Cargo, create another artifact cache or manage maintenance.
 
 ## Temporary staging and captured outputs
 
+Pending 0.13 adds `artifacts::produce_and_retain_artifact` for a caller-executed
+transform with explicit producer, log and retained-destination paths and a byte
+allowance. Build creates producer/log exclusively, passes the owned log to the
+callback, then captures/retains successful output before removing the producer.
+Failed statuses, callback errors/panics and capture/retention errors preserve
+existing evidence. The log always remains. Callers retain tool/process policy,
+physical path distinctness, parent custody and publication; the helper starts no
+process, selects no deadline and removes no unrelated artifact.
+
 `ArtifactStagingDirectory::new(parent)` allocates one owned child beneath an
 existing caller-selected parent. Callers choose candidate filenames and perform
 their recipe and qualification there before publishing any product files.
@@ -276,6 +286,9 @@ empty. Duplicate external identities refuse in either document. Extra valid
 original selections and an empty candidate package array are allowed. Non-table
 records and malformed identity/checksum fields refuse with typed role/index
 evidence; UTF-8 and TOML failures retain their original error sources.
+
+The archive qualification workflow is available only on Unix hosts, using Host's
+descriptor-based source traversal. The in-memory subset verifier has no Unix gate.
 
 Unsourced tables are outside this check. Consumers retain exact local package
 names, versions, paths, dependency edges, forbidden-feature policy, input custody
@@ -709,14 +722,21 @@ for failure in batch.failures() {
         "build {} ({}) failed in {:?} after {:?}: {}",
         failure.label(),
         failure.index(),
-        failure.phase(),
+        failure.failure_details().unwrap().phase(),
         failure.entry_elapsed(),
-        failure.error(),
+        failure.error().unwrap(),
     );
-    eprintln!("partial timings: {:?}", failure.timings());
+    eprintln!("partial timings: {:?}", failure.failure_details().unwrap().timings());
 }
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
+
+Starting with 0.13, `outcomes()` and `failures()` borrow canonical report entries
+instead of constructing separate success/failure view types. Successful entries
+have `outcome().is_some()`; failed entries retain `error()` and `failure_details()`
+(or `failure()` for generic artifact batches). Access labels, indices and wall
+times on the entry. Shared-target maintenance yields `(entry, outcome)` pairs.
+The former view types are removed without compatibility aliases.
 
 The batch is sequential and collect-all: every independent failure is returned
 in one report, but entries are not run simultaneously. Every
@@ -870,8 +890,8 @@ let batch = build_wasm_canisters_cached_batch_with_config(
     &specs,
     WasmBuildBatchConfig::new().with_shared_incremental_target_maintenance(maintenance),
 )?;
-for entry in batch.shared_incremental_maintenance_outcomes() {
-    eprintln!("build {} ({}): {}", entry.label(), entry.index(), entry.outcome());
+for (entry, outcome) in batch.shared_incremental_maintenance_outcomes() {
+    eprintln!("build {} ({}): {}", entry.label(), entry.index(), outcome);
 }
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```

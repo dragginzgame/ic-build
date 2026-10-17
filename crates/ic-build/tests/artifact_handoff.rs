@@ -302,7 +302,7 @@ fn batches_retain_distinct_successes_through_later_failure() {
     assert_eq!(report.failures().count(), 1, "{report:?}");
     let records: Vec<_> = report
         .outcomes()
-        .map(|entry| entry.outcome().record().clone())
+        .map(|entry| entry.outcome().unwrap().record().clone())
         .collect();
     drop(report);
     for (record, expected) in records.iter().zip([b"A", b"B"]) {
@@ -339,8 +339,8 @@ fn batches_retain_distinct_successes_through_later_failure() {
         let retained: Vec<_> = report
             .outcomes()
             .map(|entry| {
-                assert_eq!(entry.outcome().is_reused(), warm);
-                entry.outcome().record().clone()
+                assert_eq!(entry.outcome().unwrap().is_reused(), warm);
+                entry.outcome().unwrap().record().clone()
             })
             .collect();
         drop(report);

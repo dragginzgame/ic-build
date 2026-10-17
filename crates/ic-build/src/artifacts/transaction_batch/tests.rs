@@ -1,8 +1,8 @@
 use std::{cell::Cell, fs};
 
 use super::{
-    ArtifactCacheBatchContractError, ArtifactCacheBatchFailure, ArtifactCacheBatchFailurePhase,
-    ArtifactCacheBatchOutcomeEntry, LabeledArtifactCacheSpec, build_artifact_caches_batch,
+    ArtifactCacheBatchContractError, ArtifactCacheBatchEntry, ArtifactCacheBatchFailure,
+    ArtifactCacheBatchFailurePhase, LabeledArtifactCacheSpec, build_artifact_caches_batch,
 };
 use crate::artifacts::{
     ArtifactCacheOutcome, ArtifactCachePreparation, ArtifactCacheSpec, prepare_artifact_cache,
@@ -50,7 +50,7 @@ fn labeled_transactions_build_then_reuse_in_order() {
     assert_eq!(built.entries()[1].label(), "second");
     assert_eq!(built_labels, ["first", "second"]);
     assert!(built.outcomes().all(|entry| {
-        matches!(entry.outcome(), ArtifactCacheOutcome::Built(_))
+        matches!(entry.outcome().unwrap(), ArtifactCacheOutcome::Built(_))
             && entry.entry_elapsed() <= built.total()
     }));
     let built_metrics = built.metrics();
@@ -66,7 +66,11 @@ fn labeled_transactions_build_then_reuse_in_order() {
     })
     .expect("valid reused batch");
     assert!(reused.is_success());
-    assert!(reused.outcomes().all(|entry| entry.outcome().is_reused()));
+    assert!(
+        reused
+            .outcomes()
+            .all(|entry| entry.outcome().unwrap().is_reused())
+    );
     let reused_metrics = reused.metrics();
     assert_eq!(reused_metrics.succeeded(), 2);
     assert_eq!(reused_metrics.failed(), 0);
@@ -106,25 +110,34 @@ fn callback_failure_retains_label_timings_and_later_transaction() {
     assert_eq!(
         report
             .outcomes()
-            .map(ArtifactCacheBatchOutcomeEntry::label)
+            .map(ArtifactCacheBatchEntry::label)
             .collect::<Vec<_>>(),
         ["first", "third"]
     );
+    for entry in report.outcomes().chain(report.failures()) {
+        assert!(std::ptr::eq(
+            entry,
+            &raw const report.entries()[entry.index()]
+        ));
+    }
     let failures = report.failures().collect::<Vec<_>>();
     assert_eq!(failures.len(), 1);
     let failure = &failures[0];
     assert_eq!(failure.index(), 1);
     assert_eq!(failure.label(), "second");
-    assert_eq!(failure.entry_elapsed(), failure.timings().total());
     assert_eq!(
-        failure.failure().phase(),
+        failure.entry_elapsed(),
+        failure.failure().unwrap().timings().total()
+    );
+    assert_eq!(
+        failure.failure().unwrap().phase(),
         ArtifactCacheBatchFailurePhase::Callback
     );
-    assert!(failure.timings().callback().is_some());
-    assert!(failure.timings().cleanup().is_some());
-    assert!(failure.timings().commit().is_none());
+    assert!(failure.failure().unwrap().timings().callback().is_some());
+    assert!(failure.failure().unwrap().timings().cleanup().is_some());
+    assert!(failure.failure().unwrap().timings().commit().is_none());
     assert!(matches!(
-        failure.failure(),
+        failure.failure().unwrap(),
         ArtifactCacheBatchFailure::Build {
             cleanup_error: None,
             ..
@@ -179,7 +192,7 @@ fn callback_and_abort_failures_retain_both_causes_and_continue() {
         source,
         cleanup_error: Some(cleanup),
         timings,
-    } = failed.failure()
+    } = failed.failure().unwrap()
     else {
         panic!("callback failure must retain the separate abort error");
     };
@@ -229,16 +242,19 @@ fn preparation_failure_is_labeled_timed_and_does_not_stop_later_entries() {
     let failure = &failures[0];
     assert_eq!(failure.index(), 1);
     assert_eq!(failure.label(), "invalid");
-    assert_eq!(failure.entry_elapsed(), failure.timings().total());
     assert_eq!(
-        failure.failure().phase(),
+        failure.entry_elapsed(),
+        failure.failure().unwrap().timings().total()
+    );
+    assert_eq!(
+        failure.failure().unwrap().phase(),
         ArtifactCacheBatchFailurePhase::Preparation
     );
-    assert!(failure.timings().callback().is_none());
-    assert!(failure.timings().cleanup().is_none());
-    assert!(failure.timings().commit().is_none());
+    assert!(failure.failure().unwrap().timings().callback().is_none());
+    assert!(failure.failure().unwrap().timings().cleanup().is_none());
+    assert!(failure.failure().unwrap().timings().commit().is_none());
     assert!(matches!(
-        failure.failure(),
+        failure.failure().unwrap(),
         ArtifactCacheBatchFailure::Cache { .. }
     ));
     assert_eq!(fs::read(root.join("third.out")).unwrap(), b"output-third");
@@ -274,15 +290,18 @@ fn commit_failure_is_labeled_timed_and_does_not_stop_later_entries() {
     let failure = &failures[0];
     assert_eq!(failure.label(), "second");
     assert_eq!(
-        failure.failure().phase(),
+        failure.failure().unwrap().phase(),
         ArtifactCacheBatchFailurePhase::Commit
     );
-    assert_eq!(failure.entry_elapsed(), failure.timings().total());
-    assert!(failure.timings().callback().is_some());
-    assert!(failure.timings().cleanup().is_none());
-    assert!(failure.timings().commit().is_some());
+    assert_eq!(
+        failure.entry_elapsed(),
+        failure.failure().unwrap().timings().total()
+    );
+    assert!(failure.failure().unwrap().timings().callback().is_some());
+    assert!(failure.failure().unwrap().timings().cleanup().is_none());
+    assert!(failure.failure().unwrap().timings().commit().is_some());
     assert!(matches!(
-        failure.failure(),
+        failure.failure().unwrap(),
         ArtifactCacheBatchFailure::Cache { .. }
     ));
     assert!(!root.join("second.out").exists());

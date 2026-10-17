@@ -166,7 +166,9 @@ fn invalid_selection_refuses_before_the_command_factory() {
                 &invalid,
                 || panic!("invalid selection has no command effects"),
                 Vec::new(),
-                || Ok(())
+                || Ok(()),
+                OwnedChild::spawn_direct,
+                || false,
             )
             .is_err()
         );
@@ -194,6 +196,8 @@ fn invalid_selection_refuses_before_the_command_factory() {
                 || panic!("recipe overrides have no command effects"),
                 Vec::new(),
                 || Ok(()),
+                OwnedChild::spawn_direct,
+                || false,
             )
             .is_err()
         );
@@ -214,4 +218,73 @@ fn message(
         executable,
         diagnostics,
     )
+}
+
+#[cfg(unix)]
+#[test]
+fn caller_spawn_and_cancellation_cover_metadata_and_build() {
+    use ic_host_process::{
+        child::CleanupPolicy,
+        tool::{ExecutionFailure, ToolError},
+    };
+    use std::{
+        cell::Cell,
+        fs,
+        os::unix::process::ExitStatusExt as _,
+        time::{Duration, Instant},
+    };
+
+    let root = crate::fs_fixture::unique_temp_directory("native-cancellation");
+    let metadata_path = root.join("metadata.json");
+    fs::write(&metadata_path, serde_json::to_vec(&metadata()).unwrap()).unwrap();
+    for phase in ["metadata", "build"] {
+        let ready = root.join(phase);
+        let spawned = Cell::new(0);
+        let started = Instant::now();
+        let error = build_native_executable(
+            &spec(),
+            || {
+                let mut command = Command::new("/bin/sh");
+                command
+                    .args([
+                        "-c",
+                        r#"
+if [ "$1" = "$CANCEL_PHASE" ]; then
+    printf armed > "$READY"
+    exec sleep 30
+fi
+cat "$METADATA"
+"#,
+                        "cargo-fixture",
+                    ])
+                    .env("CANCEL_PHASE", phase)
+                    .env("READY", &ready)
+                    .env("METADATA", &metadata_path)
+                    .stderr(Stdio::piped());
+                command
+            },
+            Vec::new(),
+            || Ok(()),
+            |command| {
+                spawned.set(spawned.get() + 1);
+                OwnedChild::spawn(command, CleanupPolicy::KillAndWait)
+            },
+            || ready.is_file() || started.elapsed() > Duration::from_secs(20),
+        )
+        .unwrap_err();
+        assert_eq!(fs::read(&ready).unwrap(), b"armed");
+        assert_eq!(spawned.get(), if phase == "metadata" { 1 } else { 2 });
+        let execution = error
+            .downcast_ref::<ToolError>()
+            .unwrap()
+            .execution_error()
+            .unwrap();
+        assert!(matches!(execution.failure, ExecutionFailure::Cancelled));
+        assert!(execution.cleanup.is_none());
+        assert_eq!(
+            execution.evidence.status.unwrap().signal(),
+            Some(libc::SIGKILL)
+        );
+    }
+    fs::remove_dir_all(root).unwrap();
 }
