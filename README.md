@@ -242,3 +242,7 @@ owning [GitHub repository](https://github.com/dragginzgame/ic-build) remain the
 sole follow-up tracker.
 Changes in Canic, Testkit, IcyDB or Shared Tooling require authorization for that
 repository. Consumer migrations and cleanup require their own scoped authorization.
+
+The read-only [Cargo release candidate editor](docs/cargo-release-candidates.md)
+provides `ic-build-release-metadata` and pure manifest/lock renderers. Consumers
+prepare the executable explicitly and retain release policy and recovery.

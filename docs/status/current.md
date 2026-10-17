@@ -1,5 +1,17 @@
 # Current handoff
 
+## Cargo release candidate ownership — pending 0.13.1
+
+The pure `cargo::release_metadata` renderers and explicit
+`ic-build-release-metadata` command replace Shared Tooling's hand-written TOML
+literal discovery. The command uses caller-selected byte bounds and Host
+no-follow descriptor reads, validates complete JSON context and preserves live
+versus saved identity semantics. Independent semantic lock projection now admits
+explicit unqualified local-reference updates; its original version-only entry
+point remains strict. Shared Tooling still owns source checks, release policy,
+backups, graph checks and rollback. Producer publication gates caller adoption;
+no local binary or sibling checkout becomes a runtime fallback.
+
 ## Host 0.25 admission caller repair — pending 0.13
 
 The incoming `2f4783a` selects registry Host 0.25.0 but retains five old tool

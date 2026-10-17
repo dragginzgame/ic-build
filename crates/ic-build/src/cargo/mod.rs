@@ -16,6 +16,7 @@ pub(crate) mod messages;
 pub mod native;
 pub mod observation;
 pub mod packages;
+pub mod release_metadata;
 pub(crate) mod selection;
 
 use crate::batch::{BatchLabelError, validate_labels};
