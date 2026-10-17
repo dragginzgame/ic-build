@@ -29,8 +29,14 @@ fn typed_features_keep_build_and_metadata_resolution_in_step() {
         [vec![OsString::from("--release")], metadata].concat()
     );
     assert_eq!(selected.profile_target_dir(), Ok("release"));
-    assert!(CargoSelection::default().metadata_arguments().is_empty());
-    assert!(CargoSelection::default().build_arguments().is_empty());
+    assert_eq!(
+        CargoSelection::default().metadata_arguments(),
+        [] as [OsString; 0]
+    );
+    assert_eq!(
+        CargoSelection::default().build_arguments(),
+        [] as [OsString; 0]
+    );
 }
 
 #[test]

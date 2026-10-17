@@ -1,5 +1,11 @@
 # Current handoff
 
+Development Clippy 1.99 rejected two default-selection emptiness assertions
+with `assert_is_empty`; they now compare explicit empty `OsString` arrays.
+`make clippy` and both selection tests pass on development Rust 1.99; both tests
+also pass on Rust 1.91. No release was retried. Focused logs are retained under
+`/tmp/ic-build-empty-assertions-20261017/`.
+
 ## Canonical feature selection, label errors and phases — pending 0.14
 
 The current working tree over `ba1cff6`, including the incoming 0.14 cuts, now
