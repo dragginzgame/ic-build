@@ -7,6 +7,8 @@
 #[cfg(test)]
 mod tests;
 
+#[cfg(unix)]
+pub mod diagnostics;
 pub mod environment;
 pub mod flags;
 pub mod lock_projection;

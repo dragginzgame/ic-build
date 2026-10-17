@@ -5,6 +5,11 @@ archive also includes the extracted artifact engine and Cargo grouping API.
 
 ## [0.14.1]
 
+- Share host library artifact selection and compile-diagnostic execution with a
+  required passing control, bounded output and complete literal expectations.
+  Consumers retain compiler recipes, cases, source custody and budgets.
+  [#66](https://github.com/dragginzgame/ic-build/issues/66).
+
 - Export retained Wasm builds with bounded streaming capture and build/source
   provenance. Refuse changed inputs and preserve prior evidence on admission
   failure; consumers retain source custody, recipes and report acceptance.
