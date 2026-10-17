@@ -3,6 +3,14 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.15.1]
+
+- Own native Wasm optimizer qualification through retained artifact transactions.
+  Exercise `-O3`, `-Os` and `-Oz`, repaired cache reuse and the transferred IC-style
+  execution oracle on Linux and both native macOS hosts. Tool admission remains
+  with the caller; package APIs and versions are unchanged
+  ([#61 — Own native Wasm optimizer semantic qualification](https://github.com/dragginzgame/ic-build/issues/61)).
+
 ## [0.15.0] - 2026-10-17
 
 - **Breaking:** align exposed Host types with the incoming registry Host 0.26
