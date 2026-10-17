@@ -1,5 +1,15 @@
 # Current handoff
 
+## Canic declaration discovery extraction
+
+The isolated contribution extracts Canic's nearest explicit-workspace search to
+`cargo::discovery`; Cargo-driven membership discovery remains separate. Three
+focused discovery cases pass on actual Rust 1.91, and strict library/test Clippy
+passes. Native macOS and release validation remain separate. Canic's deletion
+adapter is prepared outside its production tree until publication; no consumer
+migration or package release is claimed. Evidence: `/tmp/canic-cleanup-four/`.
+The 0.16 draft matches the owner's already pending 0.16 source batch.
+
 ## Canonical hashes, typed inventories and Cargo arguments — pending 0.15
 
 The local source over `fbb732b7` now stores raw file facts directly as Host's
