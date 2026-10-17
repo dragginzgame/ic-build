@@ -1,5 +1,10 @@
 # Current handoff
 
+Compile-diagnostic extraction is stacked on retained-evidence PR #59. Two focused
+tests pass on Rust 1.99 and 1.91, including real compiler controls and bounded
+artifact evidence; strict Clippy passes. Linux only locally; native macOS remains
+with the configured PR matrix. Consumer recipes and runtime code are unchanged.
+
 ## Pending retained Wasm evidence export
 
 The isolated IC Wire contribution adds retained acquisition, freshness checks and
