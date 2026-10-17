@@ -1,11 +1,15 @@
 //! Qualification of exact coordinated Cargo archives in a fresh retained workspace.
+//! Pure bounded external-lock subset admission is also available independently.
 //!
 //! Consumers supply package/version selection, tools, source custody and budgets.
 //! This is local build evidence, never registry publication or release admission.
 use super::observation::schema::{Metadata, Package};
 use ic_host_artifacts::artifact::Sha256Digest;
 use ic_host_process::tool::{CompletedExecution, OutputLimits, ToolError, capture_command};
+mod external_lock;
 mod source_inventory;
+use external_lock::admit_lock;
+pub use external_lock::{ExternalLockError, verify_external_lock_subset};
 #[cfg(test)]
 use serde_json::{Value, json};
 use source_inventory::sources;
@@ -392,59 +396,6 @@ fn admit_graph(
     }
     if members.len() != packages.len() || selected.len() != members.len() {
         return Err("unexpected extracted workspace member".into());
-    }
-    Ok(())
-}
-
-fn external_rows(bytes: &[u8]) -> Result<BTreeMap<(String, String, String), String>, Cause> {
-    use super::lockfile::{external_package, required_string};
-    let lock: toml::Value = toml::from_str(std::str::from_utf8(bytes)?)?;
-    let mut rows = BTreeMap::new();
-    for package in lock
-        .get("package")
-        .and_then(toml::Value::as_array)
-        .ok_or("missing lock packages")?
-    {
-        // Unsourced entries are outside this subset policy, including unknown
-        // entries without a source. The fingerprint reader is stricter there.
-        if package.get("source").is_none() {
-            continue;
-        }
-        let table = external_package(package)?.ok_or("missing lock source")?;
-        let text = |key| required_string(table, key).map_err(|_| format!("missing lock {key}"));
-        let source = required_string(table, "source").map_err(|_| "invalid lock source")?;
-        let checksum = if source.starts_with("registry+") {
-            let checksum = text("checksum")?;
-            checksum
-                .parse::<Sha256Digest>()
-                .map_err(|_| "invalid package checksum")?;
-            checksum
-        } else {
-            ""
-        };
-        if rows
-            .insert(
-                (text("name")?.into(), text("version")?.into(), source.into()),
-                checksum.into(),
-            )
-            .is_some()
-        {
-            return Err("duplicate package selection".into());
-        }
-    }
-    Ok(rows)
-}
-fn admit_lock(entry: &[u8], payload: &[u8]) -> Result<(), Cause> {
-    let entry = external_rows(entry)?;
-    let payload = external_rows(payload)?;
-    if payload.is_empty() {
-        return Err("empty package external graph".into());
-    }
-    if payload
-        .iter()
-        .any(|(key, checksum)| entry.get(key) != Some(checksum))
-    {
-        return Err("packaging changed external selection".into());
     }
     Ok(())
 }

@@ -133,7 +133,14 @@ fn lock_allows_only_original_external_selections_and_checksums() {
     ] {
         let invalid = row.replace(&"a".repeat(64), &checksum);
         let error = admit_lock(invalid.as_bytes(), invalid.as_bytes()).unwrap_err();
-        assert_eq!(error.to_string(), "invalid package checksum");
+        assert!(matches!(
+            error.downcast_ref::<ExternalLockError>(),
+            Some(ExternalLockError::InvalidPackage {
+                input: "original",
+                index: 0,
+                reason: "invalid package checksum",
+            })
+        ));
     }
     assert!(admit_lock(row.as_bytes(), b"package = []").is_err());
     assert!(admit_lock(row.as_bytes(), b"version = 4").is_err());

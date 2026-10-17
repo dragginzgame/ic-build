@@ -3,6 +3,17 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.12.1]
+
+- Expose bounded, typed external-lock subset admission using the archive
+  qualifier's shared reader/comparison. Allow extra original packages and empty
+  subsets; retain archive qualification's separate nonempty-graph policy.
+  Reject malformed records, duplicate identities and changed optional checksums
+  ([#25](https://github.com/dragginzgame/ic-build/issues/25)).
+- Update consumer setup and ownership guidance for published Build 0.12 / Host
+  0.24; record release-bound producer acceptance separately from application
+  adoption and reconcile the superseded Candid extraction PR.
+
 ## [0.12.0] - 2026-10-16
 
 - **Breaking:** align exposed Host types with registry Host 0.24.0. Consumers

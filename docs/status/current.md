@@ -1,5 +1,123 @@
 # Current handoff
 
+## Logical directory-size producer delivery — Host PR #173
+
+The previously prepared filesystem extraction for
+[#42](https://github.com/dragginzgame/ic-build/issues/42) is now delivered as
+[Host PR #173](https://github.com/dragginzgame/ic-host-tooling/pull/173), head
+`374506e`, from pushed Host `2f3976d`. It excludes the normal Host checkout's
+unpublished changes. Host's read module gains metadata-only logical-size
+observation with the existing Build walker and two filesystem regressions;
+cache selection, pruning, resource admission and lifecycle stay with consumers.
+Directory entries contribute no metadata bytes, sparse files contribute logical
+lengths, final symlinks contribute their own lengths, totals saturate, and native
+I/O errors propagate. Namespace custody remains caller-owned.
+
+Both Host cases pass on actual Rust 1.88/Linux, with all-target/all-feature FS
+checking, strict current Clippy, warning-denied floor rustdoc, formatting and
+links. A frozen current Build rehearsal removes its walker and duplicate generic
+tests, switches callers directly to Host and passes 109 cache/pruning/transaction/
+Wasm-cache tests on actual Rust 1.91. Caller strict all-target Clippy and MSRV
+all-target checking pass. Only the three coherent Host source identities differ
+in that temporary graph; all other external selections/checksums remain intact.
+These tests are native filesystem/process evidence; synthetic Wasm producers do
+not establish native Wasm compiler or complete application qualification.
+
+Normal Build still uses its existing implementation and published dependencies.
+The apply-checked caller patch omits temporary overrides and requires reviewed
+Host publication plus its actual dependency minimum before activation. It is
+retained in #42 with SHA-256
+`2c767344c5be0610291a71bfeefe512e79c631ef7693932e57a69964da9032ba`.
+Required hosted/native macOS checks and maintainer integration remain separate.
+Root's pending lock-subset source, incoming graph, versions, index/refs and all
+normal sibling checkouts are preserved. Source snapshots, raw checks and graph
+deltas remain under `/tmp/ic-build-logical-size-20261017.Zpx7LU/`.
+
+## Shared external-lock subset admission — pending 0.12.1
+
+This batch extends the incoming documentation work over released `2598a41` and
+preserves the incoming libc 0.2.191 lock selection byte-for-byte. The pure
+`cargo::packages::verify_external_lock_subset` API exposes the existing archive
+engine's external-selection check with an explicit per-document byte bound and
+typed errors. Parser/comparison ownership is shared; archive qualification keeps
+its independent nonempty-external-graph refusal. The generic API accepts empty
+subsets and extra valid original selections. Both reject malformed records,
+duplicate identities and changed optional checksum fields, including Git rows;
+valid registry checksums retain their canonical lowercase SHA-256 admission.
+Unsourced identity, feature/dependency policy, source custody and release
+admission stay with consumers. No process, filesystem or network effects occur.
+
+On actual Rust 1.91/Linux, all 11 selected package units and the real Cargo archive
+qualification integration pass. Strict all-target/all-feature Clippy, actual
+MSRV all-target compilation, warning-denied MSRV rustdoc, formatting and links
+pass. The archive case qualifies native Cargo packaging and retained evidence,
+not an application release or synthetic Wasm compiler proof.
+
+Auth's existing native tooling command is rehearsed in a disposable snapshot
+of `18b1850` plus incoming source. Its script deletes the yq/jq lock comparison
+and delegates to Build while retaining Auth's metadata/library policy and explicit
+8 MiB file allowance. Actual Rust 1.91 tooling build, strict all-target tooling
+lint and package-consumer fixtures pass, including duplicate/malformed lock
+refusals. All original package identities/checksums remain selected; only the
+candidate Build source and missing dependencies are added. The normal Auth
+checkout is unchanged and has no unpublished import or source override.
+
+[Build #25](https://github.com/dragginzgame/ic-build/issues/25) retains producer
+publication and archive acceptance; [Auth #66](https://github.com/dragginzgame/ic-auth/issues/66)
+owns published caller adoption and carries the apply-checked source patch.
+Full release/native macOS gates and real registry adoption remain separate.
+Own versions, the Git index/refs and retained artifacts are unchanged. Before-
+images, the frozen producer/consumer, exact graph delta and logs remain under
+`/tmp/ic-build-lock-subset-20261017.gihOWp/`.
+
+## Released 0.12.0 acceptance and registry adoption — pending 0.12.1 docs
+
+Registry 0.12.0 is verified at source
+`2598a417a96834d3139751adf549126add666c4b`. The cached sparse-index checksum
+and archive SHA-256 agree on
+`37ce052cd95c403415a36fafbe33c3ea872fcef02a29a65b871bfd2effcde425`;
+archive VCS metadata and the remote annotated `v0.12.0` tag identify that source.
+Its exact [release CI](https://github.com/dragginzgame/ic-build/actions/runs/38947150972)
+passes Linux, native macOS 15 Intel/Apple Silicon and lint/security. Producer
+issues [#49](https://github.com/dragginzgame/ic-build/issues/49),
+[#50](https://github.com/dragginzgame/ic-build/issues/50) and
+[#51](https://github.com/dragginzgame/ic-build/issues/51) are closed with that
+receipt. [PR #52](https://github.com/dragginzgame/ic-build/pull/52) is closed as
+superseded without merging or deleting its historical branch. The prior pending
+entry below retains development evidence; its unpublished/native blockers are
+resolved by this exact release, separately from application acceptance.
+
+IcyDB [PR #369](https://github.com/dragginzgame/icydb/pull/369), head `bacd69be0`,
+adopts registry Build 0.12.0/Host 0.24.0 and moves the extraction import/removes
+the retired Tools feature. It starts at pushed `27035c5`, excluding the normal
+checkout's active Memory/schema work. All unrelated external package identities
+remain unchanged, including that base's Memory 0.44.0. Build-helper all-target
+checking, strict Clippy and the installed real-extractor artifact/publication
+control pass; formatting and diff checks pass. The PR joins existing 0.277 notes
+without changing own versions or adding source overrides. Hosted CI cannot fetch
+the existing private IC Wire pin before compilation, reproduced on unchanged
+main and the PR. The commit exists; runner authentication is tracked in
+[IcyDB #370](https://github.com/dragginzgame/icydb/issues/370). Required native
+acceptance and maintainer integration remain separate; no IC/PocketIC lifecycle ran.
+
+Canic's current local Memory fixes allow `canic-host --lib` compilation with
+registry Build 0.12.0/Host 0.24.0. This uses a frozen snapshot of local `93c69ada7`
+plus incoming edits, not pushed main `53f1f22`; no dependency substitutions or
+normal-checkout mutations are made. Strict Host library Clippy, all 16 focused
+declaration/cache tests and the explicitly selected installed real-extractor reuse
+test pass. The manifest/lock bytes remain unchanged. These cover the current
+cache/process integration, including failed/changed inputs, optional cache I/O,
+corruption, batching and cold/warm output parity. Canic still owns its direct
+extractor invocation; adopting Build's admitted-tool extraction API remains
+separate from these results. No installed release, full/native macOS or lifecycle
+acceptance is claimed. Build
+[#9](https://github.com/dragginzgame/ic-build/issues/9) retains consumer acceptance.
+
+README, the artifact guide and ownership design now describe the published
+0.12/Host 0.24 boundary. Own versions, this repository's index/refs and normal
+sibling checkouts remain unchanged. Evidence and frozen sources are retained at
+`/tmp/ic-build-next012.hjDv0F/`; root before-images are in its `before/` directory.
+
 ## Host 0.24 and native Candid extraction — pending 0.12.0
 
 This batch starts at released 0.11.1 `4fa4fc0`, preserving the incoming

@@ -24,7 +24,7 @@ preserved through a shared execution path.
 
 ## Implemented ownership
 
-Pending Build 0.12's Unix `artifacts::candid` moves native extraction
+Build 0.12's Unix `artifacts::candid` moves native extraction
 orchestration out of Host Tools, over Host hashing and admitted execution.
 Host 0.24 removes the former extraction owner without an alias. Tools retains
 Candid/IC interpretation; Text retains normalization. Consumers retain source
@@ -81,7 +81,7 @@ have a separate implementation with additional release-specific guarantees.
 | Hashing, bounded streams, gzip and raw Wasm structural facts | ic-host-artifacts |
 | Filesystem admission, durable writes and lock primitives | ic-host-fs |
 | Process execution, output capture, cancellation and cleanup | ic-host-process |
-| Native Candid extraction orchestration | IC Build (pending 0.12); consumers retain tool and source admission |
+| Native Candid extraction orchestration | IC Build; consumers retain tool and source admission |
 | Common IC artifact interpretation | ic-host-tools |
 | Common executable installation, storage and portable repository tooling | Shared Tooling |
 | Role selection, declaration/runtime build choices, generated infrastructure, release IDs and release manifests | Canic |

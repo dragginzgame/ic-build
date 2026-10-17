@@ -1,8 +1,8 @@
 # Artifact and Wasm build APIs
 
-Examples use the published 0.11 API. When upgrading from before 0.9, remove the
+Examples use the published 0.12 API. When upgrading from before 0.9, remove the
 fourth argument from `WasmBuildSpec::new`; keep Cargo profile arguments in
-`with_cargo_profile_args`. Align direct Host dependencies with the 0.23 family
+`with_cargo_profile_args`. Align direct Host dependencies with the 0.24 family
 when passing Host values through Build's public APIs.
 
 These generic APIs are extracted from IC Testkit. Recipes, budgets, tool
@@ -892,7 +892,7 @@ Stream identities, archives and Wasm inspection belong to `ic_host_artifacts`;
 pathname reads and durable publication belong to `ic_host_fs`; executable
 resolution, execution and Git provenance belong to `ic_host_process`; Candid
 service interpretation and response decoding belong to `ic_host_tools`.
-Bounded line normalization belongs to `ic_host_text`. Pending Build 0.12 owns
+Bounded line normalization belongs to `ic_host_text`. Build 0.12 owns
 native extraction through Unix-only `artifacts::candid::extract`: supply an
 admitted tool, absolute source path, execution context, source-byte allowance
 and output limits. It returns source/tool identities and complete raw successful
@@ -903,11 +903,9 @@ text/grammar separately; before/after digests cannot rule out transient writes.
 Host 0.24 has removed its extraction module/feature; adopt the new Build owner
 when upgrading that graph ([#51](https://github.com/dragginzgame/ic-build/issues/51)).
 Structural Wasm inspection does not replace PocketIC's runtime validation.
-IC Build 0.11 requires compatible IC Host 0.23 releases at the
-public dependency boundary; release 0.11.0 qualifies Host 0.23.1. Pending Build
-0.12 selects registry Host 0.24.0 and changes that public type boundary.
-Retained staging
-still uses checked native permission conversion on macOS. Align direct Host
+IC Build 0.12 requires compatible IC Host 0.24 releases at the
+public dependency boundary; release 0.12.0 selects Host 0.24.0.
+Retained staging still uses checked native permission conversion on macOS. Align direct Host
 dependencies when passing `OutputLimits`, `CleanupPolicy` or matching typed Host
 failures across the engine boundary. Different Host minor families have distinct Rust crate identities even
 when their fields match. The earlier IC Build 0.2.0 boundary also means an
