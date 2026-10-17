@@ -13,7 +13,7 @@ pub use workspace::workspace_root_for;
 /// Canonical Cargo metadata and build-message types, without consumer mirrors.
 pub use cargo_metadata as schema;
 
-use super::selection::CargoFeatureSelection;
+use super::selection::{CargoFeatureSelection, graph_arguments};
 use ic_host_process::tool::{CompletedExecution, OutputLimits, capture_command};
 use serde::Deserialize;
 use serde_json::Value;
@@ -154,13 +154,7 @@ fn configure(
     };
     command.current_dir(manifest.parent().unwrap_or_else(|| Path::new(".")));
     command.arg("--manifest-path").arg(manifest);
-    command.args(features.arguments());
-    if locked {
-        command.arg("--locked");
-    }
-    if offline {
-        command.arg("--offline");
-    }
+    command.args(graph_arguments(features, locked, offline));
     Ok(())
 }
 

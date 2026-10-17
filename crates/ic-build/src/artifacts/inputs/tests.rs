@@ -132,7 +132,11 @@ fn standalone_file_directory_absence_and_consumer_encoding_are_preserved() {
         panic!("file evidence");
     };
     assert_eq!(
-        sha256.to_hex(),
+        sha256,
+        ic_host_artifacts::artifact::Sha256Digest::compute(b"abc")
+    );
+    assert_eq!(
+        sha256.to_string(),
         "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
     );
     // The prior consumer uses a String-keyed map. Path ordering is different for
@@ -148,7 +152,7 @@ fn standalone_file_directory_absence_and_consumer_encoding_are_preserved() {
             let value = match value {
                 InputEvidenceValue::Missing => "absent".into(),
                 InputEvidenceValue::Directory => "directory".into(),
-                InputEvidenceValue::File { sha256 } => sha256.to_hex(),
+                InputEvidenceValue::File { sha256 } => sha256.to_string(),
             };
             (path.to_str().unwrap(), value)
         })

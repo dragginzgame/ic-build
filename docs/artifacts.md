@@ -155,7 +155,10 @@ custody must cover sources and parent directories through capture, work and
 validation; evidence does not provide a lock or release admission.
 
 `entries()` supplies per-path `Missing`, `Directory`, or raw SHA-256 `File` facts
-for consumer-owned records. `digest()` retains the existing consumer encoding:
+for consumer-owned records. The pending 0.15 API stores file hashes as Host's
+`ic_host_artifacts::artifact::Sha256Digest`; use `Display`/`to_string()` for lowercase
+hex text. `InputDigest` remains the derived inventory/cache identity.
+`digest()` retains the existing consumer encoding:
 identity followed by UTF-8 paths in lexical string order and their values, each
 field prefixed by its u64 big-endian byte length. Values are `absent`, `directory`,
 or lowercase file SHA-256. Capture preserves native paths; this particular digest

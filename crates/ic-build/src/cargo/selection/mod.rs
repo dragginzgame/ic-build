@@ -94,14 +94,7 @@ impl CargoSelection {
     }
 
     pub(crate) fn metadata_arguments(&self) -> Vec<OsString> {
-        let mut arguments = Vec::new();
-        for (enabled, flag) in [(self.locked, "--locked"), (self.offline, "--offline")] {
-            if enabled {
-                arguments.push(flag.into());
-            }
-        }
-        arguments.extend(self.features.arguments());
-        arguments
+        graph_arguments(&self.features, self.locked, self.offline)
     }
 
     pub(crate) fn build_arguments(&self) -> Vec<OsString> {
@@ -116,4 +109,20 @@ impl CargoSelection {
         arguments.extend(self.metadata_arguments());
         arguments
     }
+}
+
+/// Encode graph choices identically for observations and build recipes.
+pub(crate) fn graph_arguments(
+    features: &CargoFeatureSelection,
+    locked: bool,
+    offline: bool,
+) -> Vec<OsString> {
+    let mut arguments = Vec::new();
+    for (enabled, flag) in [(locked, "--locked"), (offline, "--offline")] {
+        if enabled {
+            arguments.push(flag.into());
+        }
+    }
+    arguments.extend(features.arguments());
+    arguments
 }

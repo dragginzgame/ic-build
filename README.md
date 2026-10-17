@@ -2,7 +2,7 @@
 
 IC Build provides common Cargo/Wasm builds and retained artifact caches, moved
 from IC Testkit, and feature-safe Cargo grouping from Canic.
-The [published 0.12 family is available on crates.io](https://crates.io/crates/ic-build/0.12.0).
+The [published 0.14 release is available on crates.io](https://crates.io/crates/ic-build/0.14.0).
 The owning
 [extraction issue](https://github.com/dragginzgame/ic-build/issues/1) tracks
 producer and consumer acceptance.
@@ -14,7 +14,7 @@ and build dependency trees match isolated resolution. Consumers own recipes,
 tools, output budgets, source custody, release identities and lifecycle.
 PocketIC stays in Testkit; complete-release admission stays in Canic.
 
-Build 0.12 moves native Candid extraction from Host Tools into Unix-only
+Build 0.12 moved native Candid extraction from Host Tools into Unix-only
 `artifacts::candid::extract`, over the registry Host 0.24 family. It retains raw
 bounded process evidence and source/tool identities; callers own tool admission,
 limits, environment, normalization, grammar and publication. Before/after hashes
@@ -28,7 +28,7 @@ owners, retained safety boundaries and extraction sequence. Read the
 [current handoff](docs/status/current.md) before implementation.
 The [artifact API guide](docs/artifacts.md) covers recipes, retained records,
 freshness, batching and explicit maintenance.
-Pending 0.12.1 exposes `cargo::packages::verify_external_lock_subset` for bounded
+Version 0.12.1 exposes `cargo::packages::verify_external_lock_subset` for bounded
 in-memory admission of already selected external package identities
 ([API guide](docs/artifacts.md#external-lock-selection-admission)). It shares
 archive qualification's reader/comparison without adopting its nonempty-graph
@@ -41,8 +41,8 @@ Tooling. IC Build must not depend on Canic, IcyDB, PocketIC or IC Testkit.
 
 ## Use
 
-The examples below target pending 0.14. Once published, add the registry
-dependency to your host-side package:
+The examples below use published 0.14. Add the registry dependency to your
+host-side package:
 
 ```toml
 [dependencies]
@@ -80,7 +80,7 @@ The engine owns `--message-format=json`; wrappers must report artifact records.
 Overflow refuses publication after Cargo completes while diagnostics keep flowing.
 This adds no elapsed-time deadline. Metadata-derived declared paths remain
 available for caller-owned external builds.
-Pending 0.14 replaces raw Cargo arguments with `cargo::selection::CargoSelection`
+Version 0.14 replaces raw Cargo arguments with `cargo::selection::CargoSelection`
 and `with_cargo_selection`. Set `profile`, the existing
 `cargo::selection::CargoFeatureSelection`, and explicit lock/network flags.
 The feature selection owns `all_features`, explicit feature names and default-feature
@@ -99,8 +99,8 @@ framing and source custody. Configuration contents are excluded from returned
 facts and failure diagnostics. Observation executes no Cargo commands and does
 not establish build or release validity.
 
-IC Build 0.12 uses the registry IC Host 0.24 family at the public grouping,
-probe, capture and Candid boundary; release 0.12.0 selects Host 0.24.0. Align direct
+IC Build 0.14 uses the registry IC Host 0.25 family at the public grouping,
+probe, capture and Candid boundary; release 0.14.0 selects Host 0.25.1. Align direct
 Host dependencies before passing `OutputLimits`, `CleanupPolicy` or typed Host
 failures across that boundary. Upgrading Build alone while retaining a different
 Host minor family leaves nominally incompatible Rust types.
@@ -108,7 +108,7 @@ The [deployable-Wasm LTO guidance](docs/artifacts.md#deployable-wasm-lto) record
 whole-canister measurements and shows how a common adapter can apply full LTO
 through the existing API, with complete-application qualification before adopting
 a shared release default.
-The [0.12.0 release CI](https://github.com/dragginzgame/ic-build/actions/runs/38947150972)
+The [0.14.0 release CI](https://github.com/dragginzgame/ic-build/actions/runs/39031820789)
 passes Linux and native macOS 15 Intel/Apple Silicon. These producer results do
 not establish consumer adoption or application qualification;
 [#1](https://github.com/dragginzgame/ic-build/issues/1) tracks remaining acceptance
@@ -118,7 +118,7 @@ retained-cache contracts.
 ## Native executables
 
 IC Build 0.10 and newer provide `cargo::native::build_native_executable` on Unix.
-The example below uses the pending 0.14 typed recipe and caller-selected process policy.
+The example below uses the 0.14 typed recipe and caller-selected process policy.
 It builds an explicit package's binary or example and returns Cargo's reported
 executable and target root, without reconstructing paths for custom profiles or
 target directories.
@@ -222,7 +222,7 @@ The full local delivery suite is `make ci` plus `make lint check-secrets` on
 Linux after explicit tool setup. [CI](.github/workflows/ci.yml) runs lint/security
 on Linux and the package gate on Linux x86-64, macOS 15 Apple Silicon and
 macOS 15 Intel. It explicitly prepares the minimum compiler from Cargo.toml.
-Failed native jobs use the shared evidence action. The exact 0.12.0 release source
+Failed native jobs use the shared evidence action. The exact 0.14.0 release source
 passes all three hosts and lint/security in the release CI linked above; unpublished
 changes still require their own checks.
 
@@ -232,7 +232,7 @@ with its selected lockfile; validation never changes package versions.
 
 `make cloc` reports workspace Rust LOC. The transferred tests execute real
 filesystem and process boundaries, Cargo metadata and Wasm compilation, alongside
-synthetic producer fixtures for failure and concurrency cases. The 0.12.0 release
+synthetic producer fixtures for failure and concurrency cases. The 0.14.0 release
 gate passes on Linux and both required native macOS hosts. The
 [release and publication guide](docs/publishing.md) describes the consumer
 adapters, exact tagged-source admission and retained recovery evidence.

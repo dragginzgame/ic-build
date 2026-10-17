@@ -161,6 +161,14 @@ fn source_inventory_detects_bytes_modes_links_and_resource_overflow() {
         patch_registry: false,
     }];
     let before = sources(&root, &specs, limits()).unwrap();
+    let expected = json!({"sample-1.0.0/source": {
+        "sha256": Sha256Digest::compute(b"original").to_string(),
+        "mode": fs::metadata(&file).unwrap().permissions().mode() & 0o777,
+    }});
+    assert_eq!(
+        serde_json::to_vec(&before).unwrap(),
+        serde_json::to_vec(&expected).unwrap()
+    );
     fs::write(&file, b"changed").unwrap();
     assert_ne!(before, sources(&root, &specs, limits()).unwrap());
     fs::write(&file, b"original").unwrap();

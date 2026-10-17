@@ -3,6 +3,22 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.15.0]
+
+- **Breaking:** align exposed Host types with the incoming registry Host 0.26
+  family. Align direct Host dependencies before passing Host values
+  ([PR #57 — Align exposed build types with Host 0.26](https://github.com/dragginzgame/ic-build/pull/57)).
+- **Breaking:** standalone input file facts expose Host's `Sha256Digest` directly.
+  Replace file-hash `to_hex()` calls with `to_string()`; keep `InputDigest` for
+  derived inventory and cache identities. Existing digest and cache bytes remain
+  unchanged; no alias or retained-data migration is added.
+- Keep archive source inventories typed until evidence serialization, preserving
+  their JSON fields and bytes while removing dynamic JSON from comparisons.
+- Render feature, lock and network choices through one Cargo graph encoder.
+  Observations use the same flag ordering as recipes; recipe fingerprint bytes
+  and the public observation specifications remain unchanged
+  ([#60 — Canonical hashes, typed inventories and Cargo arguments](https://github.com/dragginzgame/ic-build/issues/60)).
+
 ## [0.14.0] - 2026-10-17
 
 - **Breaking:** move `CargoFeatureSelection` to `cargo::selection` and keep

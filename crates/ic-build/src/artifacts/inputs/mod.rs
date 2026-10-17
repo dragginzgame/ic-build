@@ -52,7 +52,7 @@ pub enum InputEvidenceValue {
     /// Raw SHA-256 of a regular file, without a digest-domain prefix.
     File {
         /// Digest of the complete file bytes.
-        sha256: InputDigest,
+        sha256: Sha256Digest,
     },
 }
 
@@ -209,7 +209,7 @@ impl InputEvidence {
                         (
                             path,
                             InputEvidenceValue::File {
-                                sha256: InputDigest::from_bytes(*hash.sha256.as_bytes()),
+                                sha256: hash.sha256,
                             },
                         )
                     }
@@ -434,7 +434,7 @@ fn digest_values<K: AsRef<str>>(
             InputEvidenceValue::Missing => framed_field(&mut digest, b"absent"),
             InputEvidenceValue::Directory => framed_field(&mut digest, b"directory"),
             InputEvidenceValue::File { sha256 } => {
-                let encoded = Sha256Digest::from_bytes(*sha256.as_bytes()).hex_bytes();
+                let encoded = sha256.hex_bytes();
                 framed_field(&mut digest, &encoded);
             }
         }

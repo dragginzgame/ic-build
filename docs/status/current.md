@@ -1,5 +1,97 @@
 # Current handoff
 
+## Canonical hashes, typed inventories and Cargo arguments — pending 0.15
+
+The local source over `fbb732b7` now stores raw file facts directly as Host's
+`Sha256Digest`. `InputDigest` remains the framed inventory/cache identity;
+consumers render file hashes through `Display`/`to_string()`. No alias, digest
+format change, namespace reset or retained-data migration is introduced.
+
+Archive qualification retains typed digest/mode facts and serializes only when
+writing evidence. The serializer preserves the former JSON bytes, including
+dependency-selected field ordering; comparison retains no JSON objects or hex
+strings.
+Traversal, byte/depth/entry bounds, mode checks and no-follow admission stay intact.
+Observations and recipes now use one graph-argument encoder. Recipe argument/key
+bytes stay unchanged; observations use the same lock/network/feature flag order.
+Their public specifications and process/error policy remain unchanged.
+
+Actual Rust 1.91 passes all-target/all-feature compilation, 20 input cases,
+19 Cargo selection/observation/package cases, real archive qualification and
+18 native/Wasm integration parents. Strict development all-target/all-feature
+Clippy, warning-denied floor Rustdoc, formatting and documentation links pass.
+Existing encoding controls and a byte-for-byte source-inventory JSON comparison
+qualify the retained formats. During the caller rehearsal, a concurrent manifest
+and lock update selected Host 0.26.1. That incoming update is preserved, and all
+58 focused tests, compilation, strict Clippy and floor Rustdoc above pass again
+on that graph. Own package version stays 0.14.0; notes select pending 0.15.0
+for the public hash field and exposed Host identity changes.
+Full release gates and native macOS checks for this dirty source remain separate.
+
+[Build #60](https://github.com/dragginzgame/ic-build/issues/60) owns delivery.
+Canic's three raw file-hash callers are pushed in its existing isolated
+[PR #593](https://github.com/dragginzgame/canic/pull/593) at
+`83976fd140891f6df0051a07be45199a90c645e8`. Registry Build 0.14 / Host 0.25
+passes actual Rust 1.91 libraries and strict development all-target Clippy.
+A separate frozen candidate with this hash cut on Host 0.25 passes those checks
+and all 44 enabled reuse cases; its opt-in measurement remains ignored. Only
+Build's source/checksum lock row differed during rehearsal. The registry lock is
+restored byte-for-byte; no path override or unpublished requirement is committed.
+That rehearsal does not qualify Canic's future Host 0.26 adoption. Match the
+actual published Build/Host pair when updating its dependency graph.
+
+Normal sibling checkouts and incoming README/handoff work remain untouched.
+Before-images, frozen sources, graph receipts and focused logs are retained in
+`/tmp/ic-build-representation-cuts-20261017/`. Root staging, refs, own versions
+and release flow remain user-owned and unchanged.
+
+## Published 0.14 and Canic registry adoption — 2026-10-17
+
+Build 0.14.0 is published from `fbb732b7ef567b210d971d55af58b7cc1268cf59`.
+The cached registry index and archive agree on SHA-256
+`957e87919fc46aed675896ee99cd01d0e18baca91c459b52ee2211d38d670f09`;
+the archive VCS receipt names that source and `crates/ic-build`.
+The [matching release CI](https://github.com/dragginzgame/ic-build/actions/runs/39031820789)
+passes Linux x86-64, native macOS 15 Intel and Apple Silicon, and lint/security
+for that exact published source. These producer gates do not establish consumer
+adoption or complete-application qualification.
+
+[PR #53](https://github.com/dragginzgame/ic-build/pull/53) and
+[PR #55](https://github.com/dragginzgame/ic-build/pull/55) are closed as superseded:
+their complete producer additions are present in the published source.
+[Host PR #174](https://github.com/dragginzgame/ic-host-tooling/pull/174) remains
+open with all required checks passing. Its shared descriptor-lock extraction is
+still unpublished; Build retains its current guard and
+[#54](https://github.com/dragginzgame/ic-build/issues/54) remains open.
+
+Canic registry adoption is pushed in the isolated
+[PR #593](https://github.com/dragginzgame/canic/pull/593) at
+`dc55c01b690988e5e29862df28c8b72a01f5958e`, extending `5181a159` from public
+main `53f1f22`. Normal Canic's dirty unpublished batch is excluded.
+The published requirements are Build 0.14 and matching Host 0.25; no production
+path override, package-version bump or compatibility implementation is introduced.
+Canic's committed install-limit policy is reused from `56f8d65c1` at its canonical
+path, over Host's inspected facts. Complete-release authority stays with Canic.
+Actual Rust 1.91 production-library checks, strict development all-target Clippy,
+44 enabled reuse cases and affected Wasm/artifact/Root/feature and internal artifact
+cases pass. Rejection-only recapture preserves the primary typed failure. The PR
+records the existing opt-in ignored measurement, older-compiler test-source limit
+and failures owned by Canic PRs #569/#519. Consumer integration, required hosted
+checks and installed qualification remain separate from producer publication.
+Before-images and focused logs are retained in
+`/tmp/ic-build-canic-014-20261017/`.
+
+A concurrent [PR #57](https://github.com/dragginzgame/ic-build/pull/57), at
+`77be04d9236e8b671cb74e5728020a6d8443533c`, prepares the separate exposed Host
+0.26 boundary for pending 0.15 notes and Testkit. Its required native checks are
+in progress. Keep that active owner separate; registry Build 0.14 consumers must
+still align direct exposed Host values to 0.25 until the newer Build is published.
+
+## Historical producer and caller receipts
+
+The sections below retain evidence for their named source and release state;
+“pending 0.14” describes those earlier preparations, not current publication.
+
 Development Clippy 1.99 rejected two default-selection emptiness assertions
 with `assert_is_empty`; they now compare explicit empty `OsString` arrays.
 `make clippy` and both selection tests pass on development Rust 1.99; both tests
