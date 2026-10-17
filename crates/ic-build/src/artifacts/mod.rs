@@ -104,7 +104,7 @@ pub use wasm_batch::{
     WasmBuildSessionMetrics, build_wasm_canisters_cached_batch,
 };
 pub use wasm_cache::{
-    CargoBuildInput, CargoInputProbePolicy, ResolvedCargoBuildInputs,
+    CargoBuildFacts, CargoBuildInput, CargoInputProbePolicy, ResolvedCargoBuildInputs,
     SharedIncrementalTargetInspection, SharedIncrementalTargetMaintenance,
     SharedIncrementalTargetMaintenanceConfig, SharedIncrementalTargetMaintenanceFailureMode,
     SharedIncrementalTargetMaintenanceOutcome, WasmBuildCacheMode, WasmBuildError,
