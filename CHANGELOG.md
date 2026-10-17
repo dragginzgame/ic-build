@@ -3,6 +3,17 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.15.0]
+
+- **Breaking:** align exposed filesystem, process and artifact types with Host
+  0.26. Consumers passing Host values must select the same family; native build
+  output limits, child ownership and original error causes retain one type owner.
+  No conversion wrapper or second Host dependency is introduced
+  ([#9 — Qualify consumers against the current exposed Host boundary](https://github.com/dragginzgame/ic-build/issues/9)).
+- Failed-build cleanup consumes its owned directory for one explicit removal
+  attempt. Preserve the exact retained path and both build/cleanup causes when
+  removal fails; retry/recovery remains caller-owned. Rust 1.91 is unchanged.
+
 ## [0.14.0] - 2026-10-17
 
 - **Breaking:** move `CargoFeatureSelection` to `cargo::selection` and keep
