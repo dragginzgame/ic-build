@@ -56,13 +56,14 @@ pub struct NativeExecutable {
 /// package/target selection and Cargo's JSON diagnostics format. Stdout is a
 /// bounded-per-message protocol; rendered compiler diagnostics and piped stderr
 /// stream to `diagnostics`. Other stderr configurations remain intact. Stdin is
-/// null. This owns direct-child completion, not process-group or signal policy.
-/// `admit` runs before each command factory, so caller interruption can refuse
-/// another dispatch after metadata. In-flight commands still run to completion.
+/// null. `spawn` selects direct-child or owned-group custody and cleanup policy.
+/// `admit` runs before each command factory. `interrupted` is polled during both
+/// metadata and build capture; cancellation retains Host's typed cleanup evidence.
+/// The caller owns signal handlers and cancellation meaning.
 ///
 /// Callers exclude source/config/tool mutation and retain artifact custody. No
 /// cache, installation, release admission, retry or elapsed-time default is added.
-/// Interrupted or rejected capture uses Host's direct-child cleanup evidence.
+/// Interrupted or rejected capture uses the caller-selected child cleanup.
 ///
 /// # Errors
 /// Refuses invalid selection before command effects, missing/ambiguous metadata
@@ -73,6 +74,8 @@ pub fn build_native_executable(
     mut cargo: impl FnMut() -> Command,
     mut diagnostics: impl Write,
     mut admit: impl FnMut() -> io::Result<()>,
+    mut spawn: impl FnMut(&mut Command) -> io::Result<OwnedChild>,
+    mut interrupted: impl FnMut() -> bool,
 ) -> Result<NativeExecutable, Box<dyn Error + Send + Sync>> {
     let selector = match spec.target_kind {
         "bin" => "--bin",
@@ -95,10 +98,15 @@ pub fn build_native_executable(
     command.args(["metadata", "--locked", "--no-deps", "--format-version", "1"]);
     command.args(&arguments.metadata_arguments);
     let mut bytes = Vec::new();
-    execute(&mut command, |stream, chunk| match stream {
-        OutputStream::Stdout => append(&mut bytes, chunk, spec.max_message_bytes),
-        OutputStream::Stderr => diagnostics.write_all(chunk),
-    })?;
+    execute(
+        &mut command,
+        &mut spawn,
+        &mut interrupted,
+        |stream, chunk| match stream {
+            OutputStream::Stdout => append(&mut bytes, chunk, spec.max_message_bytes),
+            OutputStream::Stderr => diagnostics.write_all(chunk),
+        },
+    )?;
     let (package_id, target_directory) = selection(serde_json::from_slice(&bytes)?, spec)?;
     admit()?;
     let mut command = cargo();
@@ -114,20 +122,25 @@ pub fn build_native_executable(
     command.args(spec.build_args);
     let mut decoder = MessageDecoder::new(spec.max_message_bytes, false);
     let mut executable = None;
-    execute(&mut command, |stream, chunk| {
-        if stream == OutputStream::Stderr {
-            return diagnostics.write_all(chunk);
-        }
-        decoder.feed(chunk, |decoded| {
-            selected_message(
-                decoded,
-                &package_id,
-                spec,
-                &mut executable,
-                &mut diagnostics,
-            )
-        })
-    })?;
+    execute(
+        &mut command,
+        &mut spawn,
+        &mut interrupted,
+        |stream, chunk| {
+            if stream == OutputStream::Stderr {
+                return diagnostics.write_all(chunk);
+            }
+            decoder.feed(chunk, |decoded| {
+                selected_message(
+                    decoded,
+                    &package_id,
+                    spec,
+                    &mut executable,
+                    &mut diagnostics,
+                )
+            })
+        },
+    )?;
     decoder.finish(|decoded| {
         selected_message(
             decoded,
@@ -219,10 +232,12 @@ fn selected_message(
 
 fn execute(
     command: &mut Command,
+    spawn: &mut impl FnMut(&mut Command) -> io::Result<OwnedChild>,
+    interrupted: &mut impl FnMut() -> bool,
     output: impl FnMut(OutputStream, &[u8]) -> io::Result<()>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     command.stdin(Stdio::null()).stdout(Stdio::piped());
-    let mut child = OwnedChild::spawn_direct(command)?;
+    let mut child = spawn(command)?;
     communicate_child_with_observer(
         &mut child,
         None,
@@ -232,7 +247,7 @@ fn execute(
             timeout: None,
         },
         SuccessfulExit::Cleanup,
-        || false,
+        interrupted,
         output,
     )?
     .require_success()?;

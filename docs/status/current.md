@@ -1,5 +1,21 @@
 # Current handoff
 
+## Native executable lifecycle callbacks — pending 0.13.0
+
+Native executable builds now require caller-selected spawning and cancellation
+callbacks. Callers choose direct-child or owned-group cleanup and retain signal
+ownership. Both metadata and compilation use that policy; Host cancellation and
+cleanup failures retain their original types. No default build deadline or total
+diagnostic limit is introduced. Existing per-message protocol bounds remain.
+
+Five selected native unit cases pass, including cancellation during each command,
+and the actual Cargo executable/profile/environment/failed-build case passes.
+Strict affected Clippy, actual Rust 1.91 compilation and warning-denied floor
+Rustdoc pass on Linux. A private Testkit driver rehearsal is prepared separately;
+normal registry adoption requires publication of this breaking API. Own package
+versions and all normal sibling checkouts remain unchanged. Required hosted
+native macOS checks and full release validation remain separate.
+
 ## Shared Tooling snapshot repair
 
 The 2026-10-17 release validation rejected local API prose added to the

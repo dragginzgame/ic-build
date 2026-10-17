@@ -3,6 +3,14 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.13.0]
+
+- **Breaking:** native executable builds require caller-selected child spawning
+  and cancellation callbacks. Pass `OwnedChild::spawn_direct` and `|| false` for
+  direct-child, non-cancelling behavior, or select owned-group cleanup explicitly.
+  Cancellation is observed during metadata/build capture and preserves Host
+  execution/cleanup causes. Build duration and total diagnostics remain unlimited.
+
 ## [0.12.1] - 2026-10-17
 
 - Restore Shared Tooling snapshot verification by keeping the external-lock API
