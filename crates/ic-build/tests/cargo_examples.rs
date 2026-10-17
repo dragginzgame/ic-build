@@ -1,5 +1,7 @@
 //! Named examples share Cargo identity/output selection while callers own execution.
 
+use ic_build::cargo::selection::{CargoFeatureSelection, CargoSelection};
+
 mod support;
 
 #[cfg(unix)]
@@ -71,7 +73,15 @@ fn recipe(root: &Path) -> WasmBuildSpec {
         &["example-fixture"],
     )
     .with_example("probe")
-    .with_cargo_profile_args(["--features", "probe", "--locked", "--offline"])
+    .with_cargo_selection(CargoSelection {
+        features: CargoFeatureSelection {
+            features: ["probe".into()].into(),
+            ..Default::default()
+        },
+        locked: true,
+        offline: true,
+        ..Default::default()
+    })
 }
 
 fn evidence(inputs: &ResolvedCargoBuildInputs) -> InputEvidenceSpec {
@@ -132,7 +142,15 @@ fn named_examples_build_and_reuse_without_aliasing_library_or_other_example() {
             &root.join("workspace/target/cargo"),
             &["example-fixture"],
         )
-        .with_cargo_profile_args(["--features", "probe", "--locked", "--offline"])
+        .with_cargo_selection(CargoSelection {
+            features: CargoFeatureSelection {
+                features: ["probe".into()].into(),
+                ..Default::default()
+            },
+            locked: true,
+            offline: true,
+            ..Default::default()
+        })
         .with_isolated_builds();
         let library = build_wasm_canisters_cached(&library).unwrap();
         assert_ne!(first.record().fingerprint(), library.record().fingerprint());
@@ -187,10 +205,8 @@ fn external_example_execution_rechecks_inputs_before_capturing_exact_bytes() {
             .is_current_with_probe_policy(&spec, &mut policy)
             .unwrap()
     );
-    let after = InputEvidence::capture(&evidence(
-        &resolve_cargo_build_inputs_with_probe_policy(&spec, &mut policy).unwrap(),
-    ))
-    .unwrap();
+    let after =
+        evidence(&resolve_cargo_build_inputs_with_probe_policy(&spec, &mut policy).unwrap());
     before.validate_after(&after).unwrap();
     let output = &inputs.artifact_paths().unwrap()[0];
     let bytes = fs::read(output).unwrap();
@@ -202,7 +218,7 @@ fn external_example_execution_rechecks_inputs_before_capturing_exact_bytes() {
     assert!(!root.join("workspace/configured").exists());
     fs::write(root.join("workspace/examples/probe.rs"), "changed source").unwrap();
     assert!(!inputs.is_content_current().unwrap());
-    let after = InputEvidence::capture(&evidence(&inputs)).unwrap();
+    let after = evidence(&inputs);
     assert!(matches!(
         before.validate_after(&after),
         Err(InputEvidenceError::ChangedInput { .. })
@@ -245,7 +261,7 @@ fn late_example_depfile_inputs_require_prebuild_authority() {
         let after_spec = paths
             .iter()
             .fold(evidence(&inputs), InputEvidenceSpec::with_input);
-        let after = InputEvidence::capture(&after_spec).unwrap();
+        let after = after_spec;
         if predeclared {
             before.validate_after(&after).unwrap();
             fs::remove_file(&external).unwrap();
@@ -267,18 +283,6 @@ fn unsafe_or_conflicting_example_selectors_fail_before_dispatch() {
         assert!(
             spec.clone()
                 .with_example(name)
-                .cargo_build_command()
-                .is_err()
-        );
-    }
-    for arguments in [
-        vec!["--lib"],
-        vec!["--example", "other"],
-        vec!["--bin=probe"],
-    ] {
-        assert!(
-            spec.clone()
-                .with_cargo_profile_args(arguments)
                 .cargo_build_command()
                 .is_err()
         );
@@ -383,7 +387,7 @@ fn prepared_metadata_sharing_preserves_distinct_example_selections() {
         LabeledWasmBuildSpec::new("other", second),
     ];
     let cold = snapshot
-        .build_batch(&recipes, WasmBuildBatchConfig::new())
+        .build_batch(&recipes, WasmBuildBatchConfig::new(), None)
         .unwrap();
     assert!(cold.is_success());
     let identities: Vec<_> = cold
@@ -392,7 +396,7 @@ fn prepared_metadata_sharing_preserves_distinct_example_selections() {
         .collect();
     assert_ne!(identities[0], identities[1]);
     let warm = snapshot
-        .build_batch(&recipes, WasmBuildBatchConfig::new())
+        .build_batch(&recipes, WasmBuildBatchConfig::new(), None)
         .unwrap();
     assert!(
         warm.outcomes()
@@ -404,7 +408,7 @@ fn prepared_metadata_sharing_preserves_distinct_example_selections() {
     )];
     assert!(
         snapshot
-            .build_batch(&unprepared, WasmBuildBatchConfig::new())
+            .build_batch(&unprepared, WasmBuildBatchConfig::new(), None)
             .is_err()
     );
     drop((cold, warm, snapshot));

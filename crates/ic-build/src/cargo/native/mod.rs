@@ -13,7 +13,6 @@ use ic_host_process::{
 };
 use std::{
     error::Error,
-    ffi::OsString,
     io::{self, Write},
     path::PathBuf,
     process::{Command, Stdio},
@@ -22,7 +21,8 @@ use std::{
 #[cfg(test)]
 mod tests;
 
-/// Exact native target and caller-selected build arguments and decoding allowance.
+/// Exact native target and caller-selected recipe and decoding allowance.
+#[derive(Clone, Debug)]
 pub struct NativeExecutableSpec<'a> {
     /// Unique package name in the selected Cargo metadata graph.
     pub package: &'a str,
@@ -30,11 +30,9 @@ pub struct NativeExecutableSpec<'a> {
     pub target_name: &'a str,
     /// `bin` or `example`, selecting Cargo's corresponding build target.
     pub target_kind: &'a str,
-    /// Additional build arguments, such as profile and features. Package, target,
-    /// manifest, target-directory and configuration overrides are refused; select
-    /// shared configuration and paths in the command factory instead.
-    /// Cargo's JSON message format is owned by this operation.
-    pub build_args: &'a [OsString],
+    /// Profile, feature and network/lock selections shared by metadata and build.
+    /// Commands additionally require locked operation.
+    pub selection: CargoSelection,
     /// Maximum metadata bytes or bytes in one Cargo JSON message, including LF.
     /// Total streamed diagnostic output and build duration have no default limit.
     pub max_message_bytes: usize,
@@ -85,18 +83,15 @@ pub fn build_native_executable(
     if spec.package.is_empty() || spec.target_name.is_empty() || spec.max_message_bytes == 0 {
         return Err(protocol("empty native target selection or message allowance").into());
     }
-    let arguments = CargoSelection::parse(spec.build_args.to_vec());
-    if !arguments.flags.is_empty() {
-        return Err(protocol("native build arguments override the selected recipe").into());
-    }
-    arguments
-        .profile
-        .as_ref()
-        .map_err(|message| protocol(message))?;
+    spec.selection.profile_target_dir().map_err(protocol)?;
+    let arguments = CargoSelection {
+        locked: true,
+        ..spec.selection.clone()
+    };
     admit()?;
     let mut command = cargo();
-    command.args(["metadata", "--locked", "--no-deps", "--format-version", "1"]);
-    command.args(&arguments.metadata_arguments);
+    command.args(["metadata", "--no-deps", "--format-version", "1"]);
+    command.args(arguments.metadata_arguments());
     let mut bytes = Vec::new();
     execute(
         &mut command,
@@ -112,14 +107,13 @@ pub fn build_native_executable(
     let mut command = cargo();
     command.args([
         "build",
-        "--locked",
         "--message-format=json",
         "-p",
         spec.package,
         selector,
         spec.target_name,
     ]);
-    command.args(spec.build_args);
+    command.args(arguments.build_arguments());
     let mut decoder = MessageDecoder::new(spec.max_message_bytes, false);
     let mut executable = None;
     execute(

@@ -298,7 +298,12 @@ fn batches_retain_distinct_successes_through_later_failure() {
     let root = fixture();
     let specs = ["A", "B", "failure"]
         .map(|variant| LabeledWasmBuildSpec::new(variant, wasm_spec(&root, variant)));
-    let report = build_wasm_canisters_cached_batch(&specs).unwrap();
+    let report = build_wasm_canisters_cached_batch(
+        &specs,
+        ic_build::artifacts::WasmBuildBatchConfig::new(),
+        None,
+    )
+    .unwrap();
     assert_eq!(report.failures().count(), 1, "{report:?}");
     let records: Vec<_> = report
         .outcomes()

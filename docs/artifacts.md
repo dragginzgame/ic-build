@@ -1,10 +1,36 @@
 # Artifact and Wasm build APIs
 
-Examples target the pending 0.13 API; published 0.12 batch iterators use separate
-result views. When upgrading from before 0.9, remove the
-fourth argument from `WasmBuildSpec::new`; keep Cargo profile arguments in
-`with_cargo_profile_args`. Align direct Host dependencies with the 0.24 family
-when passing Host values through Build's public APIs.
+Examples target pending 0.14. Replace raw Cargo recipe arguments with
+`cargo::selection::CargoSelection` and `with_cargo_selection`; native
+`NativeExecutableSpec` uses `selection` instead of `build_args`. Select a
+profile, `cargo::selection::CargoFeatureSelection` and explicit lock/network flags.
+The feature value owns `all_features`, explicit feature names and default-feature
+policy. The old `cargo::observation::CargoFeatureSelection` path is removed;
+observations and builds use the same encoder, preserving typed recipe argument
+fingerprint bytes.
+Metadata and builds receive the same feature and network selection. There is no
+arbitrary CLI argument escape hatch. Align direct Host dependencies with the
+0.25 family when passing Host values through Build's public APIs. Cargo progress
+events carry `ic_host_process::tool::OutputStream` directly; remove imports of
+`WasmBuildOutputStream`.
+
+Progress heartbeats, command errors and `WasmBuildFailureDetails::phase()` use
+one `artifacts::WasmBuildPhase`. Replace `WasmBuildProgressPhase` and
+`WasmBuildFailurePhase` imports directly, without aliases. Rename
+`ExactCacheLock` to `ExactCacheCoordination` and `SharedTargetLock` to
+`SharedTargetCoordination`. Identity failures distinguish `CargoIdentity` and
+`RustcIdentity`; the timing summary still adds both to `tool_identity`.
+Specification and cleanup retain their own phases.
+
+Artifact batch functions return `ic_build::batch::BatchLabelError` directly;
+remove `ArtifactCacheBatchContractError`. Match `Empty { index }` or
+`Duplicate { label, first_index, duplicate_index }`. Wasm batch contract errors
+wrap those values in `WasmBuildBatchContractError::Labels`; its error source
+exposes the same typed label failure. Source-lease invalidation and unprepared
+specification failures remain distinct. Label rejection still precedes callbacks,
+progress events, source validation and command effects. Cargo grouping returns
+the same downcastable label error; its diagnostic wording now uses shared label
+terms. Individual build, cleanup and publication failures remain in their entries.
 
 These generic APIs are extracted from IC Testkit. Recipes, budgets, tool
 selection, credentials, source custody and lifecycle remain with the caller.
@@ -50,12 +76,18 @@ The existing API can apply a shared release selection explicitly:
 
 ```rust,no_run
 use ic_build::artifacts::WasmBuildSpec;
+use ic_build::cargo::selection::CargoSelection;
 use std::path::Path;
 
 let workspace = Path::new("/application/workspace");
 let target = workspace.join("target/canister-builds");
 let spec = WasmBuildSpec::new(workspace, &target, &["application_canister"])
-    .with_cargo_profile_args(["--release", "--locked", "--offline"])
+    .with_cargo_selection(CargoSelection {
+        profile: Some("release".into()),
+        locked: true,
+        offline: true,
+        ..Default::default()
+    })
     .with_extra_env([("CARGO_PROFILE_RELEASE_LTO", "fat")]);
 ```
 
@@ -140,14 +172,17 @@ select complete inventories, source custody and rebuild directives; a descriptiv
 fingerprint does not attest that an executable was built from those sources.
 The original `digest()` and cache formats remain unchanged.
 
-`before.validate_after(&after)` permits replacement or expansion of the declared
-inventory while requiring the same identity and exclusion policy. It rechecks
+`let after = before.validate_after(&after_spec)?` captures and validates a
+replacement or expanded inventory with the same identity and exclusion policy.
+Pass an `InputEvidenceSpec`, rather than capturing it first. The operation observes
+the union of original and selected roots, reusing overlapping facts, and returns
+only the selected inventory with its existing digest encoding. It rechecks
 every original root, even if a later depfile no longer names it, and rejects
 changed bytes, absence or directory membership. Newly discovered bytes cannot
 gain retrospective authority. A newly named missing path is admissible only when
 an earlier complete directory scan proved its first child absent; excluded or
-unobserved paths cannot establish that proof. The caller supplies the after
-capture under the same source custody boundary and handles refusal according to
+unobserved paths cannot establish that proof. The caller retains source custody through this fresh
+observation and handles refusal according to
 its own build/release policy.
 
 `discover_cargo_depfile_inputs(current_dir, directories, excluded_roots,
@@ -380,7 +415,7 @@ use ic_build::artifacts::{
     ArtifactCachePrunePolicy, WasmBuildOutcome, WasmBuildSpec,
     build_wasm_canisters_cached,
 };
-use ic_build::cargo::observation::workspace_root_for;
+use ic_build::cargo::{observation::workspace_root_for, selection::CargoSelection};
 use ic_host_process::tool::{OutputLimit, OutputLimits};
 use std::{process::Command, time::Duration};
 
@@ -395,12 +430,17 @@ let workspace = workspace_root_for(
 )
     .expect("resolve the crate's Cargo workspace");
 let target = workspace.join("target").join("pic-wasm");
+
 let spec = WasmBuildSpec::new(
     &workspace,
     &target,
     &["counter_canister"],
 )
-.with_cargo_profile_args(["--release", "--locked"])
+.with_cargo_selection(CargoSelection {
+    profile: Some("release".into()),
+    locked: true,
+    ..Default::default()
+})
 .with_inherited_env(["COUNTER_SCHEMA_MODE"])
 .with_additional_inputs(["config/counter-schema.json"])
 .with_prune_policy(
@@ -526,15 +566,18 @@ identity, Cargo metadata, input discovery, content hashing, and total timing.
 Relative exact target paths use the caller's working directory, matching cache
 filesystem operations. Relative shared targets use the workspace root. Select
 these paths through `WasmBuildSpec`; overriding `CARGO_TARGET_DIR` through
-`with_extra_env` or passing `--target-dir` through `with_cargo_profile_args`
-returns `InvalidSpec` before acquisition.
+`with_extra_env` returns `InvalidSpec` before acquisition.
 
-The profile output directory is derived from Cargo arguments: default builds and
-`--profile dev` or `--profile test` use `debug`; `--release`, `-r`, and
-`--profile bench` use `release`; custom profiles use their own name. Replacing
-profile arguments also replaces the derived directory. Missing, repeated or
-unsafe profile selections return `InvalidSpec` before input resolution or cache
-work. Existing recipes retain their fingerprint encoding and cache namespaces.
+The profile output directory follows `CargoSelection::profile`: default builds,
+`dev` and `test` use `debug`; `release` and `bench` use `release`;
+custom profiles use their own name. Unsafe profile paths fail before resolution
+or cache work. Selection rendering is deterministic; equivalent old arguments in
+a different spelling/order may select a new fingerprint. Existing cache namespaces,
+retained artifacts and stamp formats are preserved; no old entries are deleted.
+Default recipes and canonical selections such as `--release --locked` keep their
+argument fingerprint bytes. Custom profiles render as `--profile=NAME` and
+explicit features as one sorted `--features=FEATURES` argument. Consumers own
+any local build parallelism or environment settings outside this selection.
 
 Wasm acquisition builds package libraries with Cargo's `--lib` flag by default.
 Use `with_example(name)` to select one named `cdylib` example from exactly one
@@ -695,12 +738,18 @@ Raw output events preserve non-UTF-8 bytes; output is still captured in
 phase work, terminates and waits for a running Cargo build, and then performs
 normal lock and incomplete-entry cleanup.
 
+Independent batches, sessions and prepared snapshots each expose one batch
+entrypoint. Pass batch configuration explicitly and `None` for silent execution,
+or `Some((progress_config, &mut observer))` for progress reporting. The former
+`_with_config`, `_with_progress` and combined variants have no aliases.
+
 Suites that require standalone feature resolution for several variants can
 batch independent specs without changing Cargo feature semantics:
 
 ```rust,no_run
 use ic_build::artifacts::{
-    LabeledWasmBuildSpec, WasmBuildSpec, build_wasm_canisters_cached_batch,
+    LabeledWasmBuildSpec, WasmBuildBatchConfig, WasmBuildSpec,
+    build_wasm_canisters_cached_batch,
 };
 
 # let workspace = std::path::PathBuf::from(".");
@@ -715,7 +764,7 @@ let specs = [
         WasmBuildSpec::new(&workspace, &target, &["role_b"]),
     ),
 ];
-let batch = build_wasm_canisters_cached_batch(&specs)?;
+let batch = build_wasm_canisters_cached_batch(&specs, WasmBuildBatchConfig::new(), None)?;
 eprintln!("{batch}");
 for failure in batch.failures() {
     eprintln!(
@@ -789,8 +838,8 @@ use std::sync::Mutex;
 let source_write_exclusion = Mutex::new(());
 let source_guard = source_write_exclusion.lock().expect("acquire source lease");
 let mut session = WasmBuildSession::assume_sources_immutable(&source_guard);
-let first = session.build_batch(&specs, WasmBuildBatchConfig::new())?;
-let second = session.build_batch(&specs, WasmBuildBatchConfig::new())?;
+let first = session.build_batch(&specs, WasmBuildBatchConfig::new(), None)?;
+let second = session.build_batch(&specs, WasmBuildBatchConfig::new(), None)?;
 eprintln!("first={first}; second={second}; session={:?}", session.metrics());
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
@@ -835,10 +884,10 @@ let snapshot = WasmBuildInputSnapshot::prepare_assuming_sources_immutable(
 )?;
 let (local_report, production_report) = std::thread::scope(|scope| {
     let local = scope.spawn(|| {
-        snapshot.build_batch(&local_test, WasmBuildBatchConfig::new())
+        snapshot.build_batch(&local_test, WasmBuildBatchConfig::new(), None)
     });
     let production = scope.spawn(|| {
-        snapshot.build_batch(&production, WasmBuildBatchConfig::new())
+        snapshot.build_batch(&production, WasmBuildBatchConfig::new(), None)
     });
     (
         local.join().expect("join LocalTest reader"),
@@ -876,7 +925,7 @@ use ic_build::artifacts::{
     SharedIncrementalTargetMaintenanceConfig,
     SharedIncrementalTargetMaintenanceFailureMode,
     SharedIncrementalTargetPrunePolicy, WasmBuildBatchConfig,
-    build_wasm_canisters_cached_batch_with_config,
+    build_wasm_canisters_cached_batch,
 };
 use std::time::Duration;
 
@@ -886,9 +935,10 @@ let maintenance = SharedIncrementalTargetMaintenanceConfig::new(
     Duration::from_secs(24 * 60 * 60),
 )
 .with_failure_mode(SharedIncrementalTargetMaintenanceFailureMode::BestEffort);
-let batch = build_wasm_canisters_cached_batch_with_config(
+let batch = build_wasm_canisters_cached_batch(
     &specs,
     WasmBuildBatchConfig::new().with_shared_incremental_target_maintenance(maintenance),
+    None,
 )?;
 for (entry, outcome) in batch.shared_incremental_maintenance_outcomes() {
     eprintln!("build {} ({}): {}", entry.label(), entry.index(), outcome);

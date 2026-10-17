@@ -104,13 +104,16 @@ fn relative_digest_refuses_outside_inputs_and_invalid_roots() {
     fs::remove_dir_all(root).unwrap();
 }
 
-fn capture(identity: &[u8], paths: &[PathBuf]) -> InputEvidence {
-    let spec = paths
+fn evidence_spec(identity: &[u8], paths: &[PathBuf]) -> InputEvidenceSpec {
+    paths
         .iter()
         .fold(InputEvidenceSpec::new(identity), |spec, path| {
             spec.with_input(path)
-        });
-    InputEvidence::capture(&spec).unwrap()
+        })
+}
+
+fn capture(identity: &[u8], paths: &[PathBuf]) -> InputEvidence {
+    InputEvidence::capture(&evidence_spec(identity, paths)).unwrap()
 }
 
 #[test]
@@ -202,7 +205,7 @@ fn replaced_inventory_rechecks_old_directory_membership_and_bytes() {
     let source = root.join("external.rs");
     fs::write(&source, b"first").unwrap();
     let before = capture(b"authority", std::slice::from_ref(&root));
-    let after = capture(b"authority", &[]);
+    let after = evidence_spec(b"authority", &[]);
     before.validate_after(&after).unwrap();
     let added = root.join("new.rs");
     fs::write(&added, b"new").unwrap();
@@ -226,26 +229,30 @@ fn directory_absence_and_late_external_discovery_have_distinct_authority() {
     let root = unique_temp_directory("input-evidence-absence");
     let before = capture(b"authority", std::slice::from_ref(&root));
     let missing = root.join("not-yet/child.rs");
-    let after = capture(b"authority", &[root.clone(), missing.clone()]);
-    before.validate_after(&after).unwrap();
+    let after = before
+        .validate_after(&evidence_spec(
+            b"authority",
+            &[root.clone(), missing.clone()],
+        ))
+        .unwrap();
     assert_ne!(before.digest().unwrap(), after.digest().unwrap());
     fs::create_dir_all(missing.parent().unwrap()).unwrap();
     fs::write(&missing, b"new bytes").unwrap();
     assert!(matches!(
-        after.validate_after(&capture(b"authority", std::slice::from_ref(&root))),
+        after.validate_after(&evidence_spec(b"authority", std::slice::from_ref(&root))),
         Err(InputEvidenceError::ChangedInput { .. })
     ));
     let outside = unique_temp_directory("input-evidence-outside");
     let foreign = outside.join("source");
     fs::write(&foreign, b"old but unobserved").unwrap();
     assert!(matches!(
-        before.validate_after(&capture(b"authority", std::slice::from_ref(&foreign))),
+        before.validate_after(&evidence_spec(b"authority", std::slice::from_ref(&foreign))),
         Err(InputEvidenceError::ChangedInput { .. })
     ));
     // Start from an unchanged directory so the failure is specifically late discovery.
     let before = capture(b"authority", std::slice::from_ref(&root));
     assert!(
-        matches!(before.validate_after(&capture(b"authority", std::slice::from_ref(&foreign))), Err(InputEvidenceError::UnobservedInput { path }) if path == foreign)
+        matches!(before.validate_after(&evidence_spec(b"authority", std::slice::from_ref(&foreign))), Err(InputEvidenceError::UnobservedInput { path }) if path == foreign)
     );
     fs::remove_dir_all(root).unwrap();
     fs::remove_dir_all(outside).unwrap();
@@ -262,26 +269,20 @@ fn exclusions_cannot_prove_absence_and_policy_identity_is_retained() {
     let before = InputEvidence::capture(&spec).unwrap();
     fs::remove_file(root.join("output/old")).unwrap();
     let unscanned = root.join("output/new");
-    let after = InputEvidence::capture(&spec.with_input(&unscanned)).unwrap();
+    let after = spec.with_input(&unscanned);
     assert!(
         matches!(before.validate_after(&after), Err(InputEvidenceError::UnobservedInput { path }) if path == unscanned)
     );
-    let changed = InputEvidence::capture(
-        &InputEvidenceSpec::new(b"other".as_slice())
-            .with_input(&root)
-            .with_excluded_entry_name("output"),
-    )
-    .unwrap();
+    let changed = InputEvidenceSpec::new(b"other".as_slice())
+        .with_input(&root)
+        .with_excluded_entry_name("output");
     assert!(matches!(
         before.validate_after(&changed),
         Err(InputEvidenceError::IdentityChanged)
     ));
-    let changed = InputEvidence::capture(
-        &InputEvidenceSpec::new(b"authority".as_slice())
-            .with_input(&root)
-            .with_excluded_root(root.join("output")),
-    )
-    .unwrap();
+    let changed = InputEvidenceSpec::new(b"authority".as_slice())
+        .with_input(&root)
+        .with_excluded_root(root.join("output"));
     assert!(matches!(
         before.validate_after(&changed),
         Err(InputEvidenceError::ExclusionsChanged)
@@ -410,7 +411,7 @@ fn depfile_discovery_and_disappearing_records_preserve_external_custody() {
     let paths =
         discover_cargo_depfile_inputs(&root, std::slice::from_ref(&records), &[], 4096).unwrap();
     assert_eq!(paths, [] as [PathBuf; 0]);
-    let after = capture(b"same authority", &paths);
+    let after = evidence_spec(b"same authority", &paths);
     before.validate_after(&after).unwrap();
     let added = external.join("added");
     fs::write(&added, b"late bytes").unwrap();
@@ -448,7 +449,7 @@ fn selected_depfile_keeps_foreign_records_out_and_refuses_late_input_authority()
     let late = root.join("late.rs");
     fs::write(&late, b"late bytes").unwrap();
     fs::write(&record, "selected: source.rs late.rs\n").unwrap();
-    let after = capture(b"selected recipe", &read().unwrap());
+    let after = evidence_spec(b"selected recipe", &read().unwrap());
     assert!(matches!(
         before.validate_after(&after),
         Err(InputEvidenceError::UnobservedInput { path }) if path == late
@@ -521,7 +522,7 @@ fn replaced_depfile_cannot_authorize_late_bytes_or_drop_old_file_custody() {
     let before = capture(b"authority", &discover());
     fs::write(&late, b"late").unwrap();
     fs::write(&record, "role: late.rs\n").unwrap();
-    let after = capture(b"authority", &discover());
+    let after = evidence_spec(b"authority", &discover());
     assert!(matches!(before.validate_after(&after),
         Err(InputEvidenceError::UnobservedInput { path }) if path == late));
     fs::write(&original, b"mutated").unwrap();
@@ -542,7 +543,7 @@ fn overlapping_directory_spellings_are_complete_not_false_absence() {
         InputEvidenceValue::File { .. }
     ));
     before
-        .validate_after(&capture(b"authority", &[alias]))
+        .validate_after(&evidence_spec(b"authority", &[alias]))
         .unwrap();
     fs::remove_dir_all(root).unwrap();
 }
@@ -667,7 +668,7 @@ fn generated_ownership_uses_resolved_paths_and_preserves_external_inputs() {
     let before = capture(b"authority", &paths);
     fs::write(&source, "edited").unwrap();
     assert!(matches!(
-        before.validate_after(&capture(b"authority", &discover())),
+        before.validate_after(&evidence_spec(b"authority", &discover())),
         Err(InputEvidenceError::ChangedInput { .. })
     ));
     let missing = output.join("../not-yet-authored.json");
@@ -686,5 +687,46 @@ fn generated_ownership_uses_resolved_paths_and_preserves_external_inputs() {
             .entries()
             .contains_key(&foreign.canonicalize().unwrap())
     );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn post_work_projection_preserves_selected_roots_and_missing_inventory() {
+    let root = unique_temp_directory("input-evidence-projection");
+    let file = root.join("source");
+    fs::write(&file, b"stable").unwrap();
+    let missing = root.join("absent");
+    let before = capture(b"authority", &[root.clone(), missing]);
+    for selected in [
+        evidence_spec(b"authority", &[file]),
+        evidence_spec(b"authority", std::slice::from_ref(&root)),
+    ] {
+        let after = before.validate_after(&selected).unwrap();
+        let expected = InputEvidence::capture(&selected).unwrap();
+        assert_eq!(after.entries(), expected.entries());
+        assert_eq!(after.digest().unwrap(), expected.digest().unwrap());
+    }
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn post_work_projection_keeps_explicit_roots_separate_from_excluded_children() {
+    let root = unique_temp_directory("input-evidence-projection-excluded");
+    let output = root.join("output");
+    fs::create_dir(&output).unwrap();
+    fs::write(output.join("source"), b"stable").unwrap();
+    let selected = InputEvidenceSpec::new(b"authority".as_slice())
+        .with_input(&root)
+        .with_excluded_entry_name("output");
+    let before = InputEvidence::capture(&selected.clone().with_input(&output)).unwrap();
+    let after = before.validate_after(&selected).unwrap();
+    let expected = InputEvidence::capture(&selected).unwrap();
+    assert_eq!(after.entries(), expected.entries());
+    assert_eq!(after.digest().unwrap(), expected.digest().unwrap());
+    fs::write(output.join("source"), b"changed").unwrap();
+    assert!(matches!(
+        before.validate_after(&selected),
+        Err(InputEvidenceError::ChangedInput { .. })
+    ));
     fs::remove_dir_all(root).unwrap();
 }

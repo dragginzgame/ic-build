@@ -1,4 +1,5 @@
 use super::*;
+use crate::batch::BatchLabelError;
 use ic_host_process::tool::OutputLimit;
 
 #[test]
@@ -11,11 +12,15 @@ fn invalid_package_inputs_reject_before_command_effects() {
     for (packages, expected) in [
         (
             vec!["left", "", "right"],
-            "empty Cargo package input at index 1",
+            BatchLabelError::Empty { index: 1 },
         ),
         (
             vec!["left", "right", "left"],
-            "duplicate Cargo package input \"left\" at indices 0 and 2",
+            BatchLabelError::Duplicate {
+                label: "left".into(),
+                first_index: 0,
+                duplicate_index: 2,
+            },
         ),
     ] {
         let packages = packages.into_iter().map(str::to_string).collect::<Vec<_>>();
@@ -27,7 +32,7 @@ fn invalid_package_inputs_reject_before_command_effects() {
             || panic!("invalid package inputs must not invoke the command factory"),
         )
         .unwrap_err();
-        assert_eq!(error.to_string(), expected);
+        assert_eq!(error.downcast_ref::<BatchLabelError>(), Some(&expected));
     }
     let groups = compatible_package_groups(
         Path::new("."),

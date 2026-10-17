@@ -1,5 +1,7 @@
 //! Actual Cargo/Wasm compilation, exact inputs and publication qualification.
 
+use ic_build::cargo::selection::CargoSelection;
+
 mod support;
 
 #[cfg(unix)]
@@ -12,9 +14,9 @@ use ic_build::artifacts::{
     LabeledWasmBuildSpec, SharedIncrementalTargetMaintenanceOutcome,
     SharedIncrementalTargetPrunePolicy, WasmBuildBatchConfig, WasmBuildBatchContractError,
     WasmBuildBatchEntry, WasmBuildBatchMetrics, WasmBuildBatchProgressEvent, WasmBuildBatchReport,
-    WasmBuildError, WasmBuildFailurePhase, WasmBuildInputSnapshot, WasmBuildOutcome,
-    WasmBuildPhase, WasmBuildProgressConfig, WasmBuildProgressEvent, WasmBuildSession,
-    WasmBuildSpec, build_wasm_canisters_cached, build_wasm_canisters_cached_with_progress,
+    WasmBuildError, WasmBuildInputSnapshot, WasmBuildOutcome, WasmBuildPhase,
+    WasmBuildProgressConfig, WasmBuildProgressEvent, WasmBuildSession, WasmBuildSpec,
+    build_wasm_canisters_cached, build_wasm_canisters_cached_with_progress,
     inspect_shared_incremental_target, prepare_artifact_cache, prune_wasm_build_cache,
     resolve_cargo_build_inputs,
 };
@@ -215,9 +217,11 @@ fn wasm_acquisition_builds_library_when_binary_has_the_same_output_name() {
             if shared_target {
                 spec = spec.with_shared_incremental_target(root.join("shared"));
             }
+            let baseline_spec =
+                WasmBuildSpec::new(&workspace, &root.join("baseline"), &["feature_a"])
+                    .with_isolated_builds();
             let baseline =
-                build_wasm_canisters_cached(&spec.clone().with_cargo_profile_args(["--lib"]))
-                    .expect("build library-only baseline");
+                build_wasm_canisters_cached(&baseline_spec).expect("build library-only baseline");
             let library =
                 fs::read(&baseline.record().artifacts()[0]).expect("read library baseline");
             let outcome = if observed {
@@ -247,7 +251,7 @@ fn wasm_acquisition_builds_library_when_binary_has_the_same_output_name() {
 }
 
 #[test]
-fn shared_wasm_target_rejects_binary_only_build_before_publication() {
+fn shared_wasm_target_refreshes_library_without_building_unrelated_binary() {
     let root = unique_temp_dir("ic-testkit-shared-binary-only");
     let workspace = root.join("workspace");
     write_independent_feature_workspace(&workspace);
@@ -260,8 +264,7 @@ fn shared_wasm_target_rejects_binary_only_build_before_publication() {
     let target = root.join("exact-target");
     let shared = root.join("shared-target");
     let spec = WasmBuildSpec::new(&workspace, &target, &["feature_a"])
-        .with_shared_incremental_target(&shared)
-        .with_cargo_profile_args(["--lib"]);
+        .with_shared_incremental_target(&shared);
     let first = build_wasm_canisters_cached(&spec).expect("build initial canister Wasm");
     let before = read_file(&wasm_path(&shared, "feature_a", "debug"), 128 * 1024 * 1024)
         .expect("read bounded Wasm");
@@ -270,26 +273,6 @@ fn shared_wasm_target_rejects_binary_only_build_before_publication() {
         "pub fn value() -> u8 { 2 }\n",
     )
     .expect("change source while retaining old canister output");
-
-    let binary_only = spec.clone().with_cargo_profile_args(["--bin", "helper"]);
-    let result = build_wasm_canisters_cached(&binary_only);
-    assert!(
-        matches!(
-            result,
-            Err(ic_build::artifacts::WasmBuildError::InvalidSpec { .. })
-        ),
-        "a binary-only build must not certify the old canister output: {result:?}",
-    );
-    assert_eq!(
-        read_file(&wasm_path(&shared, "feature_a", "debug"), 128 * 1024 * 1024)
-            .expect("read bounded Wasm"),
-        before
-    );
-    assert!(
-        !shared
-            .join("wasm32-unknown-unknown/debug/helper.wasm")
-            .exists()
-    );
 
     let rebuilt = build_wasm_canisters_cached(&spec).expect("build changed canister Wasm");
     assert!(matches!(rebuilt, WasmBuildOutcome::Built(_)));
@@ -316,7 +299,10 @@ fn shared_wasm_target_uses_updated_cargo_profile_before_publication() {
     let shared = root.join("shared-target");
     let spec = WasmBuildSpec::new(&workspace, &target, &["feature_a"])
         .with_shared_incremental_target(&shared)
-        .with_cargo_profile_args(["--release"]);
+        .with_cargo_selection(CargoSelection {
+            profile: Some("release".into()),
+            ..Default::default()
+        });
     let first = build_wasm_canisters_cached(&spec).expect("build initial release Wasm");
     let before = read_file(
         &wasm_path(&shared, "feature_a", "release"),
@@ -329,7 +315,10 @@ fn shared_wasm_target_uses_updated_cargo_profile_before_publication() {
     )
     .expect("change source while retaining old release output");
 
-    let debug_spec = spec.clone().with_cargo_profile_args(["--offline"]);
+    let debug_spec = spec.clone().with_cargo_selection(CargoSelection {
+        offline: true,
+        ..Default::default()
+    });
     let debug = build_wasm_canisters_cached(&debug_spec).expect("build changed debug Wasm");
     assert!(matches!(debug, WasmBuildOutcome::Built(_)));
     assert!(wasm_path(&shared, "feature_a", "debug").is_file());
@@ -395,7 +384,11 @@ fn independent_wasm_batch_preserves_standalone_feature_resolution() {
         .expect("lock immutable source fixture");
     let mut session = WasmBuildSession::assume_sources_immutable(&source_guard);
     let batch = session
-        .build_batch(&specs, ic_build::artifacts::WasmBuildBatchConfig::new())
+        .build_batch(
+            &specs,
+            ic_build::artifacts::WasmBuildBatchConfig::new(),
+            None,
+        )
         .expect("valid leased Wasm batch");
 
     assert!(batch.is_success());
@@ -441,11 +434,10 @@ fn independent_wasm_batch_preserves_standalone_feature_resolution() {
     ];
     let mut completed = Vec::new();
     let with_failure = session
-        .build_batch_with_progress(
+        .build_batch(
             &with_invalid_middle,
             ic_build::artifacts::WasmBuildBatchConfig::new(),
-            WasmBuildProgressConfig::new(),
-            |event| match event {
+            Some((WasmBuildProgressConfig::new(), &mut |event| match event {
                 WasmBuildBatchProgressEvent::BuildFinished { index, label } => {
                     completed.push((index, label, true));
                 }
@@ -453,7 +445,7 @@ fn independent_wasm_batch_preserves_standalone_feature_resolution() {
                     completed.push((index, label, false));
                 }
                 _ => {}
-            },
+            })),
         )
         .expect("valid leased failure batch");
     assert_reused_batch_with_failure(&with_failure, &completed);
@@ -516,15 +508,14 @@ fn prepared_wasm_inputs_serve_concurrent_warm_readers() {
             first_barrier.wait();
             let mut finished = Vec::new();
             let report = first_snapshot
-                .build_batch_with_progress(
+                .build_batch(
                     &first,
                     WasmBuildBatchConfig::new(),
-                    WasmBuildProgressConfig::new(),
-                    |event| {
+                    Some((WasmBuildProgressConfig::new(), &mut |event| {
                         if let WasmBuildBatchProgressEvent::BuildFinished { index, label } = event {
                             finished.push((index, label));
                         }
-                    },
+                    })),
                 )
                 .expect("read first prepared input");
             assert_eq!(finished, [(0, "local-test".to_owned())]);
@@ -535,7 +526,7 @@ fn prepared_wasm_inputs_serve_concurrent_warm_readers() {
         let second_reader = scope.spawn(move || {
             second_barrier.wait();
             second_snapshot
-                .build_batch(&second, WasmBuildBatchConfig::new())
+                .build_batch(&second, WasmBuildBatchConfig::new(), None)
                 .expect("read second prepared input")
         });
         barrier.wait();
@@ -560,11 +551,12 @@ fn prepared_wasm_inputs_serve_concurrent_warm_readers() {
     )];
     let mut progress_events = 0;
     let error = snapshot
-        .build_batch_with_progress(
+        .build_batch(
             &undeclared,
             WasmBuildBatchConfig::new(),
-            WasmBuildProgressConfig::new(),
-            |_| progress_events += 1,
+            Some((WasmBuildProgressConfig::new(), &mut |_| {
+                progress_events += 1;
+            })),
         )
         .expect_err("undeclared prepared reader must fail preflight");
     assert_eq!(
@@ -1040,12 +1032,15 @@ fn failed_shared_incremental_build_preserves_cargo_state_without_publishing_an_e
     fs::write(&marker, b"preserve").expect("write failed-build marker");
     let spec = WasmBuildSpec::new(&workspace, &target_dir, &[PERF_PROBE_PACKAGE])
         .with_shared_incremental_target(&shared_target)
-        .with_cargo_profile_args(["--definitely-not-a-cargo-build-option"]);
+        .with_cargo_selection(CargoSelection {
+            profile: Some("undefined-profile".into()),
+            ..Default::default()
+        });
     let fingerprint = resolve_cargo_build_inputs(&spec)
         .expect("resolve failing build identity")
         .fingerprint();
 
-    let error = build_wasm_canisters_cached(&spec).expect_err("invalid Cargo option must fail");
+    let error = build_wasm_canisters_cached(&spec).expect_err("undefined Cargo profile must fail");
 
     assert!(matches!(
         error,
@@ -1122,10 +1117,10 @@ fn source_changes_during_shared_incremental_build_reject_exact_publication() {
         let mut session = WasmBuildSession::assume_sources_immutable(&source_guard);
         let specs = [LabeledWasmBuildSpec::new("race", spec)];
         let report = session
-            .build_batch(&specs, WasmBuildBatchConfig::new())
+            .build_batch(&specs, WasmBuildBatchConfig::new(), None)
             .expect("valid race-test batch");
         let invalidated = session.metrics().is_invalidated();
-        let next = session.build_batch(&specs, WasmBuildBatchConfig::new());
+        let next = session.build_batch(&specs, WasmBuildBatchConfig::new(), None);
         drop(session);
         drop(source_guard);
         (report, invalidated, next)
@@ -1151,7 +1146,7 @@ fn source_changes_during_shared_incremental_build_reject_exact_publication() {
         WasmBuildError::InputsChangedDuringAcquisition { .. }
     ));
     let details = failure.failure_details().unwrap();
-    assert_eq!(details.phase(), WasmBuildFailurePhase::ContentHashing);
+    assert_eq!(details.phase(), WasmBuildPhase::ContentHashing);
     let timings = details.timings();
     assert!(timings.input_resolution().content_hashing() > Duration::ZERO);
     assert!(timings.cargo_build().is_some());
@@ -1232,11 +1227,10 @@ fn source_race_invalidates_every_prepared_snapshot_reader() {
     let report = thread::scope(|scope| {
         let worker = scope.spawn(|| {
             snapshot
-                .build_batch_with_progress(
+                .build_batch(
                     &specs,
                     WasmBuildBatchConfig::new(),
-                    WasmBuildProgressConfig::new(),
-                    |_| {},
+                    Some((WasmBuildProgressConfig::new(), &mut |_| {})),
                 )
                 .expect("valid prepared race-test batch")
         });
@@ -1259,11 +1253,11 @@ fn source_race_invalidates_every_prepared_snapshot_reader() {
     ));
     assert_eq!(
         failure.failure_details().unwrap().phase(),
-        WasmBuildFailurePhase::ContentHashing
+        WasmBuildPhase::ContentHashing
     );
     assert!(snapshot.metrics().is_invalidated());
     assert!(matches!(
-        snapshot.build_batch(&specs, WasmBuildBatchConfig::new()),
+        snapshot.build_batch(&specs, WasmBuildBatchConfig::new(), None),
         Err(WasmBuildBatchContractError::SourceLeaseInvalidated)
     ));
     assert!(
@@ -1318,7 +1312,11 @@ fn custom_library_names_do_not_overwrite_another_packages_outputs() {
         let mut spec =
             WasmBuildSpec::new(&root, &root.join("exact with spaces"), &["alpha", "beta"])
                 .with_isolated_builds()
-                .with_cargo_profile_args(["--offline", "--profile=custom"]);
+                .with_cargo_selection(CargoSelection {
+                    profile: Some("custom".into()),
+                    offline: true,
+                    ..Default::default()
+                });
         if shared {
             spec = spec.with_shared_incremental_target(root.join("shared with spaces"));
         }

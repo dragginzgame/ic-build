@@ -1,13 +1,15 @@
+use crate::cargo::selection::{CargoFeatureSelection, CargoSelection};
 use ic_host_fs::owned_directory::OwnedDirectory;
 #[cfg(unix)]
 use ic_host_process::testing::write_executable_script;
+use ic_host_process::tool::OutputStream;
 
 use super::{
     MetadataPackage, ProgressReporter, SharedIncrementalTargetMaintenanceConfig,
     SharedIncrementalTargetMaintenanceFailureMode, SharedIncrementalTargetMaintenanceOutcome,
     SharedIncrementalTargetPrunePolicy, WasmBuildBatchInputResolver, WasmBuildError,
-    WasmBuildOutcome, WasmBuildOutputStream, WasmBuildProgressConfig, WasmBuildProgressEvent,
-    WasmBuildProgressPhase, WasmBuildSpec, append_cargo_configuration_inputs, artifact_stamp_path,
+    WasmBuildOutcome, WasmBuildPhase, WasmBuildProgressConfig, WasmBuildProgressEvent,
+    WasmBuildSpec, append_cargo_configuration_inputs, artifact_stamp_path,
     build_wasm_canisters_cached, build_wasm_canisters_cached_with_progress,
     ensure_cache_directory_tag, finish_fingerprint_build, inspect_shared_incremental_target,
     integrated_shared_maintenance_result, lock_wasm_build_cache,
@@ -286,23 +288,6 @@ fn package_selection_agrees_across_identity_artifacts_and_cargo_invocation() {
 }
 
 #[test]
-fn metadata_receives_only_resolution_arguments() {
-    let arguments = [
-        OsString::from("--profile"),
-        OsString::from("fast"),
-        OsString::from("--locked"),
-        OsString::from("--features=alpha,beta"),
-    ];
-    assert_eq!(
-        crate::cargo::selection::CargoSelection::parse(arguments.to_vec()).metadata_arguments,
-        [
-            OsString::from("--locked"),
-            OsString::from("--features=alpha,beta"),
-        ]
-    );
-}
-
-#[test]
 fn wasm_stamps_require_exact_identity_and_unmodified_contents() {
     let root = unique_temp_directory("wasm-stamp-validation");
     let artifact = root.join("fixture.wasm");
@@ -372,7 +357,7 @@ fn wasm_stamps_require_exact_identity_and_unmodified_contents() {
 }
 
 #[test]
-fn compact_feature_arguments_watch_enabled_optional_dependencies() {
+fn typed_features_watch_enabled_optional_dependencies() {
     let root = unique_temp_directory("compact-feature-inputs");
     fs::write(
         root.join("Cargo.toml"),
@@ -390,17 +375,16 @@ fn compact_feature_arguments_watch_enabled_optional_dependencies() {
     let dependency_source = dependency.join("src/lib.rs");
     let base = WasmBuildSpec::new(&root, &root.join("target"), &["fixture"]);
 
-    for arguments in [
-        vec!["-Fextra"],
-        vec!["-F=extra"],
-        vec!["-qFextra"],
-        vec!["-qFmap"],
-        vec!["-rF=extra"],
-        vec!["-vF", "extra"],
-    ] {
+    for feature in ["extra", "map"] {
         fs::write(&dependency_source, "pub fn optional_dep() -> u8 { 1 }\n")
             .expect("reset optional dependency source");
-        let spec = base.clone().with_cargo_profile_args(&arguments);
+        let spec = base.clone().with_cargo_selection(CargoSelection {
+            features: CargoFeatureSelection {
+                features: [feature.to_owned()].into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        });
         validate_spec(&spec).expect("accept feature selection without input overrides");
         let snapshot = resolve_cargo_build_inputs(&spec).expect("resolve enabled dependency");
         assert!(
@@ -408,7 +392,7 @@ fn compact_feature_arguments_watch_enabled_optional_dependencies() {
                 .inputs()
                 .iter()
                 .any(|input| input.path() == canonical_fixture(&dependency)),
-            "{arguments:?} must include the enabled optional dependency",
+            "{feature:?} must include the enabled optional dependency",
         );
         assert!(
             snapshot
@@ -434,7 +418,7 @@ fn compact_feature_arguments_watch_enabled_optional_dependencies() {
             !snapshot
                 .is_content_current()
                 .expect("detect dependency change"),
-            "{arguments:?} must watch the enabled optional dependency",
+            "{feature:?} must watch the enabled optional dependency",
         );
     }
     fs::remove_dir_all(root).expect("remove compact feature fixture");
@@ -443,12 +427,18 @@ fn compact_feature_arguments_watch_enabled_optional_dependencies() {
 #[test]
 fn builders_preserve_os_native_values() {
     let spec = WasmBuildSpec::new(Path::new("."), Path::new("target"), &["fixture"])
-        .with_cargo_profile_args([OsString::from("--locked")])
+        .with_cargo_selection(CargoSelection {
+            locked: true,
+            ..Default::default()
+        })
         .with_extra_env([("MODE", "exact"), ("RUSTFLAGS", "")])
         .with_inherited_env(["RUSTFLAGS", "PATH", "IC_BUILD_TEST_ABSENT_38D9C64"])
         .with_additional_inputs([PathBuf::from("schema")]);
 
-    assert_eq!(spec.cargo_selection.arguments, [OsString::from("--locked")]);
+    assert_eq!(
+        spec.cargo_selection.build_arguments(),
+        [OsString::from("--locked")]
+    );
     assert_eq!(
         spec.extra_env.get(&OsString::from("MODE")),
         Some(&OsString::from("exact"))
@@ -485,108 +475,13 @@ fn builders_preserve_os_native_values() {
 fn cargo_target_overrides_are_rejected_before_acquisition() {
     let root = unique_temp_directory("cargo-target-overrides");
     let spec = WasmBuildSpec::new(&root, &root.join("exact"), &["fixture"]);
-    for override_spec in [
-        spec.clone().with_extra_env([("CARGO_TARGET_DIR", "other")]),
-        spec.clone()
-            .with_cargo_profile_args(["--target-dir", "other"]),
-        spec.with_cargo_profile_args(["--target-dir=other"]),
-    ] {
-        assert!(matches!(
-            build_wasm_canisters_cached(&override_spec),
-            Err(WasmBuildError::InvalidSpec { .. })
-        ));
-    }
+    let override_spec = spec.with_extra_env([("CARGO_TARGET_DIR", "other")]);
+    assert!(matches!(
+        build_wasm_canisters_cached(&override_spec),
+        Err(WasmBuildError::InvalidSpec { .. })
+    ));
     assert!(!root.join("exact").exists());
     fs::remove_dir_all(root).expect("remove Cargo target override fixture");
-}
-
-#[test]
-#[cfg(unix)]
-fn cargo_non_building_commands_cannot_publish_existing_shared_target_outputs() {
-    // These modes must be rejected before invoking tools or certifying an old output.
-    for arguments in [vec!["--help"], vec!["--unit-graph", "-Zunstable-options"]] {
-        let (root, spec) = fake_wasm_build_spec("cargo-non-build-shared-output");
-        let shared = root.join("incremental");
-        let spec = spec
-            .with_cargo_program(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
-            .with_cargo_profile_args(&arguments)
-            .with_shared_incremental_target(&shared);
-        let existing = expected_artifacts(&spec, &shared);
-        fs::create_dir_all(existing[0].parent().unwrap()).unwrap();
-        fs::write(&existing[0], b"\0asm\x01\0\0\0").unwrap();
-
-        let result = build_wasm_canisters_cached(&spec);
-        assert!(
-            matches!(result, Err(WasmBuildError::InvalidSpec { .. })),
-            "{arguments:?} must not publish existing output: {result:?}",
-        );
-        assert!(!spec.target_dir.exists());
-        assert_eq!(fs::read(&existing[0]).unwrap(), b"\0asm\x01\0\0\0");
-        fs::remove_dir_all(root).unwrap();
-    }
-}
-
-#[test]
-fn cargo_input_overrides_are_rejected_before_resolution_or_acquisition() {
-    let root = unique_temp_directory("cargo-input-overrides");
-    let spec = WasmBuildSpec::new(&root, &root.join("exact"), &["fixture"])
-        .with_cargo_program(root.join("missing-cargo"));
-    for arguments in [
-        vec!["--manifest-path", "other/Cargo.toml"],
-        vec!["--manifest-path=other/Cargo.toml"],
-        vec!["-m", "other/Cargo.toml"],
-        vec!["-mother/Cargo.toml"],
-        vec!["-qmother/Cargo.toml"],
-        vec!["-C", "other"],
-        vec!["-vCother"],
-        vec!["--target", "other-target"],
-        vec!["--target=other-target"],
-        vec!["--package", "other"],
-        vec!["--package=other"],
-        vec!["-p", "other"],
-        vec!["-pother"],
-        vec!["-qpother"],
-        vec!["--workspace"],
-        vec!["--all"],
-        vec!["--exclude", "fixture"],
-        vec!["--exclude=fixture"],
-        vec!["--config", "other.toml"],
-        vec!["--config=build.rustflags=['--cfg=other']"],
-        vec!["--help"],
-        vec!["-h"],
-        vec!["-qh"],
-        vec!["-rh"],
-        vec!["-vh"],
-        vec!["-vrhFextra"],
-        vec!["--unit-graph"],
-        vec!["--unit-graph", "-Zunstable-options"],
-        vec!["-Zunstable-options", "--unit-graph"],
-    ] {
-        let override_spec = spec.clone().with_cargo_profile_args(&arguments);
-        for result in [
-            resolve_cargo_build_inputs(&override_spec).map(|_| ()),
-            build_wasm_canisters_cached(&override_spec).map(|_| ()),
-        ] {
-            assert!(
-                matches!(result, Err(WasmBuildError::InvalidSpec { .. })),
-                "{arguments:?} must fail before launching Cargo: {result:?}",
-            );
-        }
-    }
-    // Compact feature values containing 'h' are values, not help switches.
-    for arguments in [
-        vec!["-Fh"],
-        vec!["-qFhighlights"],
-        vec!["-rF=highlights"],
-        vec!["-F", "highlights"],
-        vec!["--features=highlights"],
-        vec!["--features", "highlights"],
-    ] {
-        let feature_spec = spec.clone().with_cargo_profile_args(&arguments);
-        super::validate_spec(&feature_spec).expect("accept feature values containing 'h'");
-    }
-    assert!(!root.join("exact").exists());
-    fs::remove_dir_all(root).expect("remove Cargo input override fixture");
 }
 
 #[cfg(unix)]
@@ -827,8 +722,12 @@ fn semantic_workspace_projection_tracks_selected_dependencies_and_profiles() {
         .expect("write selected projection workspace manifest");
     };
     write_workspace("selected_dep_a", "s");
-    let spec = WasmBuildSpec::new(&root, &root.join("target"), &["canister"])
-        .with_cargo_profile_args(["--release"]);
+    let spec = WasmBuildSpec::new(&root, &root.join("target"), &["canister"]).with_cargo_selection(
+        CargoSelection {
+            profile: Some("release".into()),
+            ..Default::default()
+        },
+    );
 
     let initial = resolve_cargo_build_inputs(&spec).expect("resolve selected projection");
     write_workspace("selected_dep_b", "s");
@@ -1038,11 +937,23 @@ fn batch_input_snapshot_reuses_compatible_toolchain_and_metadata_resolution() {
         WasmBuildSpec::new(&root, &target, &["fixture_a"]).with_cargo_program(&cargo_wrapper),
         WasmBuildSpec::new(&root, &target, &["fixture_b"])
             .with_cargo_program(&cargo_wrapper)
-            .with_cargo_profile_args(["--features=alpha"]),
+            .with_cargo_selection(CargoSelection {
+                features: CargoFeatureSelection {
+                    features: ["alpha".into()].into(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            }),
         WasmBuildSpec::new(&root, &target, &["fixture_b"]).with_cargo_program(&cargo_wrapper),
         WasmBuildSpec::new(&root, &target, &["fixture_a"])
             .with_cargo_program(&cargo_wrapper)
-            .with_cargo_profile_args(["--features=alpha"]),
+            .with_cargo_selection(CargoSelection {
+                features: CargoFeatureSelection {
+                    features: ["alpha".into()].into(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            }),
     ];
     let mut resolver = WasmBuildBatchInputResolver::new(&specs, None);
     let mut progress = ProgressReporter::silent();
@@ -1102,7 +1013,10 @@ fn profile_output_directory_is_confined_before_resolution_or_acquisition() {
         absolute.to_str().unwrap(),
     ] {
         let spec = WasmBuildSpec::new(&root, &target, &["fixture"])
-            .with_cargo_profile_args(["--profile", profile])
+            .with_cargo_selection(CargoSelection {
+                profile: Some(profile.into()),
+                ..Default::default()
+            })
             .with_cargo_program(root.join("missing-cargo"));
         assert!(
             matches!(
@@ -1122,8 +1036,11 @@ fn profile_output_directory_is_confined_before_resolution_or_acquisition() {
         assert!(!absolute.exists());
     }
     for profile in ["debug", "release", "fast", "release-with-debug"] {
-        let spec = WasmBuildSpec::new(&root, &target, &["fixture"])
-            .with_cargo_profile_args(["--profile", profile]);
+        let spec =
+            WasmBuildSpec::new(&root, &target, &["fixture"]).with_cargo_selection(CargoSelection {
+                profile: Some(profile.into()),
+                ..Default::default()
+            });
         validate_spec(&spec).expect("accept a normal profile output directory");
         assert!(expected_artifacts(&spec, &target)[0].starts_with(&target));
     }
@@ -1131,35 +1048,21 @@ fn profile_output_directory_is_confined_before_resolution_or_acquisition() {
 }
 
 #[test]
-fn cargo_profile_arguments_match_output_directories() {
-    for (directory, arguments) in [
-        ("debug", vec![]),
-        ("debug", vec!["--lib"]),
-        ("debug", vec!["--offline"]),
-        ("debug", vec!["--profile", "dev"]),
-        ("debug", vec!["--profile=test"]),
-        ("debug", vec!["--profile=debug"]),
-        ("release", vec!["--release"]),
-        ("release", vec!["-r"]),
-        ("release", vec!["-qr"]),
-        ("release", vec!["-vrFextra"]),
-        ("release", vec!["-rF=extra"]),
-        ("release", vec!["-rF", "extra"]),
-        ("release", vec!["--profile=release"]),
-        ("release", vec!["--profile", "bench"]),
-        ("fast", vec!["--profile", "fast"]),
-        ("fast", vec!["--profile=fast"]),
-        ("debug", vec!["-Fextra"]),
-        ("debug", vec!["-qF=extra"]),
-        ("debug", vec!["-F", "extra"]),
-        ("debug", vec!["--features=release"]),
-        ("debug", vec!["--features", "release"]),
-        ("debug", vec!["-j4"]),
+fn cargo_profiles_match_output_directories() {
+    for (directory, profile) in [
+        ("debug", None),
+        ("debug", Some("dev")),
+        ("debug", Some("test")),
+        ("release", Some("release")),
+        ("release", Some("bench")),
+        ("fast", Some("fast")),
     ] {
         let spec = WasmBuildSpec::new(Path::new("."), Path::new("target"), &["fixture"])
-            .with_cargo_profile_args(&arguments);
-        validate_spec(&spec)
-            .unwrap_or_else(|error| panic!("{arguments:?} should write to {directory}: {error}"));
+            .with_cargo_selection(CargoSelection {
+                profile: profile.map(str::to_owned),
+                ..Default::default()
+            });
+        validate_spec(&spec).unwrap();
         assert_eq!(
             expected_artifacts(&spec, Path::new("target")),
             [Path::new("target")
@@ -1204,85 +1107,6 @@ fn wasm_output_validation_distinguishes_libraries_from_cdylib_examples() {
     let built = super::build_wasm_canisters_cached(&spec).expect("library with both crate types");
     assert!(matches!(built, WasmBuildOutcome::Built(_)));
     drop(built);
-    fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
-fn cargo_target_selectors_fail_before_resolution_or_acquisition() {
-    let root = unique_temp_directory("wasm-target-selectors");
-    let target = root.join("exact");
-    let shared = root.join("shared");
-    for arguments in [
-        vec!["--bin", "helper"],
-        vec!["--bin=helper"],
-        vec!["--bins"],
-        vec!["--example", "helper"],
-        vec!["--example=helper"],
-        vec!["--examples"],
-        vec!["--test", "helper"],
-        vec!["--test=helper"],
-        vec!["--tests"],
-        vec!["--bench", "helper"],
-        vec!["--bench=helper"],
-        vec!["--benches"],
-        vec!["--all-targets"],
-        vec!["--message-format", "human"],
-        vec!["--message-format=json"],
-        vec!["--lib", "--bin=helper"],
-    ] {
-        let spec = WasmBuildSpec::new(&root, &target, &["fixture"])
-            .with_cargo_profile_args(&arguments)
-            .with_cargo_program(root.join("missing-cargo"));
-        for spec in [spec.clone(), spec.with_shared_incremental_target(&shared)] {
-            for result in [
-                resolve_cargo_build_inputs(&spec).map(|_| ()),
-                super::build_wasm_canisters_cached(&spec).map(|_| ()),
-            ] {
-                assert!(
-                    matches!(result, Err(WasmBuildError::InvalidSpec { .. })),
-                    "{arguments:?} must fail before invoking tools: {result:?}",
-                );
-            }
-            assert!(!target.exists());
-            assert!(!shared.exists());
-        }
-    }
-    fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
-fn malformed_cargo_profiles_fail_before_resolution_or_acquisition() {
-    let root = unique_temp_directory("wasm-profile-mismatch");
-    let target = root.join("exact");
-    let shared = root.join("shared");
-    for arguments in [
-        vec!["--profile"],
-        vec!["--profile="],
-        vec!["--release", "--profile=release"],
-        vec!["--profile=dev", "--profile=test"],
-    ] {
-        let spec = WasmBuildSpec::new(&root, &target, &["fixture"])
-            .with_cargo_profile_args(&arguments)
-            .with_cargo_program(root.join("missing-cargo"));
-        for spec in [spec.clone(), spec.with_shared_incremental_target(&shared)] {
-            assert!(
-                matches!(
-                    resolve_cargo_build_inputs(&spec),
-                    Err(WasmBuildError::InvalidSpec { .. })
-                ),
-                "{arguments:?} must fail before resolution",
-            );
-            assert!(
-                matches!(
-                    super::build_wasm_canisters_cached(&spec),
-                    Err(WasmBuildError::InvalidSpec { .. })
-                ),
-                "{arguments:?} must fail before acquisition",
-            );
-            assert!(!target.exists());
-            assert!(!shared.exists());
-        }
-    }
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -1606,7 +1430,7 @@ fn observed_phase_emits_phase_aware_heartbeats() {
             if matches!(
                 event,
                 WasmBuildProgressEvent::Heartbeat {
-                    phase: WasmBuildProgressPhase::ContentHashing,
+                    phase: WasmBuildPhase::ContentHashing,
                     ..
                 }
             ) {
@@ -1618,7 +1442,7 @@ fn observed_phase_emits_phase_aware_heartbeats() {
             WasmBuildProgressConfig::new().with_heartbeat_interval(Duration::from_millis(5)),
             &mut observer,
         );
-        progress.run_phase(WasmBuildProgressPhase::ContentHashing, move || {
+        progress.run_phase(WasmBuildPhase::ContentHashing, move || {
             released
                 .recv_timeout(Duration::from_secs(10))
                 .expect("observer must release the operation on its heartbeat");
@@ -1630,7 +1454,7 @@ fn observed_phase_emits_phase_aware_heartbeats() {
     assert!(events.iter().any(|event| matches!(
         event,
         WasmBuildProgressEvent::Heartbeat {
-            phase: WasmBuildProgressPhase::ContentHashing,
+            phase: WasmBuildPhase::ContentHashing,
             ..
         }
     )));
@@ -1647,7 +1471,7 @@ fn observer_panic_joins_active_phase_worker() {
             if matches!(
                 event,
                 WasmBuildProgressEvent::Heartbeat {
-                    phase: WasmBuildProgressPhase::InputDiscovery,
+                    phase: WasmBuildPhase::InputDiscovery,
                     ..
                 }
             ) {
@@ -1661,7 +1485,7 @@ fn observer_panic_joins_active_phase_worker() {
             WasmBuildProgressConfig::new().with_heartbeat_interval(Duration::from_millis(5)),
             &mut observer,
         );
-        progress.run_phase(WasmBuildProgressPhase::InputDiscovery, move || {
+        progress.run_phase(WasmBuildPhase::InputDiscovery, move || {
             assert_eq!(
                 released.recv_timeout(Duration::from_secs(10)),
                 Err(mpsc::RecvTimeoutError::Disconnected),
@@ -1696,7 +1520,7 @@ fn exact_cache_lock_wait_emits_phase_aware_heartbeats() {
             if matches!(
                 &event,
                 WasmBuildProgressEvent::Heartbeat {
-                    phase: WasmBuildProgressPhase::ExactCacheLock,
+                    phase: WasmBuildPhase::ExactCacheCoordination,
                     ..
                 }
             ) {
@@ -1717,7 +1541,7 @@ fn exact_cache_lock_wait_emits_phase_aware_heartbeats() {
     assert!(events.iter().any(|event| matches!(
         event,
         WasmBuildProgressEvent::Heartbeat {
-            phase: WasmBuildProgressPhase::ExactCacheLock,
+            phase: WasmBuildPhase::ExactCacheCoordination,
             ..
         }
     )));
@@ -1760,7 +1584,7 @@ done
             if matches!(
                 &event,
                 WasmBuildProgressEvent::Heartbeat {
-                    phase: WasmBuildProgressPhase::CargoBuild,
+                    phase: WasmBuildPhase::CargoBuild,
                     ..
                 }
             ) {
@@ -1782,8 +1606,8 @@ done
     for event in &events {
         if let WasmBuildProgressEvent::CargoOutput { stream, bytes } = event {
             match stream {
-                WasmBuildOutputStream::Stdout => stdout.extend_from_slice(bytes),
-                WasmBuildOutputStream::Stderr => stderr.extend_from_slice(bytes),
+                OutputStream::Stdout => stdout.extend_from_slice(bytes),
+                OutputStream::Stderr => stderr.extend_from_slice(bytes),
             }
         }
     }
@@ -1792,7 +1616,7 @@ done
     assert!(events.iter().any(|event| matches!(
         event,
         WasmBuildProgressEvent::Heartbeat {
-            phase: WasmBuildProgressPhase::CargoBuild,
+            phase: WasmBuildPhase::CargoBuild,
             ..
         }
     )));
@@ -1826,8 +1650,8 @@ fn observed_cargo_parallel_streams_preserve_raw_bytes() {
     let mut observer = |event| {
         if let WasmBuildProgressEvent::CargoOutput { stream, bytes } = event {
             match stream {
-                WasmBuildOutputStream::Stdout => forwarded_stdout.extend(bytes),
-                WasmBuildOutputStream::Stderr => forwarded_stderr.extend(bytes),
+                OutputStream::Stdout => forwarded_stdout.extend(bytes),
+                OutputStream::Stderr => forwarded_stderr.extend(bytes),
             }
         }
     };
@@ -1858,7 +1682,7 @@ fn observed_cargo_leader_exit_cleans_descendant_held_pipes_without_eof() {
             let mut output = Vec::new();
             let mut observer = |event| {
                 if let WasmBuildProgressEvent::CargoOutput {
-                    stream: WasmBuildOutputStream::Stdout,
+                    stream: OutputStream::Stdout,
                     bytes,
                 } = event
                 {
@@ -1972,8 +1796,8 @@ fn overflowing_cargo_diagnostics_are_bounded_without_losing_forwarded_output() {
         let mut observer = |event| {
             if let WasmBuildProgressEvent::CargoOutput { stream, bytes } = event {
                 match stream {
-                    WasmBuildOutputStream::Stdout => stdout.extend(bytes),
-                    WasmBuildOutputStream::Stderr => stderr.extend(bytes),
+                    OutputStream::Stdout => stdout.extend(bytes),
+                    OutputStream::Stderr => stderr.extend(bytes),
                 }
             }
         };
@@ -3223,4 +3047,36 @@ fn prepared_reader_counts_are_concurrent_saturating_and_only_for_matches() {
     assert!(state.reuse(&unknown).is_none());
     assert_eq!(state.reader_reuses(), usize::MAX);
     fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn separate_tool_phases_keep_aggregate_identity_timings() {
+    let mut progress = ProgressReporter::silent();
+    progress.record_phase(WasmBuildPhase::CargoIdentity, Duration::from_secs(2));
+    progress.record_phase(WasmBuildPhase::RustcIdentity, Duration::from_secs(3));
+    assert_eq!(
+        progress.failure_timings.input_resolution().tool_identity(),
+        Duration::from_secs(5)
+    );
+    assert_eq!(
+        progress.failure_timings.input_resolution().total(),
+        Duration::from_secs(5)
+    );
+    let error = WasmBuildError::CommandSpawn {
+        phase: WasmBuildPhase::RustcIdentity,
+        program: "missing-rustc".into(),
+        source: std::io::ErrorKind::NotFound.into(),
+    };
+    assert_eq!(
+        progress
+            .failure_details(&error, Duration::from_secs(7))
+            .phase(),
+        WasmBuildPhase::RustcIdentity
+    );
+    assert_eq!(
+        ProgressReporter::silent()
+            .failure_details(&error, Duration::ZERO)
+            .phase(),
+        WasmBuildPhase::RustcIdentity
+    );
 }

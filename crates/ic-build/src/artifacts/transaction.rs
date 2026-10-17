@@ -15,7 +15,7 @@ use ic_host_artifacts::artifact::MatchingWriter;
 use ic_host_fs::owned_directory::{OwnedDirectory, remove_path_if_present};
 
 mod boundaries;
-use boundaries::CargoInputBoundaries;
+use super::inputs::boundaries::CargoInputBoundaries;
 
 use super::{
     cache_fs::{

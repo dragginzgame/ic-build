@@ -95,20 +95,8 @@ pub struct WasmBuildBatchEntry {
 #[non_exhaustive]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum WasmBuildBatchContractError {
-    /// An entry label was empty.
-    EmptyLabel {
-        /// Zero-based position of the invalid entry.
-        index: usize,
-    },
-    /// Two entries used the same label.
-    DuplicateLabel {
-        /// Duplicated caller label.
-        label: String,
-        /// Position where the label first appeared.
-        first_index: usize,
-        /// Position where the label was repeated.
-        duplicate_index: usize,
-    },
+    /// Invalid input labels, rejected before source validation or command effects.
+    Labels(BatchLabelError),
     /// A source mutation invalidated the caller's immutable-source lease.
     SourceLeaseInvalidated,
     /// A prepared snapshot reader requested a specification absent at preparation.
@@ -166,44 +154,28 @@ impl<'guard> WasmBuildSession<'guard> {
         }
     }
 
-    /// Build one sequential collect-all batch using retained immutable inputs.
+    /// Build a collect-all batch with explicit orchestration and optional progress.
+    ///
+    /// Source lease, feature isolation and retention match independent batches.
+    /// Prepared snapshots reject specifications absent during preparation.
     ///
     /// # Errors
-    /// Returns invalid labels or an invalidated source-lease error before work.
-    /// Individual build failures are retained in the returned report.
+    /// Returns invalid labels, an invalidated lease or an unprepared specification
+    /// error before work. Individual build failures remain in the report.
     pub fn build_batch(
         &mut self,
         specs: &[LabeledWasmBuildSpec],
         config: WasmBuildBatchConfig,
+        progress: Option<(
+            WasmBuildProgressConfig,
+            &mut dyn FnMut(WasmBuildBatchProgressEvent),
+        )>,
     ) -> Result<WasmBuildBatchReport, WasmBuildBatchContractError> {
         run_wasm_batch(
             specs,
             config,
             Some(WasmBuildInputReuse::Session(&mut self.state)),
-            None,
-        )
-    }
-
-    /// Build one observed sequential batch using retained immutable inputs.
-    ///
-    /// # Errors
-    /// Returns invalid labels or an invalidated source-lease error before work.
-    /// Individual build failures are retained in the returned report.
-    pub fn build_batch_with_progress<F>(
-        &mut self,
-        specs: &[LabeledWasmBuildSpec],
-        batch_config: WasmBuildBatchConfig,
-        progress_config: WasmBuildProgressConfig,
-        mut observer: F,
-    ) -> Result<WasmBuildBatchReport, WasmBuildBatchContractError>
-    where
-        F: FnMut(WasmBuildBatchProgressEvent),
-    {
-        run_wasm_batch(
-            specs,
-            batch_config,
-            Some(WasmBuildInputReuse::Session(&mut self.state)),
-            Some((progress_config, &mut observer)),
+            progress,
         )
     }
 
@@ -258,49 +230,28 @@ impl<'guard> WasmBuildInputSnapshot<'guard> {
         })
     }
 
-    /// Build one sequential collect-all batch from prepared inputs.
+    /// Build a collect-all batch with explicit orchestration and optional progress.
     ///
-    /// Separate calls may run concurrently. Every exact specification must
-    /// have been supplied to [`Self::prepare_assuming_sources_immutable`].
+    /// Source lease, feature isolation and retention match independent batches.
+    /// Prepared snapshots reject specifications absent during preparation.
     ///
     /// # Errors
     /// Returns invalid labels, an invalidated lease or an unprepared specification
-    /// error before work. Individual build failures are retained in the report.
+    /// error before work. Individual build failures remain in the report.
     pub fn build_batch(
         &self,
         specs: &[LabeledWasmBuildSpec],
         config: WasmBuildBatchConfig,
+        progress: Option<(
+            WasmBuildProgressConfig,
+            &mut dyn FnMut(WasmBuildBatchProgressEvent),
+        )>,
     ) -> Result<WasmBuildBatchReport, WasmBuildBatchContractError> {
         run_wasm_batch(
             specs,
             config,
             Some(WasmBuildInputReuse::Snapshot(&self.state)),
-            None,
-        )
-    }
-
-    /// Build one observed sequential batch from prepared inputs.
-    ///
-    /// Separate calls may run concurrently and use independent observers.
-    ///
-    /// # Errors
-    /// Returns invalid labels, an invalidated lease or an unprepared specification
-    /// error before work. Individual build failures are retained in the report.
-    pub fn build_batch_with_progress<F>(
-        &self,
-        specs: &[LabeledWasmBuildSpec],
-        batch_config: WasmBuildBatchConfig,
-        progress_config: WasmBuildProgressConfig,
-        mut observer: F,
-    ) -> Result<WasmBuildBatchReport, WasmBuildBatchContractError>
-    where
-        F: FnMut(WasmBuildBatchProgressEvent),
-    {
-        run_wasm_batch(
-            specs,
-            batch_config,
-            Some(WasmBuildInputReuse::Snapshot(&self.state)),
-            Some((progress_config, &mut observer)),
+            progress,
         )
     }
 
@@ -697,6 +648,7 @@ impl std::fmt::Display for WasmBuildBatchReport {
 
 /// Build every Wasm specification as an independent Cargo invocation.
 ///
+/// Pass explicit batch configuration and optional progress reporting.
 /// Specifications run sequentially and every result is retained. Each entry
 /// keeps its own package set, profile arguments, feature resolution,
 /// fingerprint, locks, and cache policy. Packages are never combined into one
@@ -707,72 +659,13 @@ impl std::fmt::Display for WasmBuildBatchReport {
 /// Individual build failures are retained in the returned report.
 pub fn build_wasm_canisters_cached_batch(
     specs: &[LabeledWasmBuildSpec],
-) -> Result<WasmBuildBatchReport, WasmBuildBatchContractError> {
-    build_wasm_canisters_cached_batch_with_config(specs, WasmBuildBatchConfig::new())
-}
-
-/// Build an independent Wasm batch with shared batch orchestration.
-///
-/// Batch-owned maintenance is attached only to the first specification for
-/// each distinct configured shared-target path. Isolated specifications are
-/// unaffected. An entry mixing batch-owned and per-spec integrated maintenance
-/// reports an indexed error without preventing later entries from running.
-///
-/// # Errors
-/// Returns a contract error for an empty or duplicate label before any work.
-/// Individual build failures are retained in the returned report.
-pub fn build_wasm_canisters_cached_batch_with_config(
-    specs: &[LabeledWasmBuildSpec],
     config: WasmBuildBatchConfig,
+    progress: Option<(
+        WasmBuildProgressConfig,
+        &mut dyn FnMut(WasmBuildBatchProgressEvent),
+    )>,
 ) -> Result<WasmBuildBatchReport, WasmBuildBatchContractError> {
-    run_wasm_batch(specs, config, None, None)
-}
-
-/// Build an independent Wasm batch while forwarding structured progress.
-///
-/// The same observation configuration is applied to every entry. Batch events
-/// identify the originating specification without altering the standalone
-/// build semantics.
-///
-/// # Errors
-/// Returns a contract error for an empty or duplicate label before any work.
-/// Individual build failures are retained in the returned report.
-pub fn build_wasm_canisters_cached_batch_with_progress<F>(
-    specs: &[LabeledWasmBuildSpec],
-    config: WasmBuildProgressConfig,
-    observer: F,
-) -> Result<WasmBuildBatchReport, WasmBuildBatchContractError>
-where
-    F: FnMut(WasmBuildBatchProgressEvent),
-{
-    build_wasm_canisters_cached_batch_with_config_and_progress(
-        specs,
-        WasmBuildBatchConfig::new(),
-        config,
-        observer,
-    )
-}
-
-/// Build a configured independent Wasm batch while forwarding structured progress.
-///
-/// # Errors
-/// Returns a contract error for an empty or duplicate label before any work.
-/// Individual build failures are retained in the returned report.
-pub fn build_wasm_canisters_cached_batch_with_config_and_progress<F>(
-    specs: &[LabeledWasmBuildSpec],
-    batch_config: WasmBuildBatchConfig,
-    progress_config: WasmBuildProgressConfig,
-    mut observer: F,
-) -> Result<WasmBuildBatchReport, WasmBuildBatchContractError>
-where
-    F: FnMut(WasmBuildBatchProgressEvent),
-{
-    run_wasm_batch(
-        specs,
-        batch_config,
-        None,
-        Some((progress_config, &mut observer)),
-    )
+    run_wasm_batch(specs, config, None, progress)
 }
 
 fn run_wasm_batch(
@@ -784,7 +677,8 @@ fn run_wasm_batch(
         &mut dyn FnMut(WasmBuildBatchProgressEvent),
     )>,
 ) -> Result<WasmBuildBatchReport, WasmBuildBatchContractError> {
-    validate_batch_labels(specs)?;
+    validate_labels(specs.iter().map(LabeledWasmBuildSpec::label))
+        .map_err(WasmBuildBatchContractError::Labels)?;
     validate_input_reuse(specs, reuse.as_ref())?;
     let count = specs.len();
     let mut resolver =
@@ -866,24 +760,6 @@ where
     }
 }
 
-fn validate_batch_labels(
-    specs: &[LabeledWasmBuildSpec],
-) -> Result<(), WasmBuildBatchContractError> {
-    validate_labels(specs.iter().map(|labeled| labeled.label.as_str())).map_err(|error| match error
-    {
-        BatchLabelError::Empty { index } => WasmBuildBatchContractError::EmptyLabel { index },
-        BatchLabelError::Duplicate {
-            label,
-            first_index,
-            duplicate_index,
-        } => WasmBuildBatchContractError::DuplicateLabel {
-            label,
-            first_index,
-            duplicate_index,
-        },
-    })
-}
-
 fn validate_input_reuse(
     specs: &[LabeledWasmBuildSpec],
     reuse: Option<&WasmBuildInputReuse<'_>>,
@@ -961,17 +837,7 @@ fn batch_maintenance_ownership_error() -> WasmBuildError {
 impl std::fmt::Display for WasmBuildBatchContractError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::EmptyLabel { index } => {
-                write!(formatter, "Wasm batch label at index {index} is empty")
-            }
-            Self::DuplicateLabel {
-                label,
-                first_index,
-                duplicate_index,
-            } => write!(
-                formatter,
-                "Wasm batch label {label:?} at index {duplicate_index} duplicates index {first_index}",
-            ),
+            Self::Labels(source) => write!(formatter, "Wasm batch {source}"),
             Self::SourceLeaseInvalidated => formatter
                 .write_str("Wasm build source lease was invalidated by a detected input mutation"),
             Self::SpecificationNotPrepared { index, label } => write!(
@@ -982,7 +848,14 @@ impl std::fmt::Display for WasmBuildBatchContractError {
     }
 }
 
-impl std::error::Error for WasmBuildBatchContractError {}
+impl std::error::Error for WasmBuildBatchContractError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Labels(source) => Some(source),
+            _ => None,
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests;

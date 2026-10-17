@@ -33,26 +33,6 @@ pub struct ArtifactCacheBatchEntry<E> {
     entry_elapsed: Duration,
 }
 
-/// Structural error that prevents a labeled artifact batch from starting.
-#[non_exhaustive]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ArtifactCacheBatchContractError {
-    /// An entry label was empty.
-    EmptyLabel {
-        /// Zero-based position of the invalid entry.
-        index: usize,
-    },
-    /// Two entries used the same label.
-    DuplicateLabel {
-        /// Duplicated caller label.
-        label: String,
-        /// Position where the label first appeared.
-        first_index: usize,
-        /// Position where the label was repeated.
-        duplicate_index: usize,
-    },
-}
-
 /// Primary phase in which a generic artifact batch entry failed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ArtifactCacheBatchFailurePhase {
@@ -395,11 +375,11 @@ impl<E> std::fmt::Display for ArtifactCacheBatchReport<E> {
 pub fn build_artifact_caches_batch<E, F>(
     specs: &[LabeledArtifactCacheSpec],
     mut populate: F,
-) -> Result<ArtifactCacheBatchReport<E>, ArtifactCacheBatchContractError>
+) -> Result<ArtifactCacheBatchReport<E>, BatchLabelError>
 where
     F: FnMut(&str, &ArtifactBuildTransaction) -> Result<(), E>,
 {
-    validate_batch_labels(specs)?;
+    validate_labels(specs.iter().map(LabeledArtifactCacheSpec::label))?;
     let started = Instant::now();
     let mut entries = Vec::with_capacity(specs.len());
     for (index, labeled) in specs.iter().enumerate() {
@@ -471,44 +451,6 @@ fn build_artifact_cache_entry<E>(
         entry_elapsed,
     }
 }
-
-fn validate_batch_labels(
-    specs: &[LabeledArtifactCacheSpec],
-) -> Result<(), ArtifactCacheBatchContractError> {
-    validate_labels(specs.iter().map(|labeled| labeled.label.as_str())).map_err(|error| match error
-    {
-        BatchLabelError::Empty { index } => ArtifactCacheBatchContractError::EmptyLabel { index },
-        BatchLabelError::Duplicate {
-            label,
-            first_index,
-            duplicate_index,
-        } => ArtifactCacheBatchContractError::DuplicateLabel {
-            label,
-            first_index,
-            duplicate_index,
-        },
-    })
-}
-
-impl std::fmt::Display for ArtifactCacheBatchContractError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::EmptyLabel { index } => {
-                write!(formatter, "artifact batch label at index {index} is empty")
-            }
-            Self::DuplicateLabel {
-                label,
-                first_index,
-                duplicate_index,
-            } => write!(
-                formatter,
-                "artifact batch label {label:?} at index {duplicate_index} duplicates index {first_index}",
-            ),
-        }
-    }
-}
-
-impl std::error::Error for ArtifactCacheBatchContractError {}
 
 impl std::fmt::Display for ArtifactCacheBatchFailurePhase {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

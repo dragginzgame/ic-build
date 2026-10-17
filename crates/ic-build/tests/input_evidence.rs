@@ -52,8 +52,7 @@ fn real_cargo_depfiles_retain_external_include_evidence() {
         InputEvidenceSpec::with_input,
     );
     let before = InputEvidence::capture(&spec).unwrap();
-    let after =
-        InputEvidence::capture(&InputEvidenceSpec::new(b"caller-identity".as_slice())).unwrap();
+    let after = InputEvidenceSpec::new(b"caller-identity".as_slice());
     before.validate_after(&after).unwrap();
     fs::write(&external, b"changed").unwrap();
     assert!(matches!(before.validate_after(&after),

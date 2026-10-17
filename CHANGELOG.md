@@ -3,6 +3,40 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.14.0]
+
+- **Breaking:** move `CargoFeatureSelection` to `cargo::selection` and keep
+  `all_features` inside it. Observations and builds share one feature encoder;
+  typed recipe argument fingerprint bytes remain unchanged. No old-path alias.
+- **Breaking:** artifact batches return `batch::BatchLabelError` directly; Wasm
+  contract errors wrap it in `Labels`. Preserve early rejection and duplicate
+  indices; Cargo grouping now retains the same typed label error.
+- **Breaking:** progress, command errors and failure details use one
+  `WasmBuildPhase`. Remove the progress/failure phase enums and their translation;
+  distinguish Cargo/rustc identity failures while retaining aggregate timings.
+
+- **Breaking:** replace raw Cargo recipe arguments with typed `CargoSelection`,
+  shared by metadata and native/Wasm build commands. Use `with_cargo_selection`
+  or native `selection`; package, target and output selection remain structural.
+  Deterministic argument rendering can change keys for differently spelled old
+  selections; retained formats, artifacts and default recipe keys remain intact.
+- **Breaking:** Cargo output progress events use Host `OutputStream` directly;
+  remove the duplicate `WasmBuildOutputStream` type without an alias.
+- Share per-pass canonical input paths and directory facts between transactional
+  and shared-target boundary validation, preserving their separate policies,
+  observation order and pre-effect failures.
+
+- **Breaking:** validate standalone input evidence from a post-work specification
+  and use the returned validated inventory. Original and newly selected roots
+  share one observation; dropped inputs still receive checks and digest encoding
+  remains unchanged. Do not construct a separate post-work capture first
+  ([Canic #530 — Converge build-input reuse](https://github.com/dragginzgame/canic/issues/530)).
+- **Breaking:** use one Wasm batch entrypoint per execution mode, passing explicit
+  batch configuration and optional progress reporting. Remove the configuration
+  and progress wrapper variants without aliases; ordering, maintenance, source
+  leases and retained successes remain unchanged
+  ([#54 — Land batch report cuts](https://github.com/dragginzgame/ic-build/issues/54)).
+
 ## [0.13.0] - 2026-10-17
 
 - **Breaking:** align exposed Host types with the selected Host 0.25 family.

@@ -64,6 +64,7 @@ pub mod candid;
 mod cache_fs;
 mod digest;
 mod inputs;
+mod phase;
 mod staging;
 mod transaction;
 mod transaction_batch;
@@ -82,6 +83,7 @@ pub use inputs::{
     InputEvidence, InputEvidenceError, InputEvidenceSpec, InputEvidenceValue,
     discover_cargo_depfile_inputs, parse_cargo_depfile, read_cargo_depfile_inputs,
 };
+pub use phase::WasmBuildPhase;
 pub use staging::{
     ArtifactStagingDirectory, CaptureRetentionError, CapturedArtifact, produce_and_retain_artifact,
 };
@@ -91,31 +93,26 @@ pub use transaction::{
     ArtifactOutputValidation, prepare_artifact_cache, prune_artifact_cache,
 };
 pub use transaction_batch::{
-    ArtifactCacheBatchContractError, ArtifactCacheBatchEntry, ArtifactCacheBatchFailure,
-    ArtifactCacheBatchFailurePhase, ArtifactCacheBatchFailureTimings, ArtifactCacheBatchMetrics,
-    ArtifactCacheBatchReport, LabeledArtifactCacheSpec, build_artifact_caches_batch,
+    ArtifactCacheBatchEntry, ArtifactCacheBatchFailure, ArtifactCacheBatchFailurePhase,
+    ArtifactCacheBatchFailureTimings, ArtifactCacheBatchMetrics, ArtifactCacheBatchReport,
+    LabeledArtifactCacheSpec, build_artifact_caches_batch,
 };
 pub use wasm_batch::{
     LabeledWasmBuildSpec, WasmBuildBatchConfig, WasmBuildBatchContractError, WasmBuildBatchEntry,
     WasmBuildBatchMetrics, WasmBuildBatchProgressEvent, WasmBuildBatchReport,
     WasmBuildInputSnapshot, WasmBuildInputSnapshotMetrics, WasmBuildSession,
     WasmBuildSessionMetrics, build_wasm_canisters_cached_batch,
-    build_wasm_canisters_cached_batch_with_config,
-    build_wasm_canisters_cached_batch_with_config_and_progress,
-    build_wasm_canisters_cached_batch_with_progress,
 };
 pub use wasm_cache::{
     CargoBuildInput, CargoInputProbePolicy, ResolvedCargoBuildInputs,
     SharedIncrementalTargetInspection, SharedIncrementalTargetMaintenance,
     SharedIncrementalTargetMaintenanceConfig, SharedIncrementalTargetMaintenanceFailureMode,
     SharedIncrementalTargetMaintenanceOutcome, SharedIncrementalTargetPrunePolicy,
-    WasmBuildCacheMode, WasmBuildError, WasmBuildFailureDetails, WasmBuildFailurePhase,
-    WasmBuildFailureTimings, WasmBuildOutcome, WasmBuildOutputStream, WasmBuildPhase,
-    WasmBuildProgressConfig, WasmBuildProgressEvent, WasmBuildProgressOutcome,
-    WasmBuildProgressPhase, WasmBuildRecord, WasmBuildSpec, WasmBuildTimings,
-    WasmInputResolutionTimings, build_wasm_canisters_cached,
-    build_wasm_canisters_cached_with_progress, inspect_shared_incremental_target,
-    maintain_shared_incremental_target, maintain_shared_incremental_target_at_most_every,
-    prune_wasm_build_cache, resolve_cargo_build_inputs,
-    resolve_cargo_build_inputs_with_probe_policy,
+    WasmBuildCacheMode, WasmBuildError, WasmBuildFailureDetails, WasmBuildFailureTimings,
+    WasmBuildOutcome, WasmBuildProgressConfig, WasmBuildProgressEvent, WasmBuildProgressOutcome,
+    WasmBuildRecord, WasmBuildSpec, WasmBuildTimings, WasmInputResolutionTimings,
+    build_wasm_canisters_cached, build_wasm_canisters_cached_with_progress,
+    inspect_shared_incremental_target, maintain_shared_incremental_target,
+    maintain_shared_incremental_target_at_most_every, prune_wasm_build_cache,
+    resolve_cargo_build_inputs, resolve_cargo_build_inputs_with_probe_policy,
 };

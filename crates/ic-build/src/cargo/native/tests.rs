@@ -6,7 +6,7 @@ fn spec() -> NativeExecutableSpec<'static> {
         package: "fixture",
         target_name: "worker",
         target_kind: "example",
-        build_args: &[],
+        selection: CargoSelection::default(),
         max_message_bytes: 4096,
     }
 }
@@ -173,31 +173,22 @@ fn invalid_selection_refuses_before_the_command_factory() {
             .is_err()
         );
     }
-    for arguments in [
-        &["--target-dir", "elsewhere"][..],
-        &["--manifest-path=elsewhere/Cargo.toml"],
-        &["-pother"],
-        &["--example=other"],
-        &["--target=wasm32-unknown-unknown"],
-        &["--config=elsewhere.toml"],
-        &["--message-format=human"],
-        &["--lib"],
-        &["--help"],
-        &["--profile", ""],
-    ] {
-        let arguments = arguments.iter().map(OsString::from).collect::<Vec<_>>();
+    for profile in ["", "..", "nested/profile", "/absolute"] {
         let invalid = NativeExecutableSpec {
-            build_args: &arguments,
+            selection: CargoSelection {
+                profile: Some(profile.into()),
+                ..Default::default()
+            },
             ..spec()
         };
         assert!(
             build_native_executable(
                 &invalid,
-                || panic!("recipe overrides have no command effects"),
+                || panic!("invalid profile has no command effects"),
                 Vec::new(),
                 || Ok(()),
                 OwnedChild::spawn_direct,
-                || false,
+                || false
             )
             .is_err()
         );

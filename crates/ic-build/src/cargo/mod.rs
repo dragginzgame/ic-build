@@ -16,9 +16,9 @@ pub(crate) mod messages;
 pub mod native;
 pub mod observation;
 pub mod packages;
-pub(crate) mod selection;
+pub mod selection;
 
-use crate::batch::{BatchLabelError, validate_labels};
+use crate::batch::validate_labels;
 use ic_host_process::tool::OutputLimits;
 use std::{collections::BTreeMap, path::Path, process::Command};
 
@@ -41,14 +41,7 @@ pub fn compatible_package_groups(
     limits: OutputLimits,
     mut cargo_command: impl FnMut() -> Command,
 ) -> Result<Vec<Vec<String>>, Box<dyn std::error::Error>> {
-    validate_labels(packages.iter().map(String::as_str)).map_err(|error| match error {
-        BatchLabelError::Empty { index } => {
-            format!("empty Cargo package input at index {index}")
-        }
-        BatchLabelError::Duplicate { label, first_index, duplicate_index } => {
-            format!("duplicate Cargo package input {label:?} at indices {first_index} and {duplicate_index}")
-        }
-    })?;
+    validate_labels(packages.iter().map(String::as_str))?;
     let mut isolated = BTreeMap::new();
     let mut groups: Vec<Vec<String>> = Vec::new();
     for package in packages {
@@ -97,7 +90,7 @@ fn resolved_trees(
     cargo_command: &mut impl FnMut() -> Command,
 ) -> Result<BTreeMap<String, String>, Box<dyn std::error::Error>> {
     let manifest = workspace.join("Cargo.toml");
-    let features = observation::CargoFeatureSelection::default();
+    let features = selection::CargoFeatureSelection::default();
     let tree = observation::observe_tree(
         &observation::CargoTreeSpec {
             manifest_path: &manifest,

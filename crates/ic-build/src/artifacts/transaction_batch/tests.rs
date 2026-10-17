@@ -1,8 +1,9 @@
+use crate::batch::BatchLabelError;
 use std::{cell::Cell, fs};
 
 use super::{
-    ArtifactCacheBatchContractError, ArtifactCacheBatchEntry, ArtifactCacheBatchFailure,
-    ArtifactCacheBatchFailurePhase, LabeledArtifactCacheSpec, build_artifact_caches_batch,
+    ArtifactCacheBatchEntry, ArtifactCacheBatchFailure, ArtifactCacheBatchFailurePhase,
+    LabeledArtifactCacheSpec, build_artifact_caches_batch,
 };
 use crate::artifacts::{
     ArtifactCacheOutcome, ArtifactCachePreparation, ArtifactCacheSpec, prepare_artifact_cache,
@@ -321,10 +322,7 @@ fn batch_rejects_empty_or_duplicate_labels_before_work() {
         Ok::<(), &'static str>(())
     })
     .expect_err("empty label must fail");
-    assert_eq!(
-        error,
-        ArtifactCacheBatchContractError::EmptyLabel { index: 0 }
-    );
+    assert_eq!(error, BatchLabelError::Empty { index: 0 });
     assert!(!callback_ran.get());
 
     let duplicate = [
@@ -343,7 +341,7 @@ fn batch_rejects_empty_or_duplicate_labels_before_work() {
     .expect_err("duplicate label must fail");
     assert_eq!(
         error,
-        ArtifactCacheBatchContractError::DuplicateLabel {
+        BatchLabelError::Duplicate {
             label: "same".to_owned(),
             first_index: 0,
             duplicate_index: 1,

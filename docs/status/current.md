@@ -1,5 +1,148 @@
 # Current handoff
 
+## Canonical feature selection, label errors and phases — pending 0.14
+
+The current working tree over `ba1cff6`, including the incoming 0.14 cuts, now
+owns `CargoFeatureSelection` in `cargo::selection`. Its `all_features` flag joins
+explicit names and default-feature selection there; observations and builds use
+one encoder. No old observation-path alias remains. The existing typed recipe
+argument bytes are preserved, including flag order and empty-feature rendering.
+Real Cargo metadata and tree cases qualify explicit and all-feature graphs.
+
+`batch::BatchLabelError` is the canonical typed empty/duplicate label failure.
+Artifact batches return it directly; Wasm contract errors use `Labels(error)`
+and expose that value through `Error::source`. Cargo grouping returns the same
+downcastable error. Its generic diagnostic wording replaces Cargo/artifact-specific
+wording; Wasm keeps its contextual prefix. Labels still reject before callbacks,
+progress, source validation or command effects. No lease/preparation error is
+collapsed into a label failure, and individual failures retain their batch entries.
+
+`artifacts::WasmBuildPhase`, owned in `artifacts/phase.rs`, now serves command
+errors, progress heartbeats and failure details. Progress/failure enum aliases and
+translation are absent. Exact/shared lock phases use `ExactCacheCoordination` and
+`SharedTargetCoordination`. Identity failures retain `CargoIdentity` or
+`RustcIdentity`; both still contribute to the aggregate `tool_identity` timing.
+Specification, publication, maintenance and cleanup phases remain distinct.
+
+Actual Rust 1.91 passes all-target/all-feature compilation, strict Clippy,
+warning-denied rustdoc, 43 Cargo cases, 13 Wasm-batch cases, six artifact-batch
+cases, 64 Wasm-cache cases, 24 real native/Wasm integration tests and both README
+examples. Synthetic producer failure/race cases supplement actual Cargo builds.
+The new regressions cover distinct tool phases in silent/observed batches,
+aggregate timing preservation and typed label causes. Formatting, documentation
+links and the unchanged shared snapshot are checked separately. Full release
+gates and native macOS qualification remain unrun.
+
+[Build #54](https://github.com/dragginzgame/ic-build/issues/54) records the local
+cut; [Canic #530](https://github.com/dragginzgame/canic/issues/530),
+[IcyDB #307](https://github.com/dragginzgame/icydb/issues/307) and
+[Testkit #94](https://github.com/dragginzgame/ic-testkit/issues/94) retain consumer
+adoption. Their normal checkouts remain unchanged. Pending notes stay 0.14.0;
+own version stays 0.13.0, and the incoming registry Host 0.25.1 lock, index and refs
+remain untouched. No upstream Host API or retained format/namespace changed.
+Before-images and focused logs: `/tmp/ic-build-model-cuts-20261017/`.
+
+## Typed Cargo recipes, direct Host streams and shared boundary facts — pending 0.14
+
+The current working tree over `ba1cff6`, including the incoming 0.14 evidence and
+batch cuts, now replaces the partial Cargo CLI parser with public
+`cargo::selection::CargoSelection`. Wasm recipes use `with_cargo_selection`;
+native executable recipes use `selection`. Metadata and builds render the same
+feature/lock/network choices. Reuse `CargoFeatureSelection`; represent frozen
+policy with both `locked` and `offline`. Profiles remain explicit names, while
+package, target, output and message-format choices stay structural. Native builds
+apply mandatory locked operation before rendering, preventing duplicate flags.
+There is no raw-argument compatibility path. Default keys and canonical
+`--release --locked` argument bytes remain unchanged; normalization of other old
+spellings/orderings may select new keys, without deleting retained entries.
+
+Cargo output progress now carries `ic_host_process::tool::OutputStream` directly.
+The per-validation fact cache lives in `artifacts/inputs/boundaries.rs`; transaction
+exclusion-first lazy policy and shared-target eager input admission remain separate.
+Both retain their original typed errors and pre-effect ordering. Shared-target
+validation reuses the admitted directory types, retaining original input spellings
+when constructing generated-directory candidates and observing every candidate.
+
+Actual Rust 1.91 passes all-target/all-feature compilation and strict Clippy,
+warning-denied rustdoc, 63 Wasm-cache units, typed/native/boundary regressions,
+the generated-build-script observation case, 24 affected integration tests and both
+README examples. Real native and Wasm Cargo fixtures complement synthetic producer
+failure/race coverage. The lock stays byte-identical to the incoming Host 0.25.1
+selection. One generated-source fixture now uses positional formatting to avoid
+Rust 1.91 Clippy misreading its nested captured-format braces; behavior is unchanged.
+Full release gates and native macOS qualification were not run.
+
+Canic's recipe adapters, IcyDB's testing build adapter and Testkit's benchmark
+recipes still use the old published API. Migrate after 0.14 publication through
+[Canic #530](https://github.com/dragginzgame/canic/issues/530),
+[IcyDB #307](https://github.com/dragginzgame/icydb/issues/307) and
+[Testkit #94](https://github.com/dragginzgame/ic-testkit/issues/94).
+[Build #47](https://github.com/dragginzgame/ic-build/issues/47) records this local
+boundary consolidation and the still separate Host publication work. Earlier
+frozen Host caller patches below remain receipts for their recorded source;
+these new imports change their application context, so refresh and requalify them
+before registry adoption. No pending Host API is imported into normal Build.
+The incoming source/index/refs, own version and lock are preserved. Before-images
+and focused logs: `/tmp/ic-build-typed-selection-20261017/`.
+
+## Fresh input validation and one batch API — pending 0.14
+
+Over `ba1cff6` and the incoming registry Host 0.25.1 lock, input validation now
+accepts a post-work specification, observes original and selected roots together,
+and returns the selected inventory. Already observed roots are not rehashed;
+projection preserves existing path/value and digest bytes, including missing
+inputs and explicit roots beneath excluded child names. Dropped original roots
+still receive validation and newly discovered bytes gain no retroactive authority.
+Independent batches, sessions and prepared snapshots each retain one entrypoint
+with explicit configuration and optional progress. Five wrapper variants retire
+without aliases. Existing callers and the API guide migrate together.
+
+Actual Rust 1.91 passes all-target/all-feature compilation, 20 input and 12 batch
+units and 28 affected integration parents; strict current Clippy and floor
+warning-denied rustdoc pass. Links, snapshot and changed-file formatting pass.
+Source custody, release admission, diagnostics and feature isolation remain with
+their existing owners. [Canic #530 — Converge build-input reuse](https://github.com/dragginzgame/canic/issues/530#issuecomment-6233192667)
+records the post-publication migration; normal Canic is unchanged. These public
+cuts require a new pre-1.0 minor, so the notes select 0.14.0; own versions stay
+0.13.0. Full release/native macOS and published consumer acceptance remain separate.
+
+[Host PR #179](https://github.com/dragginzgame/ic-host-tooling/pull/179),
+`a29281c`, adds single-attempt owned-directory cleanup from public `4086a17`.
+It complements the existing allocator in PR #135 (`b1d7c71`), without a second
+allocator implementation. The frozen Build staging-wrapper deletion passes 18
+custody units, six Cargo integration parents, floor compilation and strict lint;
+Host's floor passes 14 directory-filter cases as an ordinary user. The patch and
+publication boundary are attached to [Build #45 — Directory allocation](https://github.com/dragginzgame/ic-build/issues/45#issuecomment-6233192457).
+Normal Build retains its published staging API until both Host APIs are published;
+no dependency override or guessed minimum is installed. The incoming lock and
+root index/refs remain untouched. Logs and before-images:
+`/tmp/ic-build-nextcuts-20261017/`.
+
+## Combined Host caller cuts — source qualification, not registry adoption
+
+The combined deletion over Build `ba1cff6` uses upstream shared descriptor
+retention, logical directory size and newline framing directly. Cargo JSON/text
+and EOF policy stay local. The candidate passes read-only apply checking against
+normal source; [Build #54 — Retire the local shared-lock guard](https://github.com/dragginzgame/ic-build/issues/54#issuecomment-6232843798)
+contains the full patch and source receipt, also covering #42 and #47.
+
+The isolated Host source is public `4086a17` plus the producer changes from open
+PRs #173 (`700b40b`), #174 (`74ef1db`) and #172 (`2de898dd`). Actual Build
+Rust 1.91 passes all-target/all-feature compilation, 16 focused units and seven
+integration parents with explicit workers. Strict current Build and affected
+Host Clippy pass. Host Rust 1.88 passes two size, eight lock and six framing units.
+Synthetic Wasm producers qualify orchestration, not native Wasm compilation.
+
+All 48 non-Host lock entries remain exact in qualification; only the three
+coherent Host source identities change temporarily. Normal source, manifests,
+index/refs and the incoming registry 0.25.1 lock remain unchanged. The selected
+registry packages lack these APIs: reviewed integration/publication, actual first
+published FS/Process minima and normal registry caller qualification still gate
+activation. No pending imports or source overrides are installed in normal Build.
+Full/native macOS validation and consumer migration remain separate. Evidence:
+`/tmp/ic-build-hardcuts-followup-20261017/`; caller patch SHA-256:
+`89bdfdb5f2fcd1bbcaa3c5b60b29cf2d9ea01ace005a3dd69d4ef061ea460849`.
+
 ## Host 0.25 admission caller repair — pending 0.13
 
 The incoming `2f4783a` selects registry Host 0.25.0 but retains five old tool

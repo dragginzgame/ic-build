@@ -1,7 +1,8 @@
+use super::phase::WasmBuildPhase;
 use crate::cargo::{
     messages::{MessageDecoder, artifact_matches},
     observation::schema,
-    selection::{CargoSelection, SelectionFlag},
+    selection::CargoSelection,
 };
 use ic_host_fs::owned_directory::{OwnedDirectory, remove_path_if_present};
 use ic_host_process::{
@@ -169,36 +170,6 @@ pub struct WasmInputResolutionTimings {
     total: Duration,
 }
 
-/// Primary phase in which one cacheable Wasm acquisition failed.
-#[non_exhaustive]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum WasmBuildFailurePhase {
-    /// The caller supplied an invalid build specification.
-    Specification,
-    /// Waiting for the exact-cache lock or preparing its directory.
-    ExactCacheCoordination,
-    /// Reading Cargo or rustc identity.
-    ToolIdentity,
-    /// Running or decoding Cargo metadata.
-    CargoMetadata,
-    /// Discovering selected source and configuration inputs.
-    InputDiscovery,
-    /// Hashing selected and conservative input contents.
-    ContentHashing,
-    /// Waiting for or preparing a shared incremental target.
-    SharedTargetCoordination,
-    /// Applying configured shared-target maintenance.
-    SharedTargetMaintenance,
-    /// Executing Cargo for the selected Wasm packages.
-    CargoBuild,
-    /// Validating, copying, stamping, or materializing Wasm artifacts.
-    ArtifactPublication,
-    /// Applying exact-cache retention after a successful acquisition.
-    ExactCacheMaintenance,
-    /// Removing an incomplete exact-cache entry after failure.
-    Cleanup,
-}
-
 /// Partial phase timings retained when a Wasm acquisition fails.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct WasmBuildFailureTimings {
@@ -216,7 +187,7 @@ pub struct WasmBuildFailureTimings {
 /// Structured phase and partial timings for one failed Wasm entry.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WasmBuildFailureDetails {
-    phase: WasmBuildFailurePhase,
+    phase: WasmBuildPhase,
     timings: WasmBuildFailureTimings,
 }
 
@@ -255,8 +226,7 @@ pub(super) struct WasmBuildBatchInputResolver<'a, 'session> {
     specs: Vec<&'a WasmBuildSpec>,
     groups: Vec<BatchResolutionGroup>,
     group_by_index: Vec<usize>,
-    resolved:
-        Vec<Option<Result<ResolvedCargoBuildInputs, (WasmBuildFailurePhase, WasmBuildError)>>>,
+    resolved: Vec<Option<Result<ResolvedCargoBuildInputs, (WasmBuildPhase, WasmBuildError)>>>,
     reuse: Option<WasmBuildInputReuse<'session>>,
     metrics: WasmBuildBatchInputMetrics,
 }
@@ -312,7 +282,7 @@ struct BatchResolutionKey<'a> {
     workspace_root: &'a Path,
     cargo_program: &'a OsStr,
     rustc_program: &'a OsStr,
-    metadata_arguments: &'a [OsString],
+    metadata_arguments: Vec<OsString>,
     environment: BTreeMap<OsString, Option<OsString>>,
 }
 
@@ -393,15 +363,6 @@ pub struct WasmBuildProgressConfig {
     emit_cargo_output: bool,
 }
 
-/// Raw child-process stream attached to a Cargo progress event.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum WasmBuildOutputStream {
-    /// Cargo standard output.
-    Stdout,
-    /// Cargo standard error.
-    Stderr,
-}
-
 /// Final cache state reported by a successful observed build.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WasmBuildProgressOutcome {
@@ -409,34 +370,6 @@ pub enum WasmBuildProgressOutcome {
     Built,
     /// Exact artifacts were reused without Cargo.
     Reused,
-}
-
-/// Potentially long phase of one observed Wasm-cache acquisition.
-#[non_exhaustive]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum WasmBuildProgressPhase {
-    /// Waiting for exclusive ownership of the exact artifact cache.
-    ExactCacheLock,
-    /// Reading the Cargo executable identity.
-    CargoIdentity,
-    /// Reading the Rust compiler identity.
-    RustcIdentity,
-    /// Resolving Cargo's package graph.
-    CargoMetadata,
-    /// Discovering local source and configuration inputs.
-    InputDiscovery,
-    /// Hashing exact source and configuration contents.
-    ContentHashing,
-    /// Waiting for exclusive ownership of a shared incremental Cargo target.
-    SharedTargetLock,
-    /// Inspecting or clearing a shared incremental Cargo target.
-    SharedTargetMaintenance,
-    /// Compiling the selected Wasm packages.
-    CargoBuild,
-    /// Validating, copying, hashing, or stamping exact artifacts.
-    ArtifactPublication,
-    /// Applying retention to immutable exact-cache entries.
-    ExactCacheMaintenance,
 }
 
 /// Structured progress emitted by an observed cacheable Wasm build.
@@ -494,14 +427,14 @@ pub enum WasmBuildProgressEvent {
     /// One raw Cargo output chunk was read without lossy UTF-8 conversion.
     CargoOutput {
         /// Child-process stream that produced the bytes.
-        stream: WasmBuildOutputStream,
+        stream: OutputStream,
         /// Raw output bytes in per-stream read order.
         bytes: Vec<u8>,
     },
     /// The current acquisition phase remained active without another event.
     Heartbeat {
         /// Phase that is still making or waiting for progress.
-        phase: WasmBuildProgressPhase,
+        phase: WasmBuildPhase,
         /// Time elapsed since this phase started.
         elapsed: Duration,
     },
@@ -585,7 +518,7 @@ struct ProgressReporter<'a> {
     config: WasmBuildProgressConfig,
     observer: Option<&'a mut dyn FnMut(WasmBuildProgressEvent)>,
     last_event: Instant,
-    failure_phase: Option<WasmBuildFailurePhase>,
+    failure_phase: Option<WasmBuildPhase>,
     failure_timings: WasmBuildFailureTimings,
 }
 
@@ -633,23 +566,23 @@ impl ProgressReporter<'_> {
             .map(|interval| interval.saturating_sub(self.last_event.elapsed()))
     }
 
-    fn emit_heartbeat(&mut self, phase: WasmBuildProgressPhase, elapsed: Duration) {
+    fn emit_heartbeat(&mut self, phase: WasmBuildPhase, elapsed: Duration) {
         self.emit(WasmBuildProgressEvent::Heartbeat { phase, elapsed });
     }
 
-    fn emit_heartbeat_if_due(&mut self, phase: WasmBuildProgressPhase, elapsed: Duration) {
+    fn emit_heartbeat_if_due(&mut self, phase: WasmBuildPhase, elapsed: Duration) {
         if self.heartbeat_due_in() == Some(Duration::ZERO) {
             self.emit_heartbeat(phase, elapsed);
         }
     }
 
-    fn run_phase<T, F>(&mut self, phase: WasmBuildProgressPhase, operation: F) -> T
+    fn run_phase<T, F>(&mut self, phase: WasmBuildPhase, operation: F) -> T
     where
         T: Send,
         F: FnOnce() -> T + Send,
     {
         let started = Instant::now();
-        self.begin_phase(progress_failure_phase(phase));
+        self.begin_phase(phase);
         let result = if !self.is_observed() || self.config.heartbeat_interval.is_none() {
             operation()
         } else {
@@ -677,48 +610,51 @@ impl ProgressReporter<'_> {
                 }
             })
         };
-        self.record_phase(progress_failure_phase(phase), started.elapsed());
+        self.record_phase(phase, started.elapsed());
         result
     }
 
-    const fn begin_phase(&mut self, phase: WasmBuildFailurePhase) {
+    const fn begin_phase(&mut self, phase: WasmBuildPhase) {
         self.failure_phase = Some(phase);
     }
 
-    fn record_phase(&mut self, phase: WasmBuildFailurePhase, elapsed: Duration) {
+    fn record_phase(&mut self, phase: WasmBuildPhase, elapsed: Duration) {
         self.failure_phase = Some(phase);
         let timings = &mut self.failure_timings;
         // Select the authoritative timing slot once. Optional slots distinguish
         // an unrun phase from one that completed with zero elapsed time.
         let timing = match phase {
-            WasmBuildFailurePhase::Specification => return,
-            WasmBuildFailurePhase::ExactCacheCoordination => &mut timings.exact_cache_coordination,
-            WasmBuildFailurePhase::ToolIdentity => &mut timings.input_resolution.tool_identity,
-            WasmBuildFailurePhase::CargoMetadata => &mut timings.input_resolution.cargo_metadata,
-            WasmBuildFailurePhase::InputDiscovery => &mut timings.input_resolution.input_discovery,
-            WasmBuildFailurePhase::ContentHashing => &mut timings.input_resolution.content_hashing,
-            WasmBuildFailurePhase::SharedTargetCoordination => timings
+            WasmBuildPhase::Specification => return,
+            WasmBuildPhase::ExactCacheCoordination => &mut timings.exact_cache_coordination,
+            WasmBuildPhase::CargoIdentity | WasmBuildPhase::RustcIdentity => {
+                &mut timings.input_resolution.tool_identity
+            }
+            WasmBuildPhase::CargoMetadata => &mut timings.input_resolution.cargo_metadata,
+            WasmBuildPhase::InputDiscovery => &mut timings.input_resolution.input_discovery,
+            WasmBuildPhase::ContentHashing => &mut timings.input_resolution.content_hashing,
+            WasmBuildPhase::SharedTargetCoordination => timings
                 .shared_target_coordination
                 .get_or_insert(Duration::ZERO),
-            WasmBuildFailurePhase::SharedTargetMaintenance => timings
+            WasmBuildPhase::SharedTargetMaintenance => timings
                 .shared_target_maintenance
                 .get_or_insert(Duration::ZERO),
-            WasmBuildFailurePhase::CargoBuild => timings.cargo_build.get_or_insert(Duration::ZERO),
-            WasmBuildFailurePhase::ArtifactPublication => {
+            WasmBuildPhase::CargoBuild => timings.cargo_build.get_or_insert(Duration::ZERO),
+            WasmBuildPhase::ArtifactPublication => {
                 timings.artifact_publication.get_or_insert(Duration::ZERO)
             }
-            WasmBuildFailurePhase::ExactCacheMaintenance => timings
+            WasmBuildPhase::ExactCacheMaintenance => timings
                 .exact_cache_maintenance
                 .get_or_insert(Duration::ZERO),
-            WasmBuildFailurePhase::Cleanup => timings.cleanup.get_or_insert(Duration::ZERO),
+            WasmBuildPhase::Cleanup => timings.cleanup.get_or_insert(Duration::ZERO),
         };
         *timing = timing.saturating_add(elapsed);
         if matches!(
             phase,
-            WasmBuildFailurePhase::ToolIdentity
-                | WasmBuildFailurePhase::CargoMetadata
-                | WasmBuildFailurePhase::InputDiscovery
-                | WasmBuildFailurePhase::ContentHashing
+            WasmBuildPhase::CargoIdentity
+                | WasmBuildPhase::RustcIdentity
+                | WasmBuildPhase::CargoMetadata
+                | WasmBuildPhase::InputDiscovery
+                | WasmBuildPhase::ContentHashing
         ) {
             timings.input_resolution.total = timings.input_resolution.total.saturating_add(elapsed);
         }
@@ -734,71 +670,26 @@ impl ProgressReporter<'_> {
     }
 }
 
-const fn progress_failure_phase(phase: WasmBuildProgressPhase) -> WasmBuildFailurePhase {
-    match phase {
-        WasmBuildProgressPhase::ExactCacheLock => WasmBuildFailurePhase::ExactCacheCoordination,
-        WasmBuildProgressPhase::CargoIdentity | WasmBuildProgressPhase::RustcIdentity => {
-            WasmBuildFailurePhase::ToolIdentity
-        }
-        WasmBuildProgressPhase::CargoMetadata => WasmBuildFailurePhase::CargoMetadata,
-        WasmBuildProgressPhase::InputDiscovery => WasmBuildFailurePhase::InputDiscovery,
-        WasmBuildProgressPhase::ContentHashing => WasmBuildFailurePhase::ContentHashing,
-        WasmBuildProgressPhase::SharedTargetLock => WasmBuildFailurePhase::SharedTargetCoordination,
-        WasmBuildProgressPhase::SharedTargetMaintenance => {
-            WasmBuildFailurePhase::SharedTargetMaintenance
-        }
-        WasmBuildProgressPhase::CargoBuild => WasmBuildFailurePhase::CargoBuild,
-        WasmBuildProgressPhase::ArtifactPublication => WasmBuildFailurePhase::ArtifactPublication,
-        WasmBuildProgressPhase::ExactCacheMaintenance => {
-            WasmBuildFailurePhase::ExactCacheMaintenance
-        }
-    }
-}
-
-fn classify_unobserved_failure(error: &WasmBuildError) -> WasmBuildFailurePhase {
+fn classify_unobserved_failure(error: &WasmBuildError) -> WasmBuildPhase {
     match error {
-        WasmBuildError::InvalidSpec { .. } => WasmBuildFailurePhase::Specification,
+        WasmBuildError::InvalidSpec { .. } => WasmBuildPhase::Specification,
         WasmBuildError::CommandSpawn { phase, .. }
-        | WasmBuildError::CommandFailed { phase, .. } => match phase {
-            WasmBuildPhase::CargoIdentity | WasmBuildPhase::RustcIdentity => {
-                WasmBuildFailurePhase::ToolIdentity
-            }
-            WasmBuildPhase::CargoMetadata => WasmBuildFailurePhase::CargoMetadata,
-            WasmBuildPhase::CargoBuild => WasmBuildFailurePhase::CargoBuild,
-        },
-        WasmBuildError::InvalidMetadata { .. } => WasmBuildFailurePhase::CargoMetadata,
-        WasmBuildError::InvalidCargoConfiguration { .. } => WasmBuildFailurePhase::InputDiscovery,
-        WasmBuildError::MissingArtifacts { .. } => WasmBuildFailurePhase::ArtifactPublication,
-        WasmBuildError::InputsChangedDuringAcquisition { .. } => {
-            WasmBuildFailurePhase::ContentHashing
-        }
-        WasmBuildError::PreparedInputSnapshotInvalidated => {
-            WasmBuildFailurePhase::ArtifactPublication
-        }
-        WasmBuildError::FailedBuildCleanup { .. } => WasmBuildFailurePhase::Cleanup,
+        | WasmBuildError::CommandFailed { phase, .. } => *phase,
+        WasmBuildError::InvalidMetadata { .. } => WasmBuildPhase::CargoMetadata,
+        WasmBuildError::InvalidCargoConfiguration { .. } => WasmBuildPhase::InputDiscovery,
+        WasmBuildError::MissingArtifacts { .. }
+        | WasmBuildError::PreparedInputSnapshotInvalidated => WasmBuildPhase::ArtifactPublication,
+        WasmBuildError::InputsChangedDuringAcquisition { .. } => WasmBuildPhase::ContentHashing,
+        WasmBuildError::FailedBuildCleanup { .. } => WasmBuildPhase::Cleanup,
         WasmBuildError::Io { source, .. }
             if source
                 .get_ref()
                 .is_some_and(<dyn std::error::Error + Send + Sync>::is::<ToolError>) =>
         {
-            WasmBuildFailurePhase::CargoBuild
+            WasmBuildPhase::CargoBuild
         }
-        WasmBuildError::Io { .. } => WasmBuildFailurePhase::ExactCacheCoordination,
+        WasmBuildError::Io { .. } => WasmBuildPhase::ExactCacheCoordination,
     }
-}
-
-/// External phase associated with a cacheable Wasm build failure.
-#[non_exhaustive]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum WasmBuildPhase {
-    /// Resolving Cargo's package graph.
-    CargoMetadata,
-    /// Reading the Cargo executable identity.
-    CargoIdentity,
-    /// Reading the Rust compiler identity.
-    RustcIdentity,
-    /// Compiling the selected Wasm packages.
-    CargoBuild,
 }
 
 /// Structured failure from a cacheable Wasm build.
@@ -892,7 +783,7 @@ impl WasmBuildSpec {
 
     /// Describe one Cargo build targeting `wasm32-unknown-unknown`.
     ///
-    /// The output subdirectory is derived from [`Self::with_cargo_profile_args`]:
+    /// The output subdirectory is derived from [`Self::with_cargo_selection`]:
     /// the default, `dev`, and `test` use `debug`; `release` and `bench` use
     /// `release`; custom profiles use their names. The derived directory must
     /// be one normal path component so artifacts remain inside their targets.
@@ -921,7 +812,7 @@ impl WasmBuildSpec {
             target_dir: target_dir.to_owned(),
             packages,
             example: None,
-            cargo_selection: CargoSelection::parse(Vec::new()),
+            cargo_selection: CargoSelection::default(),
             extra_env: BTreeMap::new(),
             inherited_env: BTreeSet::new(),
             additional_inputs: Vec::new(),
@@ -971,31 +862,13 @@ impl WasmBuildSpec {
         cargo_build_command(self, &self.target_dir)
     }
 
-    /// Set Cargo profile and feature arguments used for the build and fingerprint.
+    /// Replace typed Cargo profile, feature and network/lock selections.
     ///
-    /// Workspace, package, compilation target, and target-directory overrides
-    /// are rejected before resolution or acquisition; use this specification's
-    /// corresponding fields and builders. `--config` overrides are also
-    /// rejected: use Cargo's discovered configuration files or explicit
-    /// environment overrides so resolution and execution share tracked inputs.
-    /// Help and build-graph flags are rejected because they exit successfully
-    /// without building. These arguments also select the profile output directory;
-    /// a later call replaces both the arguments and the derived directory.
-    /// Binary, example, test, bench, and all-target selectors are rejected to
-    /// preserve structural library/example selection. Use [`Self::with_example`]
-    /// for a named example. `--lib` is supported only for the default library.
+    /// The same selection configures metadata, builds and cache identity. Package,
+    /// target, output paths and diagnostics remain owned by this specification.
     #[must_use]
-    pub fn with_cargo_profile_args<I, S>(mut self, arguments: I) -> Self
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<OsStr>,
-    {
-        self.cargo_selection = CargoSelection::parse(
-            arguments
-                .into_iter()
-                .map(|argument| argument.as_ref().to_owned())
-                .collect(),
-        );
+    pub fn with_cargo_selection(mut self, selection: CargoSelection) -> Self {
+        self.cargo_selection = selection;
         self
     }
 
@@ -1386,7 +1259,7 @@ impl WasmInputResolutionTimings {
 impl WasmBuildFailureDetails {
     pub(super) fn specification(total: Duration) -> Self {
         Self {
-            phase: WasmBuildFailurePhase::Specification,
+            phase: WasmBuildPhase::Specification,
             timings: WasmBuildFailureTimings {
                 total,
                 ..WasmBuildFailureTimings::default()
@@ -1396,7 +1269,7 @@ impl WasmBuildFailureDetails {
 
     /// Primary acquisition phase that returned the failure.
     #[must_use]
-    pub const fn phase(self) -> WasmBuildFailurePhase {
+    pub const fn phase(self) -> WasmBuildPhase {
         self.phase
     }
 
@@ -1886,9 +1759,8 @@ impl<'a, 'session> WasmBuildBatchInputResolver<'a, 'session> {
             resolve_tool_identity(active, progress)?;
 
         let metadata_started = Instant::now();
-        let metadata = progress.run_phase(WasmBuildProgressPhase::CargoMetadata, || {
-            cargo_metadata(active)
-        })?;
+        let metadata =
+            progress.run_phase(WasmBuildPhase::CargoMetadata, || cargo_metadata(active))?;
         let cargo_metadata = metadata_started.elapsed();
 
         let (discovered, input_discovery) = self.discover_group_inputs(group, &metadata, progress);
@@ -1900,7 +1772,7 @@ impl<'a, 'session> WasmBuildBatchInputResolver<'a, 'session> {
             _ => &mut batch_digest_cache,
         };
         let workspace_root = &active.workspace_root;
-        let resolved_inputs = progress.run_phase(WasmBuildProgressPhase::ContentHashing, || {
+        let resolved_inputs = progress.run_phase(WasmBuildPhase::ContentHashing, || {
             discovered
                 .into_iter()
                 .map(|(index, inputs, exclusions)| {
@@ -1942,8 +1814,7 @@ impl<'a, 'session> WasmBuildBatchInputResolver<'a, 'session> {
             let (inputs, exclusions, input_digest, validation_digest) = match result {
                 Ok(resolved) => resolved,
                 Err(error) => {
-                    self.resolved[index] =
-                        Some(Err((WasmBuildFailurePhase::ContentHashing, error)));
+                    self.resolved[index] = Some(Err((WasmBuildPhase::ContentHashing, error)));
                     continue;
                 }
             };
@@ -1983,7 +1854,7 @@ impl<'a, 'session> WasmBuildBatchInputResolver<'a, 'session> {
         let indexes = &self.groups[group].indexes;
         let specs = &self.specs;
         let resolved = &mut self.resolved;
-        let discovered = progress.run_phase(WasmBuildProgressPhase::InputDiscovery, || {
+        let discovered = progress.run_phase(WasmBuildPhase::InputDiscovery, || {
             let canonical = crate::cargo::observation::decode_metadata(metadata);
             let parsed = canonical
                 .as_ref()
@@ -2001,7 +1872,7 @@ impl<'a, 'session> WasmBuildBatchInputResolver<'a, 'session> {
                 match result {
                     Ok((inputs, exclusions)) => discovered.push((index, inputs, exclusions)),
                     Err(error) => {
-                        resolved[index] = Some(Err((WasmBuildFailurePhase::InputDiscovery, error)));
+                        resolved[index] = Some(Err((WasmBuildPhase::InputDiscovery, error)));
                     }
                 }
             }
@@ -2024,7 +1895,7 @@ fn resolve_tool_identity_with_policy(
     policy: &mut Option<&mut CargoInputProbePolicy<'_>>,
 ) -> Result<(Vec<u8>, Vec<u8>, Duration), WasmBuildError> {
     let started = Instant::now();
-    let cargo_identity = progress.run_phase(WasmBuildProgressPhase::CargoIdentity, || {
+    let cargo_identity = progress.run_phase(WasmBuildPhase::CargoIdentity, || {
         command_identity_with_policy(
             spec,
             WasmBuildPhase::CargoIdentity,
@@ -2037,7 +1908,7 @@ fn resolve_tool_identity_with_policy(
         .extra_env
         .get(OsStr::new("RUSTC"))
         .unwrap_or(&spec.rustc_program);
-    let rustc_identity = progress.run_phase(WasmBuildProgressPhase::RustcIdentity, || {
+    let rustc_identity = progress.run_phase(WasmBuildPhase::RustcIdentity, || {
         command_identity_with_policy(
             spec,
             WasmBuildPhase::RustcIdentity,
@@ -2058,7 +1929,7 @@ impl<'a> BatchResolutionKey<'a> {
                 .extra_env
                 .get(OsStr::new("RUSTC"))
                 .unwrap_or(&spec.rustc_program),
-            metadata_arguments: &spec.cargo_selection.metadata_arguments,
+            metadata_arguments: spec.cargo_selection.metadata_arguments(),
             environment: effective_environment(spec),
         }
     }
@@ -2984,7 +2855,7 @@ fn perform_configured_shared_incremental_target_maintenance(
     progress.emit(WasmBuildProgressEvent::SharedTargetMaintenanceStarted {
         target_dir: shared_target.to_owned(),
     });
-    let result = progress.run_phase(WasmBuildProgressPhase::SharedTargetMaintenance, || {
+    let result = progress.run_phase(WasmBuildPhase::SharedTargetMaintenance, || {
         let schedule = schedule_shared_incremental_target_maintenance(
             shared_target,
             config.policy,
@@ -3055,7 +2926,7 @@ fn validate_wasm_library_outputs(
     progress: &mut ProgressReporter<'_>,
 ) -> Result<(), WasmBuildError> {
     if let Some(message) = &resolved.wasm_artifact_error {
-        progress.begin_phase(WasmBuildFailurePhase::InputDiscovery);
+        progress.begin_phase(WasmBuildPhase::InputDiscovery);
         return Err(WasmBuildError::InvalidSpec {
             message: message.clone(),
         });
@@ -3141,7 +3012,7 @@ fn try_reuse_wasm_artifacts(
     let artifacts = expected_artifacts(spec, &spec.target_dir, &resolved.wasm_targets);
     let cache_entry = cache_entry_directory(spec, fingerprint);
     let cached_artifacts = expected_artifacts(spec, &cache_entry, &resolved.wasm_targets);
-    let cached_info = progress.run_phase(WasmBuildProgressPhase::ArtifactPublication, || {
+    let cached_info = progress.run_phase(WasmBuildPhase::ArtifactPublication, || {
         validated_artifact_set(&cached_artifacts, fingerprint)
     });
     let artifact_info = if let Some(info) = cached_info {
@@ -3149,10 +3020,9 @@ fn try_reuse_wasm_artifacts(
     } else {
         // Recover a missing or invalid exact entry from fully verified public
         // artifacts. A valid retained entry always owns the bytes for its key.
-        let public_is_current = progress
-            .run_phase(WasmBuildProgressPhase::ArtifactPublication, || {
-                validated_artifact_set(&artifacts, fingerprint).is_some()
-            });
+        let public_is_current = progress.run_phase(WasmBuildPhase::ArtifactPublication, || {
+            validated_artifact_set(&artifacts, fingerprint).is_some()
+        });
         if !public_is_current {
             return Ok(None);
         }
@@ -3165,7 +3035,7 @@ fn try_reuse_wasm_artifacts(
             progress,
         )?
     };
-    progress.run_phase(WasmBuildProgressPhase::ArtifactPublication, || {
+    progress.run_phase(WasmBuildPhase::ArtifactPublication, || {
         materialize_artifacts(
             &cached_artifacts,
             &artifacts,
@@ -3233,10 +3103,10 @@ fn reconstruct_exact_cache_entry(
     progress: &mut ProgressReporter<'_>,
 ) -> Result<Vec<FileDigest>, WasmBuildError> {
     let cached_artifacts = expected_artifacts(spec, cache_entry, targets);
-    let incomplete = progress.run_phase(WasmBuildProgressPhase::ArtifactPublication, || {
+    let incomplete = progress.run_phase(WasmBuildPhase::ArtifactPublication, || {
         prepare_exact_cache_entry(cache_entry)
     })?;
-    let result = progress.run_phase(WasmBuildProgressPhase::ArtifactPublication, || {
+    let result = progress.run_phase(WasmBuildPhase::ArtifactPublication, || {
         copy_wasm_artifacts(artifacts, &cached_artifacts)?;
         let missing = missing_artifacts(&cached_artifacts);
         if !missing.is_empty() {
@@ -3263,10 +3133,10 @@ fn build_wasm_cache_miss(
     let artifacts = expected_artifacts(spec, &spec.target_dir, &resolved.wasm_targets);
     let cache_entry = cache_entry_directory(spec, fingerprint);
     let preparation_started = Instant::now();
-    progress.begin_phase(WasmBuildFailurePhase::ArtifactPublication);
+    progress.begin_phase(WasmBuildPhase::ArtifactPublication);
     let preparation_result = prepare_exact_cache_entry(&cache_entry);
     progress.record_phase(
-        WasmBuildFailurePhase::ArtifactPublication,
+        WasmBuildPhase::ArtifactPublication,
         preparation_started.elapsed(),
     );
     let incomplete_directory = preparation_result?;
@@ -3278,17 +3148,17 @@ fn build_wasm_cache_miss(
             record_cache_entry_use(cargo_target_dir)?;
         }
         let build_started = Instant::now();
-        progress.begin_phase(WasmBuildFailurePhase::CargoBuild);
+        progress.begin_phase(WasmBuildPhase::CargoBuild);
         let cargo_result =
             run_cargo_build(spec, cargo_target_dir, &resolved.wasm_targets, progress);
         let cargo_build = build_started.elapsed();
-        progress.record_phase(WasmBuildFailurePhase::CargoBuild, cargo_build);
+        progress.record_phase(WasmBuildPhase::CargoBuild, cargo_build);
         let built_artifacts = cargo_result?;
         let validation_started = Instant::now();
-        progress.begin_phase(WasmBuildFailurePhase::ArtifactPublication);
+        progress.begin_phase(WasmBuildPhase::ArtifactPublication);
         let missing = missing_artifacts(&built_artifacts);
         progress.record_phase(
-            WasmBuildFailurePhase::ArtifactPublication,
+            WasmBuildPhase::ArtifactPublication,
             validation_started.elapsed(),
         );
         if !missing.is_empty() {
@@ -3305,7 +3175,7 @@ fn build_wasm_cache_miss(
         let publication_guard = shared_incremental.lock_prepared_publication()?;
 
         let cached_artifacts = expected_artifacts(spec, &cache_entry, &resolved.wasm_targets);
-        progress.run_phase(WasmBuildProgressPhase::ArtifactPublication, || {
+        progress.run_phase(WasmBuildPhase::ArtifactPublication, || {
             if built_artifacts != cached_artifacts {
                 copy_wasm_artifacts(&built_artifacts, &cached_artifacts)?;
             }
@@ -3372,11 +3242,11 @@ fn complete_build_record(
     total_started: Instant,
     progress: &mut ProgressReporter<'_>,
 ) -> Result<WasmBuildRecord, WasmBuildError> {
-    let retention = progress.run_phase(WasmBuildProgressPhase::ArtifactPublication, || {
+    let retention = progress.run_phase(WasmBuildPhase::ArtifactPublication, || {
         RetainedCacheEntry::acquire(input.active_entry).map_err(wasm_cache_fs_error)
     })?;
     let (maintenance, cache_maintenance) = spec.prune_policy.map_or((None, None), |policy| {
-        progress.run_phase(WasmBuildProgressPhase::ExactCacheMaintenance, || {
+        progress.run_phase(WasmBuildPhase::ExactCacheMaintenance, || {
             let cache_root = spec.target_dir.join(".ic-testkit/wasm-targets");
             let identity = policy.maintenance_identity();
             perform_scheduled_cache_maintenance(&cache_root, spec.prune_interval, &identity, || {
@@ -3440,7 +3310,7 @@ fn cleanup_failed_fingerprint_build(
     let primary_phase = progress.failure_phase;
     let cleanup_started = Instant::now();
     let cleanup = incomplete_directory.cleanup();
-    progress.record_phase(WasmBuildFailurePhase::Cleanup, cleanup_started.elapsed());
+    progress.record_phase(WasmBuildPhase::Cleanup, cleanup_started.elapsed());
     match cleanup {
         Ok(()) => {
             progress.failure_phase = primary_phase;
@@ -3464,10 +3334,10 @@ fn lock_wasm_build_cache_with_progress(
     target_dir: &Path,
     progress: &mut ProgressReporter<'_>,
 ) -> Result<(File, Duration), WasmBuildError> {
-    progress.begin_phase(WasmBuildFailurePhase::ExactCacheCoordination);
+    progress.begin_phase(WasmBuildPhase::ExactCacheCoordination);
     create_dir_all(target_dir, "create Cargo target directory")?;
     let lock_path = target_dir.join(".ic-testkit/wasm-build.lock");
-    lock_cache_file_with_progress(&lock_path, WasmBuildProgressPhase::ExactCacheLock, progress)
+    lock_cache_file_with_progress(&lock_path, WasmBuildPhase::ExactCacheCoordination, progress)
 }
 
 fn lock_shared_incremental_target(
@@ -3496,7 +3366,7 @@ fn lock_shared_incremental_target_internal(
     mut progress: Option<&mut ProgressReporter<'_>>,
 ) -> Result<(File, Duration, PathBuf), WasmBuildError> {
     if let Some(progress) = progress.as_deref_mut() {
-        progress.begin_phase(WasmBuildFailurePhase::SharedTargetCoordination);
+        progress.begin_phase(WasmBuildPhase::SharedTargetCoordination);
     }
     let target_dir =
         shared_incremental_target(spec).ok_or_else(|| WasmBuildError::InvalidSpec {
@@ -3518,7 +3388,7 @@ fn lock_shared_incremental_target_internal(
     let (lock, wait) = if let Some(progress) = progress {
         lock_cache_file_with_progress(
             &lock_path,
-            WasmBuildProgressPhase::SharedTargetLock,
+            WasmBuildPhase::SharedTargetCoordination,
             progress,
         )?
     } else {
@@ -3529,12 +3399,11 @@ fn lock_shared_incremental_target_internal(
 
 fn lock_cache_file_with_progress(
     lock_path: &Path,
-    phase: WasmBuildProgressPhase,
+    phase: WasmBuildPhase,
     progress: &mut ProgressReporter<'_>,
 ) -> Result<(File, Duration), WasmBuildError> {
-    let failure_phase = progress_failure_phase(phase);
     let started = Instant::now();
-    progress.begin_phase(failure_phase);
+    progress.begin_phase(phase);
     let result = if !progress.is_observed() || progress.config.heartbeat_interval.is_none() {
         lock_cache_file(lock_path).map_err(wasm_cache_fs_error)
     } else {
@@ -3547,7 +3416,7 @@ fn lock_cache_file_with_progress(
         })
         .map_err(wasm_cache_fs_error)
     };
-    progress.record_phase(failure_phase, started.elapsed());
+    progress.record_phase(phase, started.elapsed());
     result
 }
 
@@ -3583,37 +3452,12 @@ fn validate_spec(spec: &WasmBuildSpec) -> Result<(), WasmBuildError> {
             message: "Cargo compilation target must not be empty".to_owned(),
         });
     }
-    if spec
-        .cargo_selection
-        .flags
-        .contains(&SelectionFlag::NonBuilding)
-    {
-        return Err(WasmBuildError::InvalidSpec {
-            message:
-                "Cargo help and build-graph flags exit without building and cannot be used for Wasm acquisition"
-                    .to_owned(),
-        });
-    }
-    if spec.extra_env.contains_key(OsStr::new("CARGO_TARGET_DIR"))
-        || spec
-            .cargo_selection
-            .flags
-            .contains(&SelectionFlag::TargetDirectory)
-    {
+    if spec.extra_env.contains_key(OsStr::new("CARGO_TARGET_DIR")) {
         return Err(WasmBuildError::InvalidSpec {
             message: "Cargo target directories are owned by the build specification; use target_dir or with_shared_incremental_target instead of command overrides".to_owned(),
         });
     }
     validate_cargo_target_selection(spec)?;
-    if spec
-        .cargo_selection
-        .flags
-        .contains(&SelectionFlag::InputSelection)
-    {
-        return Err(WasmBuildError::InvalidSpec {
-            message: "Cargo workspace, package, target, and configuration inputs are owned by the build specification; use workspace_root, packages, with_target, and discovered Cargo configuration files or with_extra_env instead of command overrides".to_owned(),
-        });
-    }
     spec.cargo_selection
         .profile_target_dir()
         .map_err(|message| WasmBuildError::InvalidSpec {
@@ -3643,15 +3487,6 @@ fn validate_spec(spec: &WasmBuildSpec) -> Result<(), WasmBuildError> {
 }
 
 fn validate_cargo_target_selection(spec: &WasmBuildSpec) -> Result<(), WasmBuildError> {
-    if spec
-        .cargo_selection
-        .flags
-        .contains(&SelectionFlag::MessageFormat)
-    {
-        return Err(WasmBuildError::InvalidSpec {
-            message: "Cargo message format is owned by artifact selection".to_owned(),
-        });
-    }
     if let Some(example) = &spec.example {
         let mut components = Path::new(example).components();
         if spec.packages.len() != 1
@@ -3659,10 +3494,10 @@ fn validate_cargo_target_selection(spec: &WasmBuildSpec) -> Result<(), WasmBuild
                 (components.next(), components.next()),
                 (Some(Component::Normal(_)), None)
             )
-            || spec.cargo_selection.flags.contains(&SelectionFlag::Library)
         {
             return Err(WasmBuildError::InvalidSpec {
-                message: "a named Cargo example requires one package, a normal target name and no --lib override".to_owned(),
+                message: "a named Cargo example requires one package, a normal target name"
+                    .to_owned(),
             });
         }
     }
@@ -3675,15 +3510,6 @@ fn validate_cargo_target_selection(spec: &WasmBuildSpec) -> Result<(), WasmBuild
     }) {
         return Err(WasmBuildError::InvalidSpec {
             message: "Cargo package names must be normal path components".to_owned(),
-        });
-    }
-    if spec
-        .cargo_selection
-        .flags
-        .contains(&SelectionFlag::TargetSelection)
-    {
-        return Err(WasmBuildError::InvalidSpec {
-            message: "Cargo target selection is owned by the build specification; use with_example for a named cdylib example".to_owned(),
         });
     }
     Ok(())
@@ -3710,25 +3536,24 @@ fn build_fingerprint_with_policy(
         resolve_tool_identity_with_policy(spec, progress, policy)?;
 
     let metadata_started = Instant::now();
-    let metadata = progress.run_phase(WasmBuildProgressPhase::CargoMetadata, || {
+    let metadata = progress.run_phase(WasmBuildPhase::CargoMetadata, || {
         cargo_metadata_with_policy(spec, policy)
     })?;
     let cargo_metadata = metadata_started.elapsed();
 
     let discovery_started = Instant::now();
-    let (inputs, exclusions) =
-        progress.run_phase(WasmBuildProgressPhase::InputDiscovery, || {
-            let canonical = crate::cargo::observation::decode_metadata(&metadata)
-                .map_err(|error| invalid_metadata(&error.to_string()))?;
-            let parsed = ParsedCargoMetadata::parse(&canonical, &metadata)
-                .map_err(|message| invalid_metadata(&message))?;
-            resolve_local_inputs(spec, &parsed)
-        })?;
+    let (inputs, exclusions) = progress.run_phase(WasmBuildPhase::InputDiscovery, || {
+        let canonical = crate::cargo::observation::decode_metadata(&metadata)
+            .map_err(|error| invalid_metadata(&error.to_string()))?;
+        let parsed = ParsedCargoMetadata::parse(&canonical, &metadata)
+            .map_err(|message| invalid_metadata(&message))?;
+        resolve_local_inputs(spec, &parsed)
+    })?;
     let input_discovery = discovery_started.elapsed();
 
     let hashing_started = Instant::now();
     let (input_digest, validation_digest) =
-        progress.run_phase(WasmBuildProgressPhase::ContentHashing, || {
+        progress.run_phase(WasmBuildPhase::ContentHashing, || {
             let mut cache = LabeledPathDigestCache::default();
             digest_resolved_local_inputs(
                 &inputs,
@@ -3791,7 +3616,7 @@ fn finish_build_fingerprint(
             .expect("Cargo profile was validated before fingerprinting")
             .as_bytes(),
     );
-    for argument in &spec.cargo_selection.arguments {
+    for argument in &spec.cargo_selection.build_arguments() {
         hasher.field("cargo-argument", &os_bytes(argument));
     }
     for (key, value) in effective_environment(spec) {
@@ -3849,7 +3674,7 @@ fn cargo_metadata_with_policy(
     command
         .current_dir(&spec.workspace_root)
         .args(["metadata", "--format-version", "1"]);
-    for argument in &spec.cargo_selection.metadata_arguments {
+    for argument in spec.cargo_selection.metadata_arguments() {
         command.arg(argument);
     }
     apply_command_environment(&mut command, spec);
@@ -4752,20 +4577,18 @@ fn validate_shared_incremental_target_boundary(
                 .to_owned(),
         });
     }
+    let mut boundaries = super::inputs::boundaries::CargoInputBoundaries::default();
     let resolved_inputs = inputs
         .iter()
         .map(|(_, input)| {
-            let canonical = input.canonicalize().map_err(|source| WasmBuildError::Io {
-                operation: "resolve Cargo input boundary",
-                path: input.clone(),
-                source,
-            })?;
-            let metadata = fs::metadata(&canonical).map_err(|source| WasmBuildError::Io {
-                operation: "inspect Cargo input boundary",
-                path: canonical.clone(),
-                source,
-            })?;
-            Ok((canonical, metadata.is_dir()))
+            boundaries
+                .input(
+                    input,
+                    "resolve Cargo input boundary",
+                    "inspect Cargo input boundary",
+                )
+                .cloned()
+                .map_err(wasm_cache_fs_error)
         })
         .collect::<Result<Vec<_>, WasmBuildError>>()?;
     let has_safe_generated_root = std::iter::once(spec.target_dir.clone())
@@ -4773,8 +4596,9 @@ fn validate_shared_incremental_target_boundary(
         .chain(
             inputs
                 .iter()
-                .filter(|(_, path)| path.is_dir())
-                .map(|(_, path)| path.join("target")),
+                .zip(&resolved_inputs)
+                .filter(|(_, (_, is_directory))| *is_directory)
+                .map(|((_, path), _)| path.join("target")),
         )
         .filter_map(|path| canonicalize_allow_missing(&path).ok())
         .filter(|root| {
@@ -4893,12 +4717,9 @@ fn cargo_build_command(
     } else {
         command.arg("--lib");
     }
-    command.args(["--target", &spec.target]).args(
-        spec.cargo_selection
-            .arguments
-            .iter()
-            .filter(|argument| argument.as_os_str() != OsStr::new("--lib")),
-    );
+    command
+        .args(["--target", &spec.target])
+        .args(spec.cargo_selection.build_arguments());
     apply_command_environment(&mut command, spec);
     for package in &spec.packages {
         command.args(["-p", package]);
@@ -4955,7 +4776,7 @@ fn communicate_cargo_build(
         || {
             progress
                 .borrow_mut()
-                .emit_heartbeat_if_due(WasmBuildProgressPhase::CargoBuild, started.elapsed());
+                .emit_heartbeat_if_due(WasmBuildPhase::CargoBuild, started.elapsed());
             false
         },
         |stream, bytes| {
@@ -4967,10 +4788,7 @@ fn communicate_cargo_build(
             let mut progress = progress.borrow_mut();
             if progress.config.emit_cargo_output {
                 progress.emit(WasmBuildProgressEvent::CargoOutput {
-                    stream: match stream {
-                        OutputStream::Stdout => WasmBuildOutputStream::Stdout,
-                        OutputStream::Stderr => WasmBuildOutputStream::Stderr,
-                    },
+                    stream,
                     bytes: bytes.to_vec(),
                 });
             }
@@ -5288,35 +5106,6 @@ impl WasmBuildError {
             Self::FailedBuildCleanup { build_error, .. } => build_error.indicates_input_change(),
             _ => false,
         }
-    }
-}
-
-impl std::fmt::Display for WasmBuildPhase {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(match self {
-            Self::CargoMetadata => "cargo metadata",
-            Self::CargoIdentity => "Cargo identity",
-            Self::RustcIdentity => "Rust compiler identity",
-            Self::CargoBuild => "cargo build",
-        })
-    }
-}
-
-impl std::fmt::Display for WasmBuildProgressPhase {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(match self {
-            Self::ExactCacheLock => "exact cache lock",
-            Self::CargoIdentity => "Cargo identity",
-            Self::RustcIdentity => "Rust compiler identity",
-            Self::CargoMetadata => "Cargo metadata",
-            Self::InputDiscovery => "input discovery",
-            Self::ContentHashing => "content hashing",
-            Self::SharedTargetLock => "shared target lock",
-            Self::SharedTargetMaintenance => "shared target maintenance",
-            Self::CargoBuild => "Cargo build",
-            Self::ArtifactPublication => "artifact publication",
-            Self::ExactCacheMaintenance => "exact cache maintenance",
-        })
     }
 }
 

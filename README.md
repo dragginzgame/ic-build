@@ -41,12 +41,12 @@ Tooling. IC Build must not depend on Canic, IcyDB, PocketIC or IC Testkit.
 
 ## Use
 
-The examples below use the published 0.12 API. Add the registry dependency to
-your host-side package:
+The examples below target pending 0.14. Once published, add the registry
+dependency to your host-side package:
 
 ```toml
 [dependencies]
-ic-build = "0.12"
+ic-build = "0.14"
 ```
 
 Rust 1.91.0 or newer is required. Import the engine directly and keep the returned
@@ -55,12 +55,17 @@ caller-held source lease:
 
 ```rust,no_run
 use ic_build::artifacts::{WasmBuildSpec, build_wasm_canisters_cached};
+use ic_build::cargo::selection::CargoSelection;
 use std::path::Path;
 
 fn build(workspace: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let target = workspace.join("target/canister-builds");
     let spec = WasmBuildSpec::new(workspace, &target, &["counter_canister"])
-        .with_cargo_profile_args(["--release", "--locked"]);
+        .with_cargo_selection(CargoSelection {
+            profile: Some("release".into()),
+            locked: true,
+            ..Default::default()
+        });
     let outcome = build_wasm_canisters_cached(&spec)?;
     let wasm = std::fs::read(&outcome.record().artifacts()[0])?;
     Ok(wasm)
@@ -75,9 +80,18 @@ The engine owns `--message-format=json`; wrappers must report artifact records.
 Overflow refuses publication after Cargo completes while diagnostics keep flowing.
 This adds no elapsed-time deadline. Metadata-derived declared paths remain
 available for caller-owned external builds.
-To adopt 0.9, remove the fourth argument from `WasmBuildSpec::new` and retain
-profile selection through `with_cargo_profile_args`. Output directories follow
-those arguments automatically, including when a later call replaces them.
+Pending 0.14 replaces raw Cargo arguments with `cargo::selection::CargoSelection`
+and `with_cargo_selection`. Set `profile`, the existing
+`cargo::selection::CargoFeatureSelection`, and explicit lock/network flags.
+The feature selection owns `all_features`, explicit feature names and default-feature
+policy; observations and builds share its encoder. Native executable
+specifications use the same value in `selection`. Arbitrary CLI flags and target
+selectors have no recipe escape hatch; choose packages, targets and output paths
+through their structural fields. Cargo output events carry Host's
+`ic_host_process::tool::OutputStream` directly. Progress and failure details use
+`artifacts::WasmBuildPhase`, including separate Cargo/rustc identity phases.
+Artifact batches return `batch::BatchLabelError`; Wasm contract errors retain it
+in `WasmBuildBatchContractError::Labels`.
 Published 0.6.1 adds `ic_build::cargo::environment` for read-only configuration
 discovery, include traversal, raw-byte digests and compiler-override facts. Consumers select
 effective or conservative input paths and retain compiler admission, receipt
@@ -104,14 +118,14 @@ retained-cache contracts.
 ## Native executables
 
 IC Build 0.10 and newer provide `cargo::native::build_native_executable` on Unix.
-The example below uses the pending 0.13 caller-selected process policy.
+The example below uses the pending 0.14 typed recipe and caller-selected process policy.
 It builds an explicit package's binary or example and returns Cargo's reported
 executable and target root, without reconstructing paths for custom profiles or
 target directories.
 The caller supplies its Cargo command factory, profile/features, diagnostics writer
 and per-message JSON allowance. Set shared manifest/configuration/target paths in
-the factory so metadata and build use the same recipe; build-only selection and
-path overrides are refused. Compiler diagnostics stream without a default deadline.
+the factory so metadata and build use the same recipe. The specification owns
+package/target selection; no raw build-argument field remains. Compiler diagnostics stream without a default deadline.
 
 ```rust,no_run
 use ic_build::cargo::native::{NativeExecutableSpec, build_native_executable};
@@ -122,7 +136,7 @@ let spec = NativeExecutableSpec {
     package: "my-package",
     target_name: "worker",
     target_kind: "example",
-    build_args: &[],
+    selection: Default::default(),
     max_message_bytes: 16 * 1024 * 1024,
 };
 let built = build_native_executable(&spec, || {
