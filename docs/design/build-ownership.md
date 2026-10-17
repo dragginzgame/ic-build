@@ -63,7 +63,7 @@ dependency route; the implementation handoff above owns subsequent evidence.
 | IcyDB application and fixture builds | IcyDB adapter → Testkit Cargo/cache engine → IcyDB optimizer and artifact validation |
 | Backup and Blob optimizer qualification | Repository scripts invoke prepared wasm-opt and run product-specific tests |
 | Smaller sibling compilation checks and probes | Direct Cargo commands with repository-owned package/profile selections |
-| Shared Tooling | Tool installation, executable storage, CI helpers and optimizer qualification |
+| Shared Tooling | Tool installation, executable storage and CI helpers; semantic optimizer qualification moves to IC Build |
 
 The strongest existing reusable starting point is
 [Testkit's artifact engine](https://github.com/dragginzgame/ic-testkit/blob/235579e3342d/crates/ic-testkit/src/artifacts/mod.rs).
