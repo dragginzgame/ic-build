@@ -7,7 +7,7 @@ use ic_host_process::testing::write_executable_script;
 use ic_host_process::tool::OutputStream;
 
 use super::{
-    ProgressReporter, SharedIncrementalTargetMaintenanceConfig,
+    ProgressReporter, ResolvedCargoBuildInputs, SharedIncrementalTargetMaintenanceConfig,
     SharedIncrementalTargetMaintenanceFailureMode, SharedIncrementalTargetMaintenanceOutcome,
     WasmBuildBatchInputResolver, WasmBuildError, WasmBuildOutcome, WasmBuildPhase,
     WasmBuildProgressConfig, WasmBuildProgressEvent, WasmBuildSpec,
@@ -613,6 +613,14 @@ fn public_cargo_input_snapshot_detects_local_source_changes() {
     let spec = WasmBuildSpec::new(&root, &root.join("target"), &["fixture"]);
 
     let snapshot = resolve_cargo_build_inputs(&spec).expect("resolve Cargo input snapshot");
+    let facts = snapshot.facts().clone();
+    assert_eq!(facts.selection, spec.cargo_selection);
+    assert_eq!(facts.target, spec.target);
+    assert_eq!(facts.environment, super::effective_environment(&spec));
+    assert_ne!(facts.cargo_identity, [] as [u8; 0]);
+    assert_ne!(facts.rustc_identity, [] as [u8; 0]);
+    assert_eq!(snapshot.facts(), &facts);
+
     assert!(
         snapshot.artifact_paths().is_err(),
         "generic non-Wasm input evidence remains usable"
@@ -637,6 +645,7 @@ fn public_cargo_input_snapshot_detects_local_source_changes() {
     fs::write(package.join("src/lib.rs"), "pub fn value() -> u8 { 2 }\n")
         .expect("change fixture source");
     assert!(!snapshot.is_current(&spec).expect("detect changed input"));
+    assert_eq!(snapshot.facts(), &facts);
     assert!(
         !snapshot
             .is_content_current()
@@ -778,8 +787,7 @@ fn fingerprint_v2_separates_legacy_keys_and_keeps_stamp_format() {
         );
     let fingerprint = super::finish_build_fingerprint(
         &spec,
-        b"cargo",
-        b"rustc",
+        &super::CargoBuildFacts::observed(&spec, b"cargo", b"rustc"),
         super::InputDigest::from_bytes([7; 32]),
     );
     // Independent byte-framing fixtures: every recipe fact is the same, only
@@ -1090,6 +1098,7 @@ fn batch_input_snapshot_reuses_compatible_toolchain_and_metadata_resolution() {
         assert_eq!(inputs.timings().total() > Duration::ZERO, index < 2);
     }
 
+    assert_retained_facts(&snapshots, &specs);
     let invocations = fs::read_to_string(&invocation_log).expect("read Cargo invocation log");
     assert_eq!(
         invocations
@@ -3292,5 +3301,20 @@ fn cargo_spawn_custody_and_stdin_do_not_depend_on_progress() {
             assert_eq!(fs::read(root.join("input")).unwrap(), b"caller input");
             fs::remove_dir_all(root).unwrap();
         }
+    }
+}
+
+fn assert_retained_facts(snapshots: &[ResolvedCargoBuildInputs], specs: &[WasmBuildSpec]) {
+    for (inputs, spec) in snapshots.iter().zip(specs) {
+        assert_eq!(inputs.facts().selection, spec.cargo_selection);
+        assert_eq!(inputs.facts().target, spec.target);
+        assert_eq!(
+            inputs.facts().environment,
+            super::effective_environment(spec)
+        );
+        assert_eq!(
+            inputs.facts().cargo_identity,
+            snapshots[0].facts().cargo_identity
+        );
     }
 }

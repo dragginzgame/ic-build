@@ -3,6 +3,14 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.16.1]
+
+- Retain exact Cargo/compiler probe output, typed feature/profile selection and
+  selected effective environment with resolved build inputs. Provenance consumers
+  can project existing observations without rerunning probes or reading ambient
+  state. Snapshot facts describe inputs, not successful execution; consumers own
+  environment redaction. Fingerprint bytes and cache admission are unchanged.
+
 ## [0.16.0] - 2026-10-17
 
 - **Breaking:** align exposed Host types with the registry Host 0.27 family.

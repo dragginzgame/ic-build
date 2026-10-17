@@ -198,6 +198,38 @@ pub struct CargoBuildInput {
     path: PathBuf,
 }
 
+/// Observed tool identities and explicit recipe retained with an input snapshot.
+///
+/// These are input observations, not a claim that compilation ran or succeeded.
+/// Environment entries are the selected effective build inputs, not a complete
+/// ambient environment. They can contain secrets; consumers must redact or hash them before
+/// publishing provenance. Tool identities retain exact successful probe stdout.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CargoBuildFacts {
+    /// Selected Cargo profile, features and lock/network policy.
+    pub selection: CargoSelection,
+    /// Selected compilation target.
+    pub target: String,
+    /// Selected effective environment in fingerprint order; None records absence.
+    pub environment: BTreeMap<OsString, Option<OsString>>,
+    /// Exact Cargo identity probe stdout used by the fingerprint.
+    pub cargo_identity: Vec<u8>,
+    /// Exact compiler identity probe stdout used by the fingerprint.
+    pub rustc_identity: Vec<u8>,
+}
+
+impl CargoBuildFacts {
+    fn observed(spec: &WasmBuildSpec, cargo_identity: &[u8], rustc_identity: &[u8]) -> Self {
+        Self {
+            selection: spec.cargo_selection.clone(),
+            target: spec.target.clone(),
+            environment: effective_environment(spec),
+            cargo_identity: cargo_identity.to_vec(),
+            rustc_identity: rustc_identity.to_vec(),
+        }
+    }
+}
+
 /// Resolved exact inputs and identity for one [`WasmBuildSpec`].
 ///
 /// The snapshot can be resolved again after an external operation to detect
@@ -206,6 +238,7 @@ pub struct CargoBuildInput {
 /// timing values.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ResolvedCargoBuildInputs {
+    facts: CargoBuildFacts,
     fingerprint: InputDigest,
     input_digest: InputDigest,
     validation_digest: InputDigest,
@@ -1362,17 +1395,24 @@ pub struct CargoInputProbePolicy<'a> {
 }
 
 impl ResolvedCargoBuildInputs {
+    /// Borrow the observations already used to fingerprint this snapshot, without I/O.
+    #[must_use]
+    pub const fn facts(&self) -> &CargoBuildFacts {
+        &self.facts
+    }
+
     fn assemble(
         spec: &WasmBuildSpec,
         inputs: ResolvedLocalInputs,
         exclusions: Vec<PathBuf>,
         input_digest: InputDigest,
         validation_digest: InputDigest,
-        fingerprint: InputDigest,
+        facts: CargoBuildFacts,
         timings: impl FnOnce() -> WasmInputResolutionTimings,
     ) -> Self {
         Self {
-            fingerprint,
+            fingerprint: finish_build_fingerprint(spec, &facts, input_digest),
+            facts,
             input_digest,
             validation_digest,
             inputs: cargo_build_inputs(inputs.validation_inputs),
@@ -1815,15 +1855,13 @@ impl<'a, 'session> WasmBuildBatchInputResolver<'a, 'session> {
                 }
             };
             let spec = self.specs[index];
-            let fingerprint =
-                finish_build_fingerprint(spec, &cargo_identity, &rustc_identity, input_digest);
             let resolved = ResolvedCargoBuildInputs::assemble(
                 spec,
                 inputs,
                 exclusions,
                 input_digest,
                 validation_digest,
-                fingerprint,
+                CargoBuildFacts::observed(spec, &cargo_identity, &rustc_identity),
                 || {
                     if Some(index) == timing_index {
                         timings
@@ -3497,15 +3535,13 @@ fn build_fingerprint_with_policy(
         })?;
     let content_hashing = hashing_started.elapsed();
 
-    let fingerprint =
-        finish_build_fingerprint(spec, &cargo_identity, &rustc_identity, input_digest);
     Ok(ResolvedCargoBuildInputs::assemble(
         spec,
         inputs,
         exclusions,
         input_digest,
         validation_digest,
-        fingerprint,
+        CargoBuildFacts::observed(spec, &cargo_identity, &rustc_identity),
         || WasmInputResolutionTimings {
             tool_identity,
             cargo_metadata,
@@ -3525,8 +3561,7 @@ fn cargo_build_inputs(inputs: Vec<(PathBuf, PathBuf)>) -> Arc<[CargoBuildInput]>
 
 fn finish_build_fingerprint(
     spec: &WasmBuildSpec,
-    cargo_identity: &[u8],
-    rustc_identity: &[u8],
+    facts: &CargoBuildFacts,
     input_digest: InputDigest,
 ) -> InputDigest {
     let mut hasher = InputHasher::new(BUILD_FINGERPRINT_DOMAIN);
@@ -3550,16 +3585,16 @@ fn finish_build_fingerprint(
     for argument in &spec.cargo_selection.build_arguments() {
         hasher.field("cargo-argument", &os_bytes(argument));
     }
-    for (key, value) in effective_environment(spec) {
-        hasher.field("environment-key", &os_bytes(&key));
+    for (key, value) in &facts.environment {
+        hasher.field("environment-key", &os_bytes(key));
         if let Some(value) = value {
-            hasher.field("environment-value", &os_bytes(&value));
+            hasher.field("environment-value", &os_bytes(value));
         } else {
             hasher.field("environment-unset", b"");
         }
     }
-    hasher.field("cargo-identity", cargo_identity);
-    hasher.field("rustc-identity", rustc_identity);
+    hasher.field("cargo-identity", &facts.cargo_identity);
+    hasher.field("rustc-identity", &facts.rustc_identity);
     hasher.field("source-input-digest", input_digest.as_bytes());
     hasher.finish()
 }
