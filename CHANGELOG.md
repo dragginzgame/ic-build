@@ -3,6 +3,15 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.13.1]
+
+- Render read-only Cargo release candidates with TOML-owned literal spans,
+  preserving unrelated bytes and source-qualified dependencies. Expose an
+  explicit, bounded CLI with live or saved workspace identity admission.
+  Consumers retain preparation, release policy, source custody and rollback.
+- Add independent semantic lock admission for exact local dependency-reference
+  changes; the existing version-only projection contract remains unchanged.
+
 ## [0.13.0] - 2026-10-17
 
 - **Breaking:** align exposed Host types with the selected Host 0.25 family.
