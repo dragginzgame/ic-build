@@ -3,7 +3,7 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.13.0]
+## [0.13.0] - 2026-10-17
 
 - **Breaking:** align exposed Host types with the selected Host 0.25 family.
   Align direct Host dependencies when passing Host values. Tool admission callers
