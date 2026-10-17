@@ -256,3 +256,10 @@ owning [GitHub repository](https://github.com/dragginzgame/ic-build) remain the
 sole follow-up tracker.
 Changes in Canic, Testkit, IcyDB or Shared Tooling require authorization for that
 repository. Consumer migrations and cleanup require their own scoped authorization.
+
+`cargo::discovery::declared_workspace_root_from` locates the nearest ancestor
+manifest containing an explicit `[workspace]`, starting from an existing file or
+directory. It follows file symlinks and refuses malformed TOML, non-file markers
+and dangling links. It does not resolve Cargo membership or `package.workspace`;
+use `cargo::observation::workspace_root_for` for Cargo-driven resolution.
+Consumers retain fallback selection when no declaration exists.

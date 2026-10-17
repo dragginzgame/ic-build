@@ -3,6 +3,12 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.16.0]
+
+- Discover the nearest explicit Cargo workspace from a file or directory without
+  invoking Cargo. Preserve invalid-manifest and filesystem failures; consumers
+  retain standalone-package fallback and application configuration discovery.
+
 ## [0.15.0] - 2026-10-17
 
 - **Breaking:** align exposed Host types with the incoming registry Host 0.26
