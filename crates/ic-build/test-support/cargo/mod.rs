@@ -80,3 +80,13 @@ pub fn wasm_artifact_message_script(root: &Path, variable: &str) -> String {
     let quoted = quoted.replace("@TARGET@", &format!("'\"${variable}\"'"));
     format!("printf '%s\\n' {quoted}\n")
 }
+
+/// Test-selected compiler group cleanup, independent of progress reporting.
+pub fn spawn_cargo(
+    command: &mut std::process::Command,
+) -> std::io::Result<ic_host_process::child::OwnedChild> {
+    ic_host_process::child::OwnedChild::spawn(
+        command,
+        ic_host_process::child::CleanupPolicy::KillAndWait,
+    )
+}

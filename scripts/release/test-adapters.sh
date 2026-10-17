@@ -39,10 +39,10 @@ for path in Cargo.toml Cargo.lock CHANGELOG.md README.md LICENSE Makefile .gitig
     cp -R "$root/$path" "$fixture/workspace/$path"
 done
 mkdir -p "$fixture/workspace/.tools"
-cp -P "$root"/.tools/host* "$root"/.tools/ic* "$fixture/workspace/.tools/"
+cp -P "$root"/.tools/host* "$fixture/workspace/.tools/"
 cp -R "$root/.tools/rust" "$fixture/workspace/.tools/rust"
 export YQ="$root/.tools/host/bin/yq"
-export PATH="$root/.tools/host/bin:$root/.tools/ic/bin:$root/.tools/rust/common/bin:$PATH"
+export PATH="$root/.tools/host/bin:$root/.tools/rust/common/bin:$PATH"
 export IC_BUILD_TEST_REAL_CARGO IC_BUILD_TEST_REAL_MAKE
 IC_BUILD_TEST_REAL_CARGO="$(command -v cargo)"
 IC_BUILD_TEST_REAL_MAKE="$(command -v make)"

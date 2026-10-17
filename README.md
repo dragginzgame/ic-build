@@ -53,7 +53,10 @@ Rust 1.91.0 or newer is required. Import the engine directly and keep the return
 record alive while using its artifacts. With a prepared Cargo/Wasm toolchain and a
 caller-held source lease:
 
+The Rust example targets pending 0.16.0 and selects its Host spawner explicitly.
+
 ```rust,no_run
+use ic_host_process::child::OwnedChild;
 use ic_build::artifacts::{WasmBuildSpec, build_wasm_canisters_cached};
 use ic_build::cargo::selection::CargoSelection;
 use std::path::Path;
@@ -66,7 +69,7 @@ fn build(workspace: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
             locked: true,
             ..Default::default()
         });
-    let outcome = build_wasm_canisters_cached(&spec)?;
+    let outcome = build_wasm_canisters_cached(&spec, OwnedChild::spawn_direct)?;
     let wasm = std::fs::read(&outcome.record().artifacts()[0])?;
     Ok(wasm)
 }
@@ -118,7 +121,7 @@ retained-cache contracts.
 ## Native executables
 
 IC Build 0.10 and newer provide `cargo::native::build_native_executable` on Unix.
-The example below uses the 0.14 typed recipe and caller-selected process policy.
+The example below targets pending 0.16, with typed recipes and native targets.
 It builds an explicit package's binary or example and returns Cargo's reported
 executable and target root, without reconstructing paths for custom profiles or
 target directories.
@@ -128,14 +131,14 @@ the factory so metadata and build use the same recipe. The specification owns
 package/target selection; no raw build-argument field remains. Compiler diagnostics stream without a default deadline.
 
 ```rust,no_run
-use ic_build::cargo::native::{NativeExecutableSpec, build_native_executable};
+use ic_build::cargo::native::{NativeExecutableSpec, NativeTargetKind, build_native_executable};
 use ic_host_process::child::OwnedChild;
 use std::process::Command;
 
 let spec = NativeExecutableSpec {
     package: "my-package",
     target_name: "worker",
-    target_kind: "example",
+    target_kind: NativeTargetKind::Example,
     selection: Default::default(),
     max_message_bytes: 16 * 1024 * 1024,
 };
@@ -155,7 +158,7 @@ immutable artifact custody or release admission.
 
 ## Development
 
-Shared Tooling 0.15.2 is pinned in
+Shared Tooling 0.23.0 is pinned in
 [.shared-tooling.snapshot](.shared-tooling.snapshot); commands use this reviewed
 local snapshot. The [Make interface](docs/make-interface.md) owns common setup,
 formatting, hook installation and release entrypoints.
@@ -190,7 +193,10 @@ prerequisites.
 [rust-toolchain.toml](rust-toolchain.toml) selects the existing Rust 1.99.0
 development compiler, rustfmt, Clippy and its Wasm target independently of the qualified Linux
 library MSRV. Explicit setup reads that target from the toolchain file. The complete
-common toolset is prepared and checked on Linux x86-64. Interactive shells use
+common host/Cargo toolset is prepared and checked on Linux x86-64. This repo has
+no installed IC-executable caller; IC setup remains an explicit opt-in through
+the shared ordered local target lists when such a caller is added. Existing IC
+installations remain retained. Interactive shells use
 the PATH selection in [local developer setup](docs/local-setup.md).
 Fetch the selected workspace dependencies before the offline validation gate;
 installing developer tools does not populate this project cache. CI performs the
@@ -204,7 +210,7 @@ use the prepared compiler even outside this repository's toolchain selection.
 | `make help` | List the repository commands. |
 | `make version` | Read the current workspace version. |
 | `make tasks` | Read the shared maintenance catalog; scheduling remains explicit. |
-| `make tools-check` | Verify all 12 common tools offline. |
+| `make tools-check` | Verify the seven common host/Cargo tools offline. |
 | `make fmt` / `make fmt-check` | Sort Cargo manifests and format / check all workspace Rust source. |
 | `make install-hooks` | Activate the shared pre-commit formatter for selected staged files. |
 | `make check-package` / `make docs-check` | Compile the engine and build rustdoc with warnings denied. |
@@ -239,10 +245,11 @@ adapters, exact tagged-source admission and retained recovery evidence.
 The adapter fixtures qualify command behavior; they do not establish publication
 or native macOS support. Published-version custody is recorded in the handoff.
 
-Existing Testkit v1 stamp bytes, digest domains and `.ic-testkit` cache/lock names
-are retained unchanged during the ownership move. There is one reader and no
-automatic cache migration or cleanup. Returned records must remain alive until
-their artifact paths have finished being consumed.
+Testkit's v1 stamp format and `.ic-testkit` cache/lock names remain intact.
+Pending 0.16 uses typed Cargo metadata and a v2 Wasm fingerprint domain, so
+recipes rebuild under new keys. Old retained entries remain available to their
+owners; no migration reader or automatic cleanup is added. Returned records must
+remain alive until their artifact paths have finished being consumed.
 
 The [transactional transform example](crates/ic-build/examples/transactional_artifact_cache.rs)
 composes a caller-selected, admitted tool with the generic cache; it chooses its

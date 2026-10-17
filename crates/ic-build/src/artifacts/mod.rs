@@ -31,7 +31,7 @@
 //! ) -> Result<Vec<u8>, Box<dyn std::error::Error>>
 //! {
 //!     let resolved = resolve_cargo_build_inputs(spec)?;
-//!     let wasm = build_wasm_canisters_cached(spec)?;
+//!     let wasm = build_wasm_canisters_cached(spec, ic_host_process::child::OwnedChild::spawn_direct)?;
 //!     let input = &wasm.record().artifacts()[0];
 //!     let post_spec = ArtifactCacheSpec::new(post_cache, "deploy", "optimizer/v1")
 //!         .with_cargo_build_inputs("cargo", spec, &resolved)
@@ -77,11 +77,11 @@ pub(crate) mod test_support;
 #[cfg(all(test, unix))]
 mod host_tests;
 
-pub use cache_fs::{ArtifactCacheMaintenance, ArtifactCachePrunePolicy, ArtifactCachePruneReport};
+pub use cache_fs::{ArtifactCacheMaintenance, ArtifactCachePruneReport, CacheRetentionLimits};
 pub use digest::InputDigest;
 pub use inputs::{
-    InputEvidence, InputEvidenceError, InputEvidenceSpec, InputEvidenceValue,
-    discover_cargo_depfile_inputs, parse_cargo_depfile, read_cargo_depfile_inputs,
+    InputEvidence, InputEvidenceError, InputEvidenceSpec, InputEvidenceValue, parse_cargo_depfile,
+    read_cargo_depfile_inputs,
 };
 pub use phase::WasmBuildPhase;
 pub use staging::{
@@ -93,9 +93,9 @@ pub use transaction::{
     ArtifactOutputValidation, prepare_artifact_cache, prune_artifact_cache,
 };
 pub use transaction_batch::{
-    ArtifactCacheBatchEntry, ArtifactCacheBatchFailure, ArtifactCacheBatchFailurePhase,
-    ArtifactCacheBatchFailureTimings, ArtifactCacheBatchMetrics, ArtifactCacheBatchReport,
-    LabeledArtifactCacheSpec, build_artifact_caches_batch,
+    ArtifactCacheBatchEntry, ArtifactCacheBatchFailure, ArtifactCacheBatchFailureTimings,
+    ArtifactCacheBatchMetrics, ArtifactCacheBatchReport, LabeledArtifactCacheSpec,
+    build_artifact_caches_batch,
 };
 pub use wasm_batch::{
     LabeledWasmBuildSpec, WasmBuildBatchConfig, WasmBuildBatchContractError, WasmBuildBatchEntry,
@@ -107,12 +107,12 @@ pub use wasm_cache::{
     CargoBuildInput, CargoInputProbePolicy, ResolvedCargoBuildInputs,
     SharedIncrementalTargetInspection, SharedIncrementalTargetMaintenance,
     SharedIncrementalTargetMaintenanceConfig, SharedIncrementalTargetMaintenanceFailureMode,
-    SharedIncrementalTargetMaintenanceOutcome, SharedIncrementalTargetPrunePolicy,
-    WasmBuildCacheMode, WasmBuildError, WasmBuildFailureDetails, WasmBuildFailureTimings,
-    WasmBuildOutcome, WasmBuildProgressConfig, WasmBuildProgressEvent, WasmBuildProgressOutcome,
-    WasmBuildRecord, WasmBuildSpec, WasmBuildTimings, WasmInputResolutionTimings,
-    build_wasm_canisters_cached, build_wasm_canisters_cached_with_progress,
-    inspect_shared_incremental_target, maintain_shared_incremental_target,
-    maintain_shared_incremental_target_at_most_every, prune_wasm_build_cache,
-    resolve_cargo_build_inputs, resolve_cargo_build_inputs_with_probe_policy,
+    SharedIncrementalTargetMaintenanceOutcome, WasmBuildCacheMode, WasmBuildError,
+    WasmBuildFailureDetails, WasmBuildFailureTimings, WasmBuildOutcome, WasmBuildProgressConfig,
+    WasmBuildProgressEvent, WasmBuildProgressOutcome, WasmBuildRecord, WasmBuildSpec,
+    WasmBuildTimings, WasmInputResolutionTimings, build_wasm_canisters_cached,
+    build_wasm_canisters_cached_with_progress, inspect_shared_incremental_target,
+    maintain_shared_incremental_target, maintain_shared_incremental_target_at_most_every,
+    prune_wasm_build_cache, resolve_cargo_build_inputs,
+    resolve_cargo_build_inputs_with_probe_policy,
 };

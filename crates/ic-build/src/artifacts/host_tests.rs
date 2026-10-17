@@ -1,3 +1,4 @@
+use ic_host_process::child::OwnedChild;
 #[cfg(unix)]
 use ic_host_process::testing::write_executable_script;
 
@@ -123,7 +124,7 @@ fn shim_wasm_and_post_link_caches_reuse_and_invalidate_independently() {
     };
     let acquire = |optimizer: &AdmittedTool| -> Result<_, Box<dyn std::error::Error>> {
         let resolved = resolve_cargo_build_inputs(&spec)?;
-        let wasm = build_wasm_canisters_cached(&spec)?;
+        let wasm = build_wasm_canisters_cached(&spec, OwnedChild::spawn_direct)?;
         let input = &wasm.record().artifacts()[0];
         let post_spec = ArtifactCacheSpec::new(&root.join("post-cache"), "deploy", "optimizer/v1")
             .with_cargo_build_inputs("cargo", &spec, &resolved)

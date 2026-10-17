@@ -115,15 +115,17 @@ pub(super) fn remove_unretained_entry(path: &Path) -> Result<(), CacheFsError> {
     })
 }
 
-/// Caller-selected retention limits for content-addressed artifact entries.
+/// Caller-selected age and logical-size thresholds for cache maintenance.
 ///
-/// Age pruning runs before size pruning. A policy without either limit scans
-/// the selected cache namespace and updates its cache metadata without
-/// removing entries. Entries retained by live acquisition records are skipped,
-/// even when this temporarily exceeds the limits. They become eligible for the
-/// next maintenance pass after their final owner drops or its process exits.
+/// Thresholds do not select a cleanup algorithm or schedule maintenance.
+/// Exact-entry pruning removes expired and then least-recently-used entries,
+/// skipping live retained records. Shared-target maintenance clears the entire
+/// mutable Cargo state when either threshold is exceeded. It preserves only
+/// the target root and IC Build's coordination metadata; do not colocate unrelated
+/// data there. Without thresholds, no committed entry or shared compiler state
+/// is removed. Explicit transaction maintenance may still clear abandoned staging.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct ArtifactCachePrunePolicy {
+pub struct CacheRetentionLimits {
     max_age: Option<Duration>,
     max_size_bytes: Option<u64>,
 }
@@ -152,8 +154,8 @@ pub enum ArtifactCacheMaintenance {
     },
 }
 
-impl ArtifactCachePrunePolicy {
-    /// Create a policy that records cache metadata without removing entries.
+impl CacheRetentionLimits {
+    /// Create explicit limits without an age or size threshold.
     #[must_use]
     pub const fn new() -> Self {
         Self {
@@ -162,14 +164,14 @@ impl ArtifactCachePrunePolicy {
         }
     }
 
-    /// Remove entries older than `max_age` before applying the size limit.
+    /// Set the maximum time since recorded cache use.
     #[must_use]
     pub const fn with_max_age(mut self, max_age: Duration) -> Self {
         self.max_age = Some(max_age);
         self
     }
 
-    /// Remove least-recently-used entries until retained logical size is at most `bytes`.
+    /// Set the maximum logical cache size.
     #[must_use]
     pub const fn with_max_size_bytes(mut self, bytes: u64) -> Self {
         self.max_size_bytes = Some(bytes);
@@ -371,12 +373,12 @@ pub(super) fn record_cache_entry_use(path: &Path) -> Result<(), CacheFsError> {
 
 pub(super) fn cache_maintenance_due(
     path: &Path,
-    minimum_interval: Option<Duration>,
+    minimum_interval: Duration,
     maintenance_identity: &str,
 ) -> Result<bool, CacheFsError> {
-    let Some(minimum_interval) = minimum_interval else {
+    if minimum_interval.is_zero() {
         return Ok(true);
-    };
+    }
     let marker = path.join(LAST_MAINTENANCE_FILE);
     // Allow both LF and CRLF for the timestamp and policy-identity lines.
     let maximum_len = MAX_TIMESTAMP_BYTES + maintenance_identity.len() + 4;
@@ -428,7 +430,7 @@ pub(super) fn record_cache_maintenance(
 
 pub(super) fn perform_scheduled_cache_maintenance(
     path: &Path,
-    minimum_interval: Option<Duration>,
+    minimum_interval: Duration,
     maintenance_identity: &str,
     maintenance: impl FnOnce() -> Result<ArtifactCachePruneReport, String>,
 ) -> (Option<ArtifactCacheMaintenance>, Option<Duration>) {
@@ -508,7 +510,7 @@ fn decode_system_time(contents: &str) -> Option<SystemTime> {
 
 pub(super) fn prune_direct_child_directories(
     cache_root: &Path,
-    policy: ArtifactCachePrunePolicy,
+    policy: CacheRetentionLimits,
     protected_entry: Option<&Path>,
     is_eligible: impl Fn(&Path) -> bool,
 ) -> Result<ArtifactCachePruneReport, CacheFsError> {
@@ -878,14 +880,14 @@ mod tests {
     fn maintenance_markers_preserve_policy_intervals_and_read_errors() {
         let root = unique_temp_directory("bounded-maintenance-marker");
         let marker = root.join(super::LAST_MAINTENANCE_FILE);
-        let identity = super::ArtifactCachePrunePolicy::new().maintenance_identity();
-        let interval = Some(Duration::from_secs(3600));
+        let identity = super::CacheRetentionLimits::new().maintenance_identity();
+        let interval = Duration::from_secs(3600);
         let due = || super::cache_maintenance_due(&root, interval, &identity).unwrap();
         assert!(due());
         super::record_cache_maintenance(&root, &identity).unwrap();
         assert!(!due());
         assert!(super::cache_maintenance_due(&root, interval, "other-policy").unwrap());
-        assert!(super::cache_maintenance_due(&root, Some(Duration::ZERO), &identity).unwrap());
+        assert!(super::cache_maintenance_due(&root, Duration::ZERO, &identity).unwrap());
 
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         for suffix in ["", "\r\n"] {
@@ -910,6 +912,7 @@ mod tests {
         assert!(due());
 
         fs::write(&marker, [0xff]).unwrap();
+        assert!(super::cache_maintenance_due(&root, Duration::ZERO, &identity).unwrap());
         let error = super::cache_maintenance_due(&root, interval, &identity).unwrap_err();
         assert_eq!(error.operation, "read cache maintenance time");
         assert_eq!(error.path, marker);
@@ -917,7 +920,7 @@ mod tests {
         fs::remove_file(&marker).unwrap();
         fs::create_dir(&marker).unwrap();
         assert!(super::cache_maintenance_due(&root, interval, &identity).is_err());
-        assert!(super::cache_maintenance_due(&root, None, &identity).unwrap());
+        assert!(super::cache_maintenance_due(&root, Duration::ZERO, &identity).unwrap());
         fs::remove_dir_all(root).unwrap();
     }
 

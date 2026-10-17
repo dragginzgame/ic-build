@@ -72,7 +72,7 @@ fn observations_bind_raw_bytes_overrides_and_include_trees() {
         vec![&config, &included, &shadowed]
     );
     assert_eq!(
-        observed[0].sha256,
+        *observed[0].sha256.as_bytes(),
         <[u8; 32]>::from(Sha256::digest(source.as_bytes()))
     );
     assert_eq!(observed[0].compiler_overrides, ["rustc", "rustdoc"]);

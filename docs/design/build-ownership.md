@@ -15,8 +15,10 @@ acceptance and delivery status.
 
 The current implementation and qualification evidence is recorded in the
 [handoff](../status/current.md); [IC Build #1](https://github.com/dragginzgame/ic-build/issues/1)
-owns extraction acceptance. The generic engine retains Testkit's exact `v1`
-stamp/digest bytes and `.ic-testkit` cache/lock namespaces. No migration reader or
+owns extraction acceptance. The generic engine retains Testkit's `v1` stamp
+format and `.ic-testkit` cache/lock namespaces. Pending 0.16 changes Wasm recipe
+keys to a typed v2 fingerprint domain, causing cold builds while preserving
+retained entries and conservative raw-input mutation checks. No migration reader or
 automatic cleanup is introduced. Canic's feature-equivalent Cargo grouping moved
 to IC Build with caller-supplied environment and output policy; complete-release
 reuse/finalization remains Canic-owned until its additional invariants can be

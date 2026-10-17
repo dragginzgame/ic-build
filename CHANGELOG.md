@@ -3,6 +3,56 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.16.0]
+
+- **Breaking:** align exposed Host types with the registry Host 0.27 family.
+  Align consumers' direct Host dependencies when passing Host values through Build.
+- Adopt Shared Tooling 0.23.0. Common setup/checks cover host and Cargo tools;
+  IC executables remain an explicit product selection. Release-adapter fixtures
+  no longer require an unused IC installation; retained installations stay intact.
+
+- **Breaking:** artifact preparation refuses the first detected input mutation
+  instead of retrying internally. Callers own recovery; retained outputs and
+  the existing before/after error evidence remain available.
+- **Breaking:** zero-interval retention always runs without reading due markers.
+  Both always-run builders now report `WasmBuildSpec::prune_interval()` as `None`;
+  use `prune_policy()` to distinguish disabled maintenance. Marker formats stay intact
+  ([#69 — Preparation refusal, output admission and schedules](https://github.com/dragginzgame/ic-build/issues/69)).
+
+- **Breaking:** use `CacheRetentionLimits` for exact-entry and shared-target
+  maintenance. Replace both former policy types directly; thresholds and schedule
+  markers stay unchanged, as do LRU pruning and whole-target clearing semantics.
+- **Breaking:** match artifact batch failures as `Preparation`, `Callback` or
+  `Commit`. Remove phase-enum/accessor usage; primary errors, cleanup evidence
+  and partial timings remain available on the canonical failure.
+- **Breaking:** decode Cargo metadata once through its typed schema and use a v2
+  Wasm fingerprint domain. Existing recipes rebuild under new keys; retained
+  artifacts, stamp formats and namespaces stay intact, with no migration or cleanup
+  ([#68 — Retention limits, tagged failures and typed fingerprints](https://github.com/dragginzgame/ic-build/issues/68)).
+
+- **Breaking:** select exact Cargo depfiles with `read_cargo_depfile_inputs`;
+  directory-wide discovery is removed. Consumers select graph records and decide
+  whether `NotFound` permits a cold inventory. Strict parsing and input custody remain.
+- **Breaking:** configuration observations expose Host's `Sha256Digest` directly.
+  Use `as_bytes()` for raw bytes or `Display` for hex; hash bytes stay unchanged.
+
+- **Breaking:** Wasm builds, batches, sessions and prepared readers require an
+  explicit Host child spawner. Select direct-child or group cleanup deliberately;
+  progress no longer changes custody or stdin. No build deadline is introduced.
+- **Breaking:** Rust-flag composition accepts explicit encoded and ordinary inherited
+  values before the additions slice. Resolve the command's selected environment
+  at the caller; precedence and argument boundaries remain unchanged
+  ([#64 — Explicit execution and flag inputs](https://github.com/dragginzgame/ic-build/issues/64)).
+
+- **Breaking:** native executable specifications select `NativeTargetKind::Binary`
+  or `NativeTargetKind::Example` instead of string target kinds. Update callers
+  directly; no compatibility selector is retained.
+- Rebuild missing or invalid exact Wasm cache entries through Cargo. Public
+  outputs no longer reconstruct entries; retained entries still block replacement
+  and valid exact hits still repair public outputs. Retained formats stay unchanged.
+- Serialize archive verification workspaces through TOML, retaining exact generated
+  manifest checks and the independently admitted package graph and lock selections.
+
 ## [0.15.0] - 2026-10-17
 
 - **Breaking:** align exposed Host types with the incoming registry Host 0.26

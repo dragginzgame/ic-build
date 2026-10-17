@@ -1,4 +1,4 @@
-use super::cache_fs::canonicalize_allow_missing;
+use super::cache_fs::{CacheRetentionLimits, canonicalize_allow_missing};
 use crate::batch::{BatchLabelError, validate_labels};
 
 use std::{
@@ -10,12 +10,11 @@ use std::{
 
 use super::wasm_cache::{
     SharedIncrementalTargetMaintenanceConfig, SharedIncrementalTargetMaintenanceOutcome,
-    SharedIncrementalTargetPrunePolicy, WasmBuildBatchAttempt, WasmBuildBatchInputMetrics,
-    WasmBuildBatchInputResolver, WasmBuildError, WasmBuildFailureDetails, WasmBuildInputReuse,
-    WasmBuildInputSnapshotState, WasmBuildOutcome, WasmBuildProgressConfig, WasmBuildProgressEvent,
-    WasmBuildSessionState, WasmBuildSpec, WasmBuildTimings, WasmInputResolutionTimings,
-    build_wasm_canisters_cached_in_batch, build_wasm_canisters_cached_in_batch_with_progress,
-    shared_incremental_target,
+    WasmBuildBatchInputMetrics, WasmBuildBatchInputResolver, WasmBuildError,
+    WasmBuildFailureDetails, WasmBuildInputReuse, WasmBuildInputSnapshotState, WasmBuildOutcome,
+    WasmBuildProgressConfig, WasmBuildProgressEvent, WasmBuildSessionState, WasmBuildSpec,
+    WasmBuildTimings, WasmInputResolutionTimings, build_wasm_canisters_cached_in_batch,
+    build_wasm_canisters_cached_in_batch_with_progress, shared_incremental_target,
 };
 
 /// Orchestration shared by every entry in one independent Wasm build batch.
@@ -157,6 +156,7 @@ impl<'guard> WasmBuildSession<'guard> {
     /// Build a collect-all batch with explicit orchestration and optional progress.
     ///
     /// Source lease, feature isolation and retention match independent batches.
+    /// `spawn` selects Cargo child/group custody and cleanup, independently of progress.
     /// Prepared snapshots reject specifications absent during preparation.
     ///
     /// # Errors
@@ -170,12 +170,16 @@ impl<'guard> WasmBuildSession<'guard> {
             WasmBuildProgressConfig,
             &mut dyn FnMut(WasmBuildBatchProgressEvent),
         )>,
+        mut spawn: impl FnMut(
+            &mut std::process::Command,
+        ) -> std::io::Result<ic_host_process::child::OwnedChild>,
     ) -> Result<WasmBuildBatchReport, WasmBuildBatchContractError> {
         run_wasm_batch(
             specs,
             config,
             Some(WasmBuildInputReuse::Session(&mut self.state)),
             progress,
+            &mut spawn,
         )
     }
 
@@ -233,6 +237,7 @@ impl<'guard> WasmBuildInputSnapshot<'guard> {
     /// Build a collect-all batch with explicit orchestration and optional progress.
     ///
     /// Source lease, feature isolation and retention match independent batches.
+    /// `spawn` selects Cargo child/group custody and cleanup, independently of progress.
     /// Prepared snapshots reject specifications absent during preparation.
     ///
     /// # Errors
@@ -246,12 +251,16 @@ impl<'guard> WasmBuildInputSnapshot<'guard> {
             WasmBuildProgressConfig,
             &mut dyn FnMut(WasmBuildBatchProgressEvent),
         )>,
+        mut spawn: impl FnMut(
+            &mut std::process::Command,
+        ) -> std::io::Result<ic_host_process::child::OwnedChild>,
     ) -> Result<WasmBuildBatchReport, WasmBuildBatchContractError> {
         run_wasm_batch(
             specs,
             config,
             Some(WasmBuildInputReuse::Snapshot(&self.state)),
             progress,
+            &mut spawn,
         )
     }
 
@@ -608,7 +617,7 @@ impl WasmBuildBatchConfig {
     #[must_use]
     pub const fn with_shared_incremental_target_maintenance_at_most_every(
         self,
-        policy: SharedIncrementalTargetPrunePolicy,
+        policy: CacheRetentionLimits,
         minimum_interval: Duration,
     ) -> Self {
         self.with_shared_incremental_target_maintenance(
@@ -649,6 +658,8 @@ impl std::fmt::Display for WasmBuildBatchReport {
 /// Build every Wasm specification as an independent Cargo invocation.
 ///
 /// Pass explicit batch configuration and optional progress reporting.
+/// `spawn` selects Cargo child/group custody and cleanup for each cache miss,
+/// independently of progress; it may override the default null stdin.
 /// Specifications run sequentially and every result is retained. Each entry
 /// keeps its own package set, profile arguments, feature resolution,
 /// fingerprint, locks, and cache policy. Packages are never combined into one
@@ -664,10 +675,17 @@ pub fn build_wasm_canisters_cached_batch(
         WasmBuildProgressConfig,
         &mut dyn FnMut(WasmBuildBatchProgressEvent),
     )>,
+    mut spawn: impl FnMut(
+        &mut std::process::Command,
+    ) -> std::io::Result<ic_host_process::child::OwnedChild>,
 ) -> Result<WasmBuildBatchReport, WasmBuildBatchContractError> {
-    run_wasm_batch(specs, config, None, progress)
+    run_wasm_batch(specs, config, None, progress, &mut spawn)
 }
 
+#[expect(
+    clippy::result_large_err,
+    reason = "Batch entries retain complete failure details inline without per-failure allocation."
+)]
 fn run_wasm_batch(
     specs: &[LabeledWasmBuildSpec],
     batch_config: WasmBuildBatchConfig,
@@ -676,6 +694,9 @@ fn run_wasm_batch(
         WasmBuildProgressConfig,
         &mut dyn FnMut(WasmBuildBatchProgressEvent),
     )>,
+    mut spawn: impl FnMut(
+        &mut std::process::Command,
+    ) -> std::io::Result<ic_host_process::child::OwnedChild>,
 ) -> Result<WasmBuildBatchReport, WasmBuildBatchContractError> {
     validate_labels(specs.iter().map(LabeledWasmBuildSpec::label))
         .map_err(WasmBuildBatchContractError::Labels)?;
@@ -685,7 +706,7 @@ fn run_wasm_batch(
         WasmBuildBatchInputResolver::new(specs.iter().map(LabeledWasmBuildSpec::spec), reuse);
     let mut report = build_wasm_batch(specs, batch_config, |spec, index| {
         let Some((progress_config, observer)) = observation.as_mut() else {
-            return build_wasm_canisters_cached_in_batch(spec, index, &mut resolver);
+            return build_wasm_canisters_cached_in_batch(spec, index, &mut resolver, &mut spawn);
         };
         let label = specs[index].label.clone();
         observer(WasmBuildBatchProgressEvent::BuildStarted {
@@ -705,8 +726,9 @@ fn run_wasm_batch(
                     event,
                 });
             },
+            &mut spawn,
         );
-        observer(match &attempt.result {
+        observer(match &attempt {
             Ok(_) => WasmBuildBatchProgressEvent::BuildFinished { index, label },
             Err(_) => WasmBuildBatchProgressEvent::BuildFailed { index, label },
         });
@@ -722,7 +744,10 @@ fn build_wasm_batch<F>(
     mut build: F,
 ) -> WasmBuildBatchReport
 where
-    F: FnMut(&WasmBuildSpec, usize) -> WasmBuildBatchAttempt,
+    F: FnMut(
+        &WasmBuildSpec,
+        usize,
+    ) -> Result<WasmBuildOutcome, (WasmBuildError, WasmBuildFailureDetails)>,
 {
     let started = Instant::now();
     let mut entries = Vec::with_capacity(specs.len());
@@ -739,7 +764,7 @@ where
             ))
         } else {
             match maintenance.prepare_spec(spec) {
-                Ok(configured) => build(configured.as_ref().unwrap_or(spec), index).result,
+                Ok(configured) => build(configured.as_ref().unwrap_or(spec), index),
                 Err(error) => Err((
                     error,
                     WasmBuildFailureDetails::specification(entry_started.elapsed()),

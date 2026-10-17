@@ -22,7 +22,7 @@ pub struct ConfigurationFile {
     /// Canonical containing directory plus the original file name, for stable labels.
     pub location: PathBuf,
     /// SHA-256 of the same UTF-8 bytes parsed during this observation.
-    pub sha256: [u8; 32],
+    pub sha256: Sha256Digest,
     /// Present build compiler/wrapper fields, in canonical field order.
     pub compiler_overrides: Vec<&'static str>,
 }
@@ -236,7 +236,7 @@ fn append_configuration(
     files.push(ConfigurationFile {
         path: config.to_owned(),
         location: location.clone(),
-        sha256: *Sha256Digest::compute(contents.as_bytes()).as_bytes(),
+        sha256: Sha256Digest::compute(contents.as_bytes()),
         compiler_overrides,
     });
     if let Some(include) = configuration.get("include") {
