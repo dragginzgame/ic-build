@@ -3,7 +3,7 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
-## [0.12.1]
+## [0.12.1] - 2026-10-17
 
 - Restore Shared Tooling snapshot verification by keeping the external-lock API
   guidance in the local artifact guide and restoring the shared publication guide.
