@@ -1,5 +1,5 @@
-use crate::batch::BatchLabelError;
 use crate::cargo::selection::CargoSelection;
+use ic_host_artifacts::batch::BatchLabelError;
 #[cfg(unix)]
 use ic_host_process::testing::write_executable_script;
 

@@ -3,6 +3,13 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.16.0]
+
+- **Breaking:** batch label admission and errors belong to
+  `ic_host_artifacts::batch`. Replace `ic_build::batch::BatchLabelError` imports
+  with the Host owner. Exact labels, first invalid input, original duplicate
+  indices and refusal before build/cache work retain their contracts.
+
 ## [0.15.0] - 2026-10-17
 
 - **Breaking:** align exposed Host types with the incoming registry Host 0.26
