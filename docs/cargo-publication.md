@@ -68,35 +68,6 @@ and provenance state, inspect the lock owner, and explicitly select any fresh
 attempt. A failed invocation is never permission to repeat an upload blindly.
 Status zero reports command completion, not independent registry readback.
 
-## External lock selection admission
-
-Pending IC Build 0.12.1 provides the pure
-`ic_build::cargo::packages::verify_external_lock_subset(original, candidate, max_bytes)`
-API for callers that need the archive engine's external-selection check without
-running a package/test workflow. Both byte slices must fit the explicit
-per-document allowance before UTF-8/TOML decoding. It performs no file or process
-I/O, dependency resolution, network access or mutation.
-
-Every candidate external name/version/source identity and optional checksum must
-match the original. Registry checksums require canonical lowercase SHA-256;
-non-registry optional checksum fields compare exactly, including absent versus
-empty. Duplicate external identities refuse in either document. Extra valid
-original selections and an empty candidate package array are allowed. Non-table
-records and malformed identity/checksum fields refuse with typed role/index
-evidence; UTF-8 and TOML failures retain their original error sources.
-
-Unsourced tables are outside this check. Consumers retain exact local package
-names, versions, paths, dependency edges, forbidden-feature policy, input custody
-and release admission. Cargo archive qualification uses this same reader and
-comparison, then independently requires a nonempty external graph. Valid archive
-flows retain their selected-graph, evidence and lifetime contracts; malformed
-records and changed non-registry checksum fields now refuse there too.
-
-Auth's existing `apps/tooling` command boundary can read both locks with its
-explicit file budget and invoke this check, leaving its library-graph admission
-in the existing script. Publish the producer before adopting that import; a
-source rehearsal or temporary path override does not establish registry adoption.
-
 ## Consumer adoption boundary
 
 Keep existing adapters until their own equivalence checks pass against a reviewed

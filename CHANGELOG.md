@@ -5,6 +5,8 @@ archive also includes the extracted artifact engine and Cargo grouping API.
 
 ## [0.12.1]
 
+- Restore Shared Tooling snapshot verification by keeping the external-lock API
+  guidance in the local artifact guide and restoring the shared publication guide.
 - Expose bounded, typed external-lock subset admission using the archive
   qualifier's shared reader/comparison. Allow extra original packages and empty
   subsets; retain archive qualification's separate nonempty-graph policy.

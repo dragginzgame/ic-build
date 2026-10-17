@@ -29,7 +29,8 @@ owners, retained safety boundaries and extraction sequence. Read the
 The [artifact API guide](docs/artifacts.md) covers recipes, retained records,
 freshness, batching and explicit maintenance.
 Pending 0.12.1 exposes `cargo::packages::verify_external_lock_subset` for bounded
-in-memory admission of already selected external package identities. It shares
+in-memory admission of already selected external package identities
+([API guide](docs/artifacts.md#external-lock-selection-admission)). It shares
 archive qualification's reader/comparison without adopting its nonempty-graph
 policy or executing Cargo; callers retain local package, feature and release checks.
 Version 0.1.3 also provides temporary staging and bounded capture of producer

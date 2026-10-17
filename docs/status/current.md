@@ -1,5 +1,14 @@
 # Current handoff
 
+## Shared Tooling snapshot repair
+
+The 2026-10-17 release validation rejected local API prose added to the
+snapshot-owned `docs/cargo-publication.md`. That guide now matches the adopted
+0.15.2 digest exactly; the prose lives in the local
+[artifact API guide](../artifacts.md#external-lock-selection-admission), linked
+from README. `make shared-tooling-check` verifies all 101 snapshot files.
+This documentation repair does not establish completion of release validation.
+
 ## Logical directory-size producer delivery — Host PR #173
 
 The previously prepared filesystem extraction for
