@@ -1,5 +1,26 @@
 # Current handoff
 
+## Retained post-processing custody — pending 0.12.1
+
+Based on delivered 0.12.0 `2598a417a96834d3139751adf549126add666c4b`.
+`artifacts::produce_and_retain_artifact` owns exclusive producer/log creation,
+successful bounded capture/retention and producer removal only after retention.
+Unsuccessful statuses, callback IO failures/panics and capture/retention failures
+leave existing diagnostics and producer bytes for caller recovery. Identical
+paths refuse before creation; physical path distinctness and custody remain an
+explicit caller obligation. The helper starts no process: tools, arguments,
+output routing, cancellation, file budgets and publication remain caller-owned.
+
+On Linux, all 18 staging cases pass on Rust 1.91, including six new custody
+cases, with strict library/test Clippy and warning-denied Rust 1.91 rustdoc.
+The prepared Jobs caller passes its three actual optimizer cases with this Build
+source; only the Build source/checksum lock row changes, preserving every package
+name/version. Existing selected registry Build does not contain this helper, so
+active Jobs keeps its local wrapper until reviewed publication and adoption.
+Evidence is retained at `/tmp/jobs-outcome-entry-transform.FAoOi2/`.
+Package versions and dependency selections are unchanged; no full suite, native
+macOS run, release, publication, cache policy or sibling-checkout mutation ran.
+
 ## Host 0.24 and native Candid extraction — pending 0.12.0
 
 This batch starts at released 0.11.1 `4fa4fc0`, preserving the incoming

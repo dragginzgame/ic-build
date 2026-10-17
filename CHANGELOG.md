@@ -3,6 +3,12 @@
 The 0.1.0 section preserves the original bootstrap notes. The published 0.1.0
 archive also includes the extracted artifact engine and Cargo grouping API.
 
+## [0.12.1]
+
+- Share exclusive producer/log admission and capture-before-cleanup custody for
+  caller-executed artifact transforms. Preserve partial outputs, diagnostics and
+  typed capture failures; tools, arguments and process policy remain caller-owned.
+
 ## [0.12.0] - 2026-10-16
 
 - **Breaking:** align exposed Host types with registry Host 0.24.0. Consumers
